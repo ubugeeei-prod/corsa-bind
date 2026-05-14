@@ -3,8 +3,8 @@ version = 1
 [typescript_go]
 path = "ref/typescript-go"
 repository = "https://github.com/microsoft/typescript-go.git"
-commit = "ba858e5c6852160ff69184d7fd7db77b348e246c"
-tree = "49248a2c230e711b1c49ea17b84fee7767d97c4c"
-committer_date = "2026-04-23T21:55:46Z"
+commit = "47ca64821ddc972ae77ed3b75337ac3a2d635562"
+tree = "d99b63f642baffa5969e65e16943b33767fe5d4a"
+committer_date = "2026-05-13T22:03:10Z"
 author = "Andrew Branch"
-subject = "Include compilerOptions.types in auto-import packages (#3536)"
+subject = "Don't recursively scan auto-import packages for non-main .d.ts files unless option is set (#3823)"
