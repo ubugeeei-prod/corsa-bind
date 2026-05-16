@@ -61,7 +61,7 @@
   "dependencies": {
     "@corsa-bind/napi": "workspace:*",
     "@oxlint/plugins": "1.57.0",
-    "oxlint": "1.57.0"
+    "oxlint": "1.65.0"
   },
   "engines": {
     "node": ">=22"
