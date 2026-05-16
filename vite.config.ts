@@ -71,10 +71,10 @@ export default defineConfig({
     tasks: {
       sync_ref: {
         cache: false,
-        command: "cargo run -p corsa_ref -- sync",
+        command: "cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync",
       },
       verify_ref: {
-        command: "cargo run -p corsa_ref -- verify",
+        command: "cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- verify",
         dependsOn: ["sync_ref"],
       },
       build: {
