@@ -1,6 +1,7 @@
 import { memberObject, memberPropertyName } from "./ast";
 import { createNativeRule } from "./rule_creator";
 import { isArrayLikeNode, typeTextsAtNode } from "./type_utils";
+import { isStringArrayLikeTypeTexts } from "../utils";
 
 type Options = {
   ignoreStringArrays?: boolean;
@@ -46,14 +47,7 @@ export const requireArraySortCompareRule = createNativeRule(
 );
 
 function isStringArrayLike(context: any, node: any): boolean {
-  return typeTextsAtNode(context, node).some((text) => {
-    return (
-      text === "string[]" ||
-      text === "readonly string[]" ||
-      text.startsWith("Array<string>") ||
-      text.startsWith("ReadonlyArray<string>")
-    );
-  });
+  return isStringArrayLikeTypeTexts(typeTextsAtNode(context, node));
 }
 
 function resolveOptions(options: readonly unknown[]): Required<Options> {

@@ -9,7 +9,10 @@ export const tsgoPath = resolve(
   workspaceRoot,
   process.platform === "win32" ? ".cache/tsgo.exe" : ".cache/tsgo",
 );
-export const datasetPath = resolve(workspaceRoot, "ref/typescript-go/_packages/api/tsconfig.json");
+export const datasetPath = resolve(
+  workspaceRoot,
+  "ref/typescript-go/_packages/native-preview/tsconfig.json",
+);
 export const typescriptOxlintFixtureDir = resolve(
   workspaceRoot,
   "bench/fixtures/typescript_oxlint",

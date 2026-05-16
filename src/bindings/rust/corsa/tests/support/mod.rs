@@ -79,7 +79,7 @@ pub fn real_tsgo_binary() -> PathBuf {
 }
 
 pub fn real_dataset() -> PathBuf {
-    workspace_root().join("ref/typescript-go/_packages/api/tsconfig.json")
+    workspace_root().join("ref/typescript-go/_packages/native-preview/tsconfig.json")
 }
 
 pub fn real_api_config(mode: ApiMode) -> Option<ApiSpawnConfig> {

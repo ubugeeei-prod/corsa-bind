@@ -96,12 +96,6 @@ jobs:
           cache: true
           run-install: true
 
-      - name: Sync pinned tsgo checkout
-        run: vp run -w sync_ref
-
-      - name: Verify pinned tsgo checkout
-        run: vp run -w verify_ref
-
       - name: Build pinned tsgo binary
         run: vp run -w build_tsgo
 
@@ -136,12 +130,6 @@ jobs:
           node-version: "24"
           cache: true
           run-install: true
-
-      - name: Sync pinned tsgo checkout
-        run: vp run -w sync_ref
-
-      - name: Verify pinned tsgo checkout
-        run: vp run -w verify_ref
 
       - name: Build pinned tsgo binary
         run: vp run -w build_tsgo

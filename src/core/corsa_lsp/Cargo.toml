@@ -1,6 +1,6 @@
 [package]
 name = "corsa_lsp"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 description = "LSP-focused clients, overlays, and virtual documents for typescript-go"
 publish = ["crates-io"]
@@ -20,6 +20,6 @@ log = { workspace = true }
 lsp-types = "0.97"
 parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }
-corsa_core = { version = "0.6.0", path = "../corsa_core" }
-corsa_jsonrpc = { version = "0.6.0", path = "../corsa_jsonrpc" }
-corsa_runtime = { version = "0.6.0", path = "../corsa_runtime" }
+corsa_core = { version = "0.7.0", path = "../corsa_core" }
+corsa_jsonrpc = { version = "0.7.0", path = "../corsa_jsonrpc" }
+corsa_runtime = { version = "0.7.0", path = "../corsa_runtime" }

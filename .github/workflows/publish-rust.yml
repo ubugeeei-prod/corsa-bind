@@ -31,7 +31,7 @@ env:
 
 jobs:
   release-gates:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'publish-rust' }}
+    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-rust') && github.ref_type == 'tag' }}
     name: Release Gates
     runs-on: ubuntu-latest
     steps:
@@ -60,7 +60,6 @@ jobs:
           run-install: true
 
       - name: Validate release tag
-        if: ${{ github.event_name == 'push' }}
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node --strip-types ./scripts/assert_release_tag.ts
@@ -77,12 +76,6 @@ jobs:
       - name: Test
         run: vp run -w test
 
-      - name: Sync pinned tsgo checkout
-        run: vp run -w sync_ref
-
-      - name: Verify pinned tsgo checkout
-        run: vp run -w verify_ref
-
       - name: Benchmark guards
         run: vp run -w bench_verify
 
@@ -95,7 +88,7 @@ jobs:
         run: vp run -w release_dry_run
 
   publish:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'publish-rust' }}
+    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-rust') && github.ref_type == 'tag' }}
     name: Publish Rust Crates
     needs:
       - release-gates

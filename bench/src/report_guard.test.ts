@@ -36,7 +36,7 @@ const nativeScenarios = [
   "type_to_string",
 ] as const;
 
-const datasets = ["ast", "api", "_extension"] as const;
+const datasets = ["native-preview", "_extension"] as const;
 
 describe("benchmark guards", () => {
   benchCase("ts benchmarks emit complete metrics", () => {

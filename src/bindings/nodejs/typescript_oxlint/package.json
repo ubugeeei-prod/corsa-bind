@@ -1,6 +1,6 @@
 {
   "name": "corsa-oxlint",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Type-aware Oxlint helpers powered by corsa and typescript-go",
   "homepage": "https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/typescript_oxlint",
   "bugs": {

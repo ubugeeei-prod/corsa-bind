@@ -31,7 +31,7 @@ env:
 
 jobs:
   release-gates:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'publish-npm' }}
+    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
     name: Release Gates
     runs-on: ubuntu-latest
     steps:
@@ -60,7 +60,6 @@ jobs:
           run-install: true
 
       - name: Validate release tag
-        if: ${{ github.event_name == 'push' }}
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node --strip-types ./scripts/assert_release_tag.ts
@@ -77,12 +76,6 @@ jobs:
       - name: Test
         run: vp run -w test
 
-      - name: Sync pinned tsgo checkout
-        run: vp run -w sync_ref
-
-      - name: Verify pinned tsgo checkout
-        run: vp run -w verify_ref
-
       - name: Benchmark guards
         run: vp run -w bench_verify
 
@@ -95,7 +88,7 @@ jobs:
         run: vp run -w release_dry_run
 
   resolve-native-targets:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'publish-npm' }}
+    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
     name: Resolve native binding targets
     needs:
       - release-gates
@@ -118,7 +111,7 @@ jobs:
           printf 'matrix=%s\n' "$(node --strip-types ./scripts/print_napi_build_matrix.ts)" >> "$GITHUB_OUTPUT"
 
   build-native-bindings:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'publish-npm' }}
+    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
     name: Build native binding (${{ matrix.target }})
     needs:
       - release-gates
@@ -171,7 +164,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'publish-npm' }}
+    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
     name: Publish npm packages
     needs:
       - release-gates

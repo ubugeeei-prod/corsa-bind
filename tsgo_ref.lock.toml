@@ -3,8 +3,8 @@ version = 1
 [typescript_go]
 path = "ref/typescript-go"
 repository = "https://github.com/microsoft/typescript-go.git"
-commit = "2de4a3f1746f614fe5a19deec6a4ad9d0640d67a"
-tree = "2a21a642d4e58930e090b5e4f2acc8e34592e58e"
-committer_date = "2026-04-21T23:36:26Z"
-author = "Copilot"
-subject = "Fix utf8.RuneLen bug in LineAndCharacterToPosition for invalid UTF-8 sequences (#3442)"
+commit = "f4a1d2a1d0d5df4333f2440500e3a6c4b4702d9a"
+tree = "db15a071b5981d71e41c086859133cb15ef67cb3"
+committer_date = "2026-05-15T23:24:59Z"
+author = "navya9singh"
+subject = "Adding signature help tooltip coloring support for VS (#3821)"

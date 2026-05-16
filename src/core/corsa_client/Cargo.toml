@@ -1,6 +1,6 @@
 [package]
 name = "corsa_client"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 description = "Typed stdio API client bindings for typescript-go"
 publish = ["crates-io"]
@@ -23,6 +23,6 @@ parking_lot = "0.12"
 phf = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-corsa_core = { version = "0.6.0", path = "../corsa_core" }
-corsa_jsonrpc = { version = "0.6.0", path = "../corsa_jsonrpc" }
-corsa_runtime = { version = "0.6.0", path = "../corsa_runtime" }
+corsa_core = { version = "0.7.0", path = "../corsa_core" }
+corsa_jsonrpc = { version = "0.7.0", path = "../corsa_jsonrpc" }
+corsa_runtime = { version = "0.7.0", path = "../corsa_runtime" }

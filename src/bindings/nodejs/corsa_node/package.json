@@ -1,6 +1,6 @@
 {
   "name": "@corsa-bind/napi",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Native Node.js bindings for corsa and typescript-go stdio workflows",
   "homepage": "https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/corsa_node",
   "bugs": {

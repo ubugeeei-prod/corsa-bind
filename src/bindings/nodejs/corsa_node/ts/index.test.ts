@@ -14,6 +14,7 @@ import {
   isAnyLikeTypeTexts,
   isArrayLikeTypeTexts,
   isErrorLikeTypeTexts,
+  isStringArrayLikeTypeTexts,
   isPromiseLikeTypeTexts,
   nativeLintRuleMetas,
   runNativeLintRule,
@@ -27,7 +28,10 @@ const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_tsgo${executableSuffix}`);
 const realBinary = resolve(workspaceRoot, `.cache/tsgo${executableSuffix}`);
-const realDataset = resolve(workspaceRoot, "ref/typescript-go/_packages/api/tsconfig.json");
+const realDataset = resolve(
+  workspaceRoot,
+  "ref/typescript-go/_packages/native-preview/tsconfig.json",
+);
 const realTsgoReady = existsSync(realBinary) && existsSync(realDataset);
 
 describe("CorsaApiClient", () => {
@@ -71,6 +75,8 @@ describe("CorsaApiClient", () => {
       "undefined",
     ]);
     expect(isArrayLikeTypeTexts(["ReadonlyArray<string>"])).toBe(true);
+    expect(isStringArrayLikeTypeTexts(["readonly string[]"])).toBe(true);
+    expect(isStringArrayLikeTypeTexts(["Array<number>"])).toBe(false);
     expect(isPromiseLikeTypeTexts(["Promise<string>"])).toBe(true);
     expect(isPromiseLikeTypeTexts([], ["then"])).toBe(true);
     expect(isErrorLikeTypeTexts(["TypeError"])).toBe(true);

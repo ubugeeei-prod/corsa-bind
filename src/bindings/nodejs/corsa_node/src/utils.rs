@@ -67,6 +67,11 @@ pub fn is_array_like_type_texts(type_texts: Vec<String>) -> bool {
 }
 
 #[napi]
+pub fn is_string_array_like_type_texts(type_texts: Vec<String>) -> bool {
+    corsa::utils::is_string_array_like_type_texts(&type_texts)
+}
+
+#[napi]
 pub fn is_promise_like_type_texts(
     type_texts: Vec<String>,
     property_names: Option<Vec<String>>,

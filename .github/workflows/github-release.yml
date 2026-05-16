@@ -31,6 +31,7 @@ jobs:
     if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v') && github.event.workflow_run.conclusion == 'success') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'github-release') }}
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - name: Checkout release commit
         uses: actions/checkout@v6

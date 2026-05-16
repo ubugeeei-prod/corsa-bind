@@ -1,6 +1,6 @@
 [package]
 name = "corsa"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 description = "Production-oriented Rust bindings, orchestration layers, and Node integration for typescript-go"
 publish = ["crates-io"]
@@ -80,12 +80,12 @@ required-features = ["experimental-distributed"]
 base64 = "0.22"
 lsp-types = "0.97"
 serde_json = "1"
-corsa_client = { version = "0.6.0", path = "../../../core/corsa_client" }
-corsa_core = { version = "0.6.0", path = "../../../core/corsa_core" }
-corsa_jsonrpc = { version = "0.6.0", path = "../../../core/corsa_jsonrpc" }
-corsa_lsp = { version = "0.6.0", path = "../../../core/corsa_lsp" }
-corsa_orchestrator = { version = "0.6.0", path = "../../../core/corsa_orchestrator" }
-corsa_runtime = { version = "0.6.0", path = "../../../core/corsa_runtime" }
+corsa_client = { version = "0.7.0", path = "../../../core/corsa_client" }
+corsa_core = { version = "0.7.0", path = "../../../core/corsa_core" }
+corsa_jsonrpc = { version = "0.7.0", path = "../../../core/corsa_jsonrpc" }
+corsa_lsp = { version = "0.7.0", path = "../../../core/corsa_lsp" }
+corsa_orchestrator = { version = "0.7.0", path = "../../../core/corsa_orchestrator" }
+corsa_runtime = { version = "0.7.0", path = "../../../core/corsa_runtime" }
 
 [dev-dependencies]
 tempfile = "3"
