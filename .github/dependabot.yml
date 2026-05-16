@@ -8,6 +8,14 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "npm"
+    directory: "/bench/cli_compare"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "npm"
+    directory: "/nix/vite-plus"
+    schedule:
+      interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -10,6 +10,23 @@ function readWorkflow(path: string): string {
 }
 
 describe("publish workflows", () => {
+  it("requires tag refs for manual package publishing", () => {
+    for (const path of [
+      ".github/workflows/publish-npm.yml",
+      ".github/workflows/publish-rust.yml",
+    ]) {
+      const workflow = readWorkflow(path);
+      expect(workflow).toContain("github.ref_type == 'tag'");
+      expect(workflow).toContain("Validate release tag");
+      expect(workflow).not.toContain("if: ${{ github.event_name == 'push' }}");
+    }
+  });
+
+  it("protects GitHub Release creation with the release environment", () => {
+    const workflow = readWorkflow(".github/workflows/github-release.yml");
+    expect(workflow).toContain("environment: release");
+  });
+
   it("sets up Node 24 before running the Rust publish script", () => {
     const workflow = readWorkflow(".github/workflows/publish-rust.yml");
     expect(workflow).toContain("Setup Node.js for release scripts");

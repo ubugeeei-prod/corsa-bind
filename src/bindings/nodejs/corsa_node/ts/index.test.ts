@@ -14,6 +14,7 @@ import {
   isAnyLikeTypeTexts,
   isArrayLikeTypeTexts,
   isErrorLikeTypeTexts,
+  isStringArrayLikeTypeTexts,
   isPromiseLikeTypeTexts,
   nativeLintRuleMetas,
   runNativeLintRule,
@@ -76,6 +77,8 @@ describe("CorsaApiClient", () => {
       "undefined",
     ]);
     expect(isArrayLikeTypeTexts(["ReadonlyArray<string>"])).toBe(true);
+    expect(isStringArrayLikeTypeTexts(["readonly string[]"])).toBe(true);
+    expect(isStringArrayLikeTypeTexts(["Array<number>"])).toBe(false);
     expect(isPromiseLikeTypeTexts(["Promise<string>"])).toBe(true);
     expect(isPromiseLikeTypeTexts([], ["then"])).toBe(true);
     expect(isErrorLikeTypeTexts(["TypeError"])).toBe(true);

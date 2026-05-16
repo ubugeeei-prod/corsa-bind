@@ -119,6 +119,17 @@ pub fn is_array_like_type_texts<T: AsRef<str>>(type_texts: &[T]) -> bool {
     })
 }
 
+/// Returns whether any rendered type text is a string array-like shape.
+pub fn is_string_array_like_type_texts<T: AsRef<str>>(type_texts: &[T]) -> bool {
+    type_texts.iter().any(|text| {
+        let text = text.as_ref().trim();
+        text == "string[]"
+            || text == "readonly string[]"
+            || text.starts_with("Array<string>")
+            || text.starts_with("ReadonlyArray<string>")
+    })
+}
+
 /// Returns whether type text or known properties suggest a thenable value.
 pub fn is_promise_like_type_texts<T: AsRef<str>, P: AsRef<str>>(
     type_texts: &[T],
@@ -179,7 +190,8 @@ pub(crate) fn is_bigint_literal(text: &str) -> bool {
 mod tests {
     use super::{
         TypeTextKind, classify_type_text, is_array_like_type_texts, is_error_like_type_texts,
-        is_promise_like_type_texts, split_top_level_type_text, split_type_text,
+        is_promise_like_type_texts, is_string_array_like_type_texts, split_top_level_type_text,
+        split_type_text,
     };
 
     #[test]
@@ -224,5 +236,15 @@ mod tests {
             &[] as &[&str],
             &["message", "name"]
         ));
+    }
+
+    #[test]
+    fn detects_string_array_shapes() {
+        assert!(is_string_array_like_type_texts(&["string[]"]));
+        assert!(is_string_array_like_type_texts(&["readonly string[]"]));
+        assert!(is_string_array_like_type_texts(&["Array<string>"]));
+        assert!(is_string_array_like_type_texts(&["ReadonlyArray<string>"]));
+        assert!(!is_string_array_like_type_texts(&["number[]"]));
+        assert!(!is_string_array_like_type_texts(&["Array<number>"]));
     }
 }

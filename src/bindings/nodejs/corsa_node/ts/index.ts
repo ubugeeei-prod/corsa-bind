@@ -85,6 +85,10 @@ export function isArrayLikeTypeTexts(typeTexts: readonly string[]): boolean {
   return binding.isArrayLikeTypeTexts([...typeTexts]);
 }
 
+export function isStringArrayLikeTypeTexts(typeTexts: readonly string[]): boolean {
+  return binding.isStringArrayLikeTypeTexts([...typeTexts]);
+}
+
 export function isPromiseLikeTypeTexts(
   typeTexts: readonly string[],
   propertyNames: readonly string[] = [],
@@ -109,6 +113,7 @@ export const Utils = Object.freeze({
   isAnyLikeTypeTexts,
   isUnknownLikeTypeTexts,
   isArrayLikeTypeTexts,
+  isStringArrayLikeTypeTexts,
   isPromiseLikeTypeTexts,
   isErrorLikeTypeTexts,
 });

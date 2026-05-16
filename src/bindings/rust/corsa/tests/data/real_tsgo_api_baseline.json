@@ -1,10 +1,10 @@
 {
   "currentDirectory": ".",
-  "fileCount": 71,
+  "fileCount": 73,
   "firstFile": "ref/typescript-go/_packages/native-preview/src/api/fs.ts",
   "lastFile": "ref/typescript-go/_packages/native-preview/src/enums/typePredicateKind.ts",
   "projectCount": 1,
-  "rootFiles": 71,
+  "rootFiles": 73,
   "configFileName": "ref/typescript-go/_packages/native-preview/tsconfig.json",
   "primaryFile": "ref/typescript-go/_packages/native-preview/src/api/fs.ts",
   "stringTypeFlags": 32,

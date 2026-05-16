@@ -16,6 +16,7 @@ export declare function isBigIntLikeTypeTexts(typeTexts: Array<string>): boolean
 export declare function isAnyLikeTypeTexts(typeTexts: Array<string>): boolean
 export declare function isUnknownLikeTypeTexts(typeTexts: Array<string>): boolean
 export declare function isArrayLikeTypeTexts(typeTexts: Array<string>): boolean
+export declare function isStringArrayLikeTypeTexts(typeTexts: Array<string>): boolean
 export declare function isPromiseLikeTypeTexts(typeTexts: Array<string>, propertyNames?: Array<string> | undefined | null): boolean
 export declare function isErrorLikeTypeTexts(typeTexts: Array<string>, propertyNames?: Array<string> | undefined | null): boolean
 /**
