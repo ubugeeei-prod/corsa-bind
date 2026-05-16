@@ -14,8 +14,8 @@ experimental-distributed = ["corsa/experimental-distributed"]
 
 [dependencies]
 lsp-types = "0.97"
-napi = { version = "2", default-features = false, features = ["napi4"] }
-napi-derive = "2"
+napi = { version = "3", default-features = false, features = ["napi4", "dyn-symbols"] }
+napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 corsa = { version = "0.7.1", path = "../../rust/corsa", features = ["experimental-distributed"] }
