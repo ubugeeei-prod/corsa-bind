@@ -282,7 +282,7 @@ fn main() -> Result<(), corsa::TsgoError> {
     block_on(async {
         let client = ApiClient::spawn(
             ApiSpawnConfig::new(".cache/tsgo")
-                .with_cwd("ref/typescript-go/_packages/api"),
+                .with_cwd("ref/typescript-go/_packages/native-preview"),
         )
         .await?;
 

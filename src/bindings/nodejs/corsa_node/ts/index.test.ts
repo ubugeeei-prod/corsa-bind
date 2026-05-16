@@ -28,10 +28,12 @@ const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_tsgo${executableSuffix}`);
 const realBinary = resolve(workspaceRoot, `.cache/tsgo${executableSuffix}`);
-const realDataset = resolve(
-  workspaceRoot,
+const realDatasetCandidates = [
   "ref/typescript-go/_packages/native-preview/tsconfig.json",
-);
+  "ref/typescript-go/_packages/api/tsconfig.json",
+].map((path) => resolve(workspaceRoot, path));
+const realDataset =
+  realDatasetCandidates.find((candidate) => existsSync(candidate)) ?? realDatasetCandidates[0];
 const realTsgoReady = existsSync(realBinary) && existsSync(realDataset);
 
 describe("CorsaApiClient", () => {

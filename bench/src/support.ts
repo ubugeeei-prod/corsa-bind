@@ -9,10 +9,12 @@ export const tsgoPath = resolve(
   workspaceRoot,
   process.platform === "win32" ? ".cache/tsgo.exe" : ".cache/tsgo",
 );
-export const datasetPath = resolve(
-  workspaceRoot,
+const datasetCandidates = [
   "ref/typescript-go/_packages/native-preview/tsconfig.json",
-);
+  "ref/typescript-go/_packages/api/tsconfig.json",
+].map((path) => resolve(workspaceRoot, path));
+export const datasetPath =
+  datasetCandidates.find((candidate) => existsSync(candidate)) ?? datasetCandidates[0];
 export const typescriptOxlintFixtureDir = resolve(
   workspaceRoot,
   "bench/fixtures/typescript_oxlint",
