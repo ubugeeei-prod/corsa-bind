@@ -37,12 +37,13 @@ interface ReleaseOptions {
   push: boolean;
   remote: string;
   requiredBranch: string;
+  runFullGates: boolean;
   skipGates: boolean;
 }
 
 function printUsage(): void {
   console.log(
-    "Usage: vp run -w release <patch|minor|major> [--no-push] [--skip-gates] [--allow-bootstrap-gap]",
+    "Usage: vp run -w release <patch|minor|major> [--no-push] [--full-gates] [--skip-gates] [--allow-bootstrap-gap]",
   );
 }
 
@@ -67,6 +68,7 @@ function parseArgs(argv: string[]): ReleaseOptions {
     push: !args.includes("--no-push"),
     remote: process.env.RELEASE_REMOTE?.trim() || defaultRemote,
     requiredBranch: process.env.RELEASE_BRANCH?.trim() || defaultBranch,
+    runFullGates: args.includes("--full-gates"),
     skipGates: args.includes("--skip-gates"),
   };
 }
@@ -199,7 +201,13 @@ async function assertBootstrapComplete(): Promise<void> {
   throw new Error(lines.join("\n"));
 }
 
-function runReleaseGates(): void {
+function runReleasePreflight(): void {
+  console.log("running local release preflight; full release gates run in GitHub Actions");
+  runCommand(vpCommand, ["check"], { cwd: rootDir });
+  runCommand(vpCommand, ["run", "-w", "fmt_check_rust"], { cwd: rootDir });
+}
+
+function runFullReleaseGates(): void {
   runCommand(vpCommand, ["check"], { cwd: rootDir });
   runCommand(vpCommand, ["run", "-w", "fmt_check_rust"], { cwd: rootDir });
   runCommand(vpCommand, ["run", "-w", "lint_rust"], { cwd: rootDir });
@@ -228,11 +236,15 @@ async function main(): Promise<void> {
   const tag = versionToTag(nextVersion);
 
   assertTagAbsent(options.remote, tag);
+  if (!options.skipGates && !options.runFullGates) {
+    runReleasePreflight();
+  }
+
   updateWorkspaceVersion(nextVersion);
   syncCargoLockfile();
 
-  if (!options.skipGates) {
-    runReleaseGates();
+  if (!options.skipGates && options.runFullGates) {
+    runFullReleaseGates();
   }
 
   assertReleaseTagMatchesWorkspace(tag);

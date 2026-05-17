@@ -92,13 +92,16 @@ vp run -w release minor
 - requires a clean checkout
 - expects `main` by default
 - bumps every Rust and npm package version together
-- runs the local release gates
+- runs only a lightweight local preflight by default
 - creates `release: vX.Y.Z`
 - creates an annotated `vX.Y.Z` tag
 - pushes the branch and the tag
 
 Pushing the tag triggers both publish workflows. Rust and npm publish from the
 tagged commit through GitHub Actions trusted publishing.
+The heavier release gates run in GitHub Actions after the tag is pushed. Use
+`vp run -w release <patch|minor|major> --full-gates` only when you explicitly
+want to rerun the full gate set locally before tagging.
 After both publish workflows complete successfully, the `GitHub Release`
 workflow creates a GitHub Release for the tag with generated release notes.
 
@@ -121,6 +124,14 @@ This performs:
 CI also runs the same release dry-run workflow.
 
 ## Release Checks
+
+The local release command runs:
+
+- `vp check`
+- `cargo fmt --all --check`
+
+The tag-triggered GitHub Actions release gates run the heavier checks before
+publishing:
 
 Before publishing Rust crates:
 
