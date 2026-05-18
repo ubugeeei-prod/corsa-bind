@@ -1,12 +1,12 @@
 use crate::{
-    Result,
+    Result, TsgoError,
     fast::{CompactString, SmallVec},
 };
 use std::{
     ffi::OsStr,
     path::PathBuf,
     process::{Child, Stdio},
-    sync::Mutex,
+    sync::{Mutex, TryLockError},
     thread,
     time::{Duration, Instant},
 };
@@ -137,23 +137,40 @@ impl AsyncChildGuard {
     ///
     /// The process is always reaped before this method returns successfully.
     pub async fn shutdown(&self, wait_for: Duration) -> Result<()> {
-        let mut child = self.child.lock().unwrap();
+        let (mut child, poisoned) = match self.child.lock() {
+            Ok(child) => (child, false),
+            Err(poisoned) => (poisoned.into_inner(), true),
+        };
         let Some(mut child) = child.take() else {
-            return Ok(());
+            return if poisoned {
+                Err(process_guard_poisoned())
+            } else {
+                Ok(())
+            };
         };
         wait_for_child_exit(&mut child, wait_for)?;
+        if poisoned {
+            return Err(process_guard_poisoned());
+        }
         Ok(())
     }
 }
 
 impl Drop for AsyncChildGuard {
     fn drop(&mut self) {
-        if let Ok(mut child) = self.child.try_lock()
-            && let Some(child) = child.as_mut()
-        {
+        let mut child = match self.child.try_lock() {
+            Ok(child) => child,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => return,
+        };
+        if let Some(child) = child.as_mut() {
             let _ = terminate_child_process(child);
         }
     }
+}
+
+fn process_guard_poisoned() -> TsgoError {
+    TsgoError::Join(CompactString::from("process guard lock poisoned"))
 }
 
 /// Waits for a child process to exit and forcefully terminates it after a timeout.
