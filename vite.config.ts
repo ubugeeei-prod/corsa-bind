@@ -149,7 +149,7 @@ export default defineConfig({
       },
       test_rust: {
         command: "cargo test --workspace",
-        dependsOn: ["verify_ref"],
+        dependsOn: ["verify_ref", "build_rust", "build_mock"],
       },
       test_rust_experimental: {
         command: "cargo test -p corsa --no-default-features --test orchestrator",
@@ -157,6 +157,7 @@ export default defineConfig({
       },
       test_rust_experimental_feature: {
         command: "cargo test -p corsa --features experimental-distributed --test orchestrator",
+        dependsOn: ["build_mock"],
       },
       test_ts: {
         command: "vp test run --config ./vite.config.ts",
