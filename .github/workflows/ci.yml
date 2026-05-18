@@ -18,9 +18,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  quality:
-    name: Quality (${{ matrix.os }})
+  js-format:
+    name: JS/TS Format (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -30,44 +31,32 @@ jobs:
           - windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: rustfmt, clippy
 
       - name: Restore Cargo cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
           cache: true
           run-install: true
 
-      - name: Check JS and TS
-        run: vp check
+      - name: Check JS and TS formatting
+        run: vp fmt --check
 
-      - name: Check Rust formatting
-        run: vp run -w fmt_check_rust
-
-      - name: Lint Rust
-        run: vp run -w lint_rust
-
-      - name: Build
-        run: vp run -w build_ci
-
-      - name: Test
-        run: vp run -w test
-
-      - name: Validate public facade without experimental features
-        run: cargo test -p corsa --no-default-features --test orchestrator
-
-  real-tsgo-smoke:
-    name: Real tsgo Smoke (${{ matrix.os }})
+  js-lint-types:
+    name: JS/TS Lint and Types (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -77,22 +66,248 @@ jobs:
           - windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
+        with:
+          node-version: "24"
+          cache: true
+          run-install: true
+
+      - name: Check JS and TS lint and types
+        run: vp check --no-fmt
+
+  rust-format:
+    name: Rust Format (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt
+
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+  rust-lint:
+    name: Rust Lint (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: clippy
 
       - name: Restore Cargo cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Lint Rust
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
+        with:
+          node-version: "24"
+          cache: true
+          run-install: true
+
+      - name: Build workspace
+        run: vp run -w build_ci
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
+        with:
+          node-version: "24"
+          cache: true
+          run-install: true
+
+      - name: Test workspace
+        run: vp run -w test
+
+  public-facade:
+    name: Public Facade (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Build mock tsgo binary
+        run: cargo build -p corsa --bin mock_tsgo
+
+      - name: Validate public facade without experimental features
+        run: cargo test -p corsa --no-default-features --test orchestrator
+
+  quality:
+    name: Quality (${{ matrix.os }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - js-format
+      - js-lint-types
+      - rust-format
+      - rust-lint
+      - build
+      - test
+      - public-facade
+    if: ${{ always() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Verify focused quality checks
+        env:
+          JS_FORMAT: ${{ needs['js-format'].result }}
+          JS_LINT_TYPES: ${{ needs['js-lint-types'].result }}
+          RUST_FORMAT: ${{ needs['rust-format'].result }}
+          RUST_LINT: ${{ needs['rust-lint'].result }}
+          BUILD: ${{ needs.build.result }}
+          TEST: ${{ needs.test.result }}
+          PUBLIC_FACADE: ${{ needs['public-facade'].result }}
+        run: |
+          failed=0
+          for check in \
+            "JS_FORMAT=$JS_FORMAT" \
+            "JS_LINT_TYPES=$JS_LINT_TYPES" \
+            "RUST_FORMAT=$RUST_FORMAT" \
+            "RUST_LINT=$RUST_LINT" \
+            "BUILD=$BUILD" \
+            "TEST=$TEST" \
+            "PUBLIC_FACADE=$PUBLIC_FACADE"; do
+            name="${check%%=*}"
+            result="${check#*=}"
+            echo "$name: $result"
+            if [ "$result" != "success" ]; then
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+  real-tsgo-smoke:
+    name: Real tsgo Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Setup Go for pinned tsgo ref
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.26.0"
           cache: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
           cache: true
@@ -110,24 +325,27 @@ jobs:
   bench-tsgo-ref:
     name: tsgo Ref Bench
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Setup Go for pinned tsgo ref
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.26.0"
           cache: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
           cache: true
