@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, ptr};
 
 use crate::{
     api_client::{
@@ -15,7 +15,8 @@ use crate::{
     types::{CorsaStrRef, CorsaString, corsa_utils_string_free, corsa_utils_string_list_free},
     utils::{
         corsa_utils_classify_type_text, corsa_utils_has_unsafe_any_flow,
-        corsa_utils_is_error_like_type_texts, corsa_utils_split_type_text,
+        corsa_utils_is_any_like_type_texts, corsa_utils_is_error_like_type_texts,
+        corsa_utils_split_top_level_type_text, corsa_utils_split_type_text,
     },
     virtual_document::{
         corsa_virtual_document_free, corsa_virtual_document_splice, corsa_virtual_document_text,
@@ -27,6 +28,28 @@ fn text_ref(text: &str) -> CorsaStrRef {
     CorsaStrRef {
         ptr: text.as_ptr(),
         len: text.len(),
+    }
+}
+
+fn null_text_ref() -> CorsaStrRef {
+    CorsaStrRef {
+        ptr: ptr::null(),
+        len: 8,
+    }
+}
+
+fn empty_text_ref() -> CorsaStrRef {
+    CorsaStrRef {
+        ptr: ptr::dangling(),
+        len: 0,
+    }
+}
+
+fn invalid_utf8_ref() -> CorsaStrRef {
+    static INVALID_UTF8: [u8; 3] = [0x66, 0x80, 0x6f];
+    CorsaStrRef {
+        ptr: INVALID_UTF8.as_ptr(),
+        len: INVALID_UTF8.len(),
     }
 }
 
@@ -48,6 +71,28 @@ fn take_string(value: CorsaString) -> String {
     text
 }
 
+fn take_string_list(value: crate::types::CorsaStringList) -> Vec<String> {
+    let values = if value.ptr.is_null() {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(value.ptr, value.len) }
+            .iter()
+            .map(|value| unsafe {
+                std::str::from_utf8(std::slice::from_raw_parts(
+                    value.ptr.cast::<u8>(),
+                    value.len,
+                ))
+                .unwrap()
+                .to_owned()
+            })
+            .collect::<Vec<_>>()
+    };
+    unsafe {
+        corsa_utils_string_list_free(value);
+    }
+    values
+}
+
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -66,6 +111,83 @@ fn mock_tsgo_binary() -> Option<PathBuf> {
 }
 
 #[test]
+fn treats_null_and_empty_str_refs_as_empty_utility_inputs() {
+    assert_eq!(
+        take_string(unsafe { corsa_utils_classify_type_text(null_text_ref()) }),
+        "other"
+    );
+    assert_eq!(
+        take_string(unsafe { corsa_utils_classify_type_text(empty_text_ref()) }),
+        "other"
+    );
+    assert_eq!(
+        take_string_list(unsafe { corsa_utils_split_type_text(null_text_ref()) }),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        take_string_list(unsafe {
+            corsa_utils_split_top_level_type_text(empty_text_ref(), b'|' as u32)
+        }),
+        Vec::<String>::new()
+    );
+
+    let type_texts = [null_text_ref(), empty_text_ref()];
+    assert!(!unsafe { corsa_utils_is_any_like_type_texts(type_texts.as_ptr(), type_texts.len()) });
+    assert!(!unsafe {
+        corsa_utils_has_unsafe_any_flow(
+            type_texts.as_ptr(),
+            type_texts.len(),
+            type_texts.as_ptr(),
+            type_texts.len(),
+        )
+    });
+}
+
+#[test]
+fn returns_safe_defaults_for_invalid_utf8_utility_inputs() {
+    assert_eq!(
+        take_string(unsafe { corsa_utils_classify_type_text(invalid_utf8_ref()) }),
+        "other"
+    );
+    assert_eq!(
+        take_string_list(unsafe { corsa_utils_split_type_text(invalid_utf8_ref()) }),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        take_string_list(unsafe {
+            corsa_utils_split_top_level_type_text(invalid_utf8_ref(), b'|' as u32)
+        }),
+        Vec::<String>::new()
+    );
+
+    let type_texts = [text_ref("any"), invalid_utf8_ref()];
+    assert!(!unsafe { corsa_utils_is_any_like_type_texts(type_texts.as_ptr(), type_texts.len()) });
+    assert!(!unsafe {
+        corsa_utils_has_unsafe_any_flow(
+            type_texts.as_ptr(),
+            type_texts.len(),
+            type_texts.as_ptr(),
+            type_texts.len(),
+        )
+    });
+}
+
+#[test]
+fn reports_invalid_utf8_for_ffi_inputs_that_set_last_error() {
+    let document = unsafe {
+        corsa_virtual_document_untitled(
+            text_ref("/demo.ts"),
+            invalid_utf8_ref(),
+            text_ref("const value = 1;"),
+        )
+    };
+    assert!(document.is_null());
+
+    let message = take_string(corsa_error_message_take());
+    assert!(message.contains("language_id must be valid UTF-8"));
+}
+
+#[test]
 fn classifies_type_texts_over_ffi() {
     let result = unsafe { corsa_utils_classify_type_text(text_ref("Promise<string> | null")) };
     let text = take_string(result);
@@ -75,20 +197,7 @@ fn classifies_type_texts_over_ffi() {
 #[test]
 fn splits_type_texts_over_ffi() {
     let result = unsafe { corsa_utils_split_type_text(text_ref("string | Array<any>")) };
-    let values = unsafe { std::slice::from_raw_parts(result.ptr, result.len) }
-        .iter()
-        .map(|value| unsafe {
-            std::str::from_utf8(std::slice::from_raw_parts(
-                value.ptr.cast::<u8>(),
-                value.len,
-            ))
-            .unwrap()
-            .to_owned()
-        })
-        .collect::<Vec<_>>();
-    unsafe {
-        corsa_utils_string_list_free(result);
-    }
+    let values = take_string_list(result);
     assert_eq!(values, vec!["string", "Array<any>"]);
 }
 
