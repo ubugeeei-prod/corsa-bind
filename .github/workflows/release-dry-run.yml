@@ -31,5 +31,8 @@ jobs:
           cache: true
           run-install: true
 
+      - name: Verify upstream ref
+        run: vp run -w verify_ref
+
       - name: Validate release artifacts
         run: vp run -w release_dry_run
