@@ -31,6 +31,13 @@ The workflow lives in [`../.github/workflows/ci.yml`](../.github/workflows/ci.ym
 
 It currently has three CI jobs in the main workflow:
 
+- `js-format`
+- `js-lint-types`
+- `rust-format`
+- `rust-lint`
+- `build`
+- `test`
+- `public-facade`
 - `quality`
 - `real-tsgo-smoke`
 - `bench-tsgo-ref`
@@ -361,6 +368,12 @@ publish public artifacts:
 
 Keep temporary bootstrap secrets scoped to that environment, and remove them
 after trusted publishing is configured for crates.io and npm.
+
+OpenSSF Scorecard is handled by
+[`scorecard.yml`](../.github/workflows/scorecard.yml) as scheduled monitoring,
+not as a required merge check. Keep it runnable manually after changing
+repository security settings, but avoid adding it to branch protection unless the
+team explicitly wants release flow to wait on repository-wide posture scans.
 
 ## Troubleshooting
 

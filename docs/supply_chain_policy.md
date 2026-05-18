@@ -53,3 +53,23 @@ runners with OIDC enabled.
 
 SBOM generation remains a future hardening target for the first public binary
 distribution flow.
+
+## OpenSSF Scorecard Monitoring
+
+The [`OpenSSF Scorecard`](../.github/workflows/scorecard.yml) workflow runs
+weekly on the default branch and can also be run manually when repository
+settings change. It is intentionally not a required pull-request status check,
+because it monitors repository posture over time rather than validating an
+individual code change.
+
+The workflow uses explicit job-level permissions and pinned action SHAs. Scheduled
+runs publish results to the public Scorecard API through GitHub OIDC. Manual runs
+generate the same SARIF artifact, but do not publish over the experimental manual
+Scorecard path.
+
+For this public repository, SARIF is uploaded to GitHub Code Scanning. If this
+workflow is reused in a private repository, enable GitHub Advanced Security and
+Code Scanning first, then set the repository variable
+`CORSA_ENABLE_SCORECARD_SARIF_UPLOAD=true`. Without that setup, the SARIF
+artifact remains available from the workflow run for short-term inspection, but
+the Code Scanning upload step stays disabled.
