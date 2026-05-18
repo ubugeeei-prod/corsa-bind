@@ -1,6 +1,6 @@
 ## Summary
 
-- 
+- Summary of the change
 
 ## Validation
 
