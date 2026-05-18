@@ -123,6 +123,46 @@ fn orchestrator_executes_parallel_batches() {
 }
 
 #[test]
+fn orchestrator_executes_batches_larger_than_work_queue_capacity() {
+    run_async_test(async {
+        let orchestrator = ApiOrchestrator::new(ApiOrchestratorConfig {
+            work_queue_capacity: 1,
+            ..ApiOrchestratorConfig::default()
+        });
+        let profile = support::api_profile("async-batch-backpressure", ApiMode::AsyncJsonRpcStdio);
+        let values = orchestrator
+            .execute_all(&profile, 2, 0_u32..8, |_, value| async move {
+                Ok::<_, corsa::TsgoError>(value)
+            })
+            .await
+            .unwrap();
+        assert_eq!(values.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7]);
+    });
+}
+
+#[test]
+fn orchestrator_reports_batch_task_panics() {
+    run_async_test(async {
+        let orchestrator = ApiOrchestrator::default();
+        let profile = support::api_profile("async-batch-panic", ApiMode::AsyncJsonRpcStdio);
+        let error = orchestrator
+            .execute_all(&profile, 1, [1_u32], |_, _| async move {
+                panic!("batch task exploded");
+                #[allow(unreachable_code)]
+                Ok::<_, corsa::TsgoError>(0_u32)
+            })
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("orchestrator batch worker panicked: batch task exploded"),
+            "{error}"
+        );
+    });
+}
+
+#[test]
 fn orchestrator_skips_worker_start_for_empty_batches() {
     run_async_test(async {
         let orchestrator = ApiOrchestrator::default();
