@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible problem in corsa-bind.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve corsa-bind. Please include enough detail for maintainers to reproduce the issue.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect to happen?
+      placeholder: Briefly describe the bug and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest example, command, or repository that reproduces the issue.
+      placeholder: |
+        1. Run ...
+        2. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include package version, runtime, OS, and any relevant toolchain versions.
+      placeholder: |
+        corsa-bind version:
+        OS:
+        Node.js/Rust/toolchain:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Paste relevant logs, errors, or stack traces. Redact secrets.
+      render: shell
+    validations:
+      required: false

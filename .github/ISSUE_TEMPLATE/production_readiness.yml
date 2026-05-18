@@ -1,0 +1,49 @@
+name: Production readiness
+description: Track a release, operational, security, or reliability readiness concern.
+title: "chore: "
+labels:
+  - production-readiness
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for work that improves confidence in shipping or operating corsa-bind.
+  - type: textarea
+    id: concern
+    attributes:
+      label: Readiness concern
+      description: What risk, gap, or operational need should be addressed?
+      placeholder: Describe the production readiness gap and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List the concrete outcomes required to close this issue.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which area is most affected?
+      options:
+        - Release
+        - Security
+        - Observability
+        - Reliability
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add links, constraints, prior discussion, or implementation notes.
+    validations:
+      required: false
