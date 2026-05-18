@@ -28,10 +28,10 @@ export interface NodeBindingTarget {
 }
 
 export interface NodeBindingBuildMatrixEntry {
+  crossCompile: boolean;
   os: string;
   target: string;
-  useZig: boolean;
-  zigAbiSuffix?: string;
+  useNapiCross: boolean;
 }
 
 export interface PublishablePackage {
@@ -127,45 +127,51 @@ const cpuToNodeArch: Record<string, string> = {
 };
 
 interface NodeBindingBuildTargetConfig {
+  crossCompile: boolean;
   os: string;
-  useZig: boolean;
-  zigAbiSuffix?: string;
+  useNapiCross: boolean;
 }
 
 const nodeBindingBuildTargetConfig: Record<string, NodeBindingBuildTargetConfig> = {
   "x86_64-pc-windows-msvc": {
+    crossCompile: false,
     os: "windows-latest",
-    useZig: false,
+    useNapiCross: false,
   },
   "aarch64-pc-windows-msvc": {
+    crossCompile: false,
     os: "windows-latest",
-    useZig: false,
+    useNapiCross: false,
   },
   "x86_64-apple-darwin": {
+    crossCompile: false,
     os: "macos-15-intel",
-    useZig: false,
+    useNapiCross: false,
   },
   "aarch64-apple-darwin": {
+    crossCompile: false,
     os: "macos-15",
-    useZig: false,
+    useNapiCross: false,
   },
   "x86_64-unknown-linux-gnu": {
+    crossCompile: false,
     os: "ubuntu-latest",
-    useZig: true,
-    zigAbiSuffix: "2.17",
+    useNapiCross: true,
   },
   "aarch64-unknown-linux-gnu": {
+    crossCompile: false,
     os: "ubuntu-latest",
-    useZig: true,
-    zigAbiSuffix: "2.17",
+    useNapiCross: true,
   },
   "x86_64-unknown-linux-musl": {
+    crossCompile: true,
     os: "ubuntu-latest",
-    useZig: true,
+    useNapiCross: false,
   },
   "aarch64-unknown-linux-musl": {
+    crossCompile: true,
     os: "ubuntu-latest",
-    useZig: true,
+    useNapiCross: false,
   },
 };
 
@@ -352,10 +358,10 @@ export function getNodeBindingBuildMatrix(
       throw new Error(`No GitHub Actions build config is configured for napi target ${target.raw}`);
     }
     return {
+      crossCompile: config.crossCompile,
       os: config.os,
       target: target.raw,
-      useZig: config.useZig,
-      zigAbiSuffix: config.zigAbiSuffix,
+      useNapiCross: config.useNapiCross,
     };
   });
 }

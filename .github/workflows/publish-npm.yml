@@ -155,8 +155,8 @@ jobs:
           cache: true
           run-install: true
 
-      - name: Setup Zig for cross-built Linux targets
-        if: ${{ matrix.useZig }}
+      - name: Setup Zig for musl cross-builds
+        if: ${{ contains(matrix.target, 'unknown-linux-musl') || matrix.crossCompile }}
         uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2
 
       - name: Build native binding
@@ -164,11 +164,23 @@ jobs:
         working-directory: src/bindings/nodejs/corsa_node
         run: |
           args=(build --platform --release --target "${{ matrix.target }}")
-          if [[ "${{ matrix.useZig }}" == "true" ]]; then
-            args+=(--zig)
+          cross_arg=""
+          case "${{ matrix.target }}" in
+            *-unknown-linux-gnu)
+              cross_arg="--use-napi-cross"
+              ;;
+            *-unknown-linux-musl)
+              cross_arg="--cross-compile"
+              ;;
+          esac
+          if [[ -z "$cross_arg" && "${{ matrix.useNapiCross || false }}" == "true" ]]; then
+            cross_arg="--use-napi-cross"
           fi
-          if [[ -n "${{ matrix.zigAbiSuffix }}" ]]; then
-            args+=(--zig-abi-suffix "${{ matrix.zigAbiSuffix }}")
+          if [[ -z "$cross_arg" && "${{ matrix.crossCompile || false }}" == "true" ]]; then
+            cross_arg="--cross-compile"
+          fi
+          if [[ -n "$cross_arg" ]]; then
+            args+=("$cross_arg")
           fi
           ../../../../node_modules/.bin/napi "${args[@]}"
 
