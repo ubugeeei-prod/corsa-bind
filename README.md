@@ -60,8 +60,9 @@ Current focus:
 Pinned upstream at the time of writing:
 
 - Repository: `https://github.com/microsoft/typescript-go.git`
-- Commit: `9c19dee6ab88ae11444837f16efa16a6b3dc9f59`
-- Lock file: [`tsgo_ref.lock.toml`](./tsgo_ref.lock.toml)
+- Commit: `f4a1d2a1d0d5df4333f2440500e3a6c4b4702d9a`
+- Lock file: [`tsgo_ref.lock.toml`](./tsgo_ref.lock.toml), which is the
+  source of truth for the exact upstream ref and tree.
 
 ## Workspace Layout
 
