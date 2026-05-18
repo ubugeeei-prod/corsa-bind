@@ -42,8 +42,9 @@ describe("publish workflows", () => {
     expect(workflow).toContain(
       "matrix: ${{ fromJSON(needs.resolve-native-targets.outputs.matrix) }}",
     );
-    expect(workflow).toContain("Setup Zig for cross-built Linux targets");
+    expect(workflow).toContain("Setup Zig for musl cross-builds");
     expect(workflow).toMatch(/uses: goto-bus-stop\/setup-zig@[a-f0-9]{40} # v2/);
-    expect(workflow).toContain('args+=(--zig-abi-suffix "${{ matrix.zigAbiSuffix }}")');
+    expect(workflow).toContain('cross_arg="--use-napi-cross"');
+    expect(workflow).toContain('cross_arg="--cross-compile"');
   });
 });
