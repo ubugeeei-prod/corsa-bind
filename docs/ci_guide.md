@@ -329,6 +329,39 @@ The most important files for this CI stabilization work are:
 - [`../src/bindings/nodejs/typescript_oxlint/ts/rules/type_utils.ts`](../src/bindings/nodejs/typescript_oxlint/ts/rules/type_utils.ts)
 - [`../ref/typescript-go/go.mod`](../ref/typescript-go/go.mod)
 
+## Branch Protection Readiness
+
+Production releases assume that `main` represents reviewed, fully validated
+state. Configure branch protection so direct pushes are blocked and pull
+requests cannot merge until the current CI surface is green.
+
+Required status checks for `main` should include:
+
+- `Quality (ubuntu-latest)`
+- `Quality (macos-latest)`
+- `Quality (windows-latest)`
+- `Real tsgo Smoke (ubuntu-latest)`
+- `Real tsgo Smoke (macos-latest)`
+- `Real tsgo Smoke (windows-latest)`
+- `tsgo Ref Bench`
+- `Cargo Deny`
+- `Release Dry Run`
+
+Enable merge queue once the repository starts accepting concurrent feature PRs
+or release-prep PRs from more than one maintainer. The queue should use the same
+required checks as normal pull requests so release tags are cut only from a
+post-merge commit that has been validated in final `main` order.
+
+The `release` environment should require maintainer approval for workflows that
+publish public artifacts:
+
+- [`publish-rust.yml`](../.github/workflows/publish-rust.yml)
+- [`publish-npm.yml`](../.github/workflows/publish-npm.yml)
+- [`github-release.yml`](../.github/workflows/github-release.yml)
+
+Keep temporary bootstrap secrets scoped to that environment, and remove them
+after trusted publishing is configured for crates.io and npm.
+
 ## Troubleshooting
 
 ## `vp check` says `@corsa-bind/napi` cannot be found
