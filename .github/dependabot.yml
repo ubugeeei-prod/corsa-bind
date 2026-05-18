@@ -2,21 +2,81 @@ version: 2
 updates:
   - package-ecosystem: "cargo"
     directory: "/"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    open-pull-requests-limit: 5
     schedule:
       interval: "weekly"
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "npm"
     directory: "/"
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    open-pull-requests-limit: 5
     schedule:
       interval: "weekly"
+    groups:
+      root-npm-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "npm"
     directory: "/bench/cli_compare"
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    open-pull-requests-limit: 5
     schedule:
       interval: "weekly"
+    groups:
+      bench-cli-compare-npm-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "npm"
     directory: "/nix/vite-plus"
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    open-pull-requests-limit: 5
     schedule:
       interval: "weekly"
+    groups:
+      nix-vite-plus-npm-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
+    labels:
+      - "dependencies"
+      - "github_actions"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    open-pull-requests-limit: 5
     schedule:
       interval: "weekly"
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
