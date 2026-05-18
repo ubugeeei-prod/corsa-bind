@@ -69,24 +69,54 @@ describe("npm release utils", () => {
 
   it("derives the GitHub Actions build matrix from the configured native targets", () => {
     expect(getNodeBindingBuildMatrix(nodeBindingManifest)).toEqual([
-      { os: "windows-latest", target: "x86_64-pc-windows-msvc", useZig: false },
-      { os: "macos-15-intel", target: "x86_64-apple-darwin", useZig: false },
       {
+        crossCompile: false,
+        os: "windows-latest",
+        target: "x86_64-pc-windows-msvc",
+        useNapiCross: false,
+      },
+      {
+        crossCompile: false,
+        os: "macos-15-intel",
+        target: "x86_64-apple-darwin",
+        useNapiCross: false,
+      },
+      {
+        crossCompile: false,
         os: "ubuntu-latest",
         target: "x86_64-unknown-linux-gnu",
-        useZig: true,
-        zigAbiSuffix: "2.17",
+        useNapiCross: true,
       },
-      { os: "macos-15", target: "aarch64-apple-darwin", useZig: false },
-      { os: "windows-latest", target: "aarch64-pc-windows-msvc", useZig: false },
-      { os: "ubuntu-latest", target: "x86_64-unknown-linux-musl", useZig: true },
       {
+        crossCompile: false,
+        os: "macos-15",
+        target: "aarch64-apple-darwin",
+        useNapiCross: false,
+      },
+      {
+        crossCompile: false,
+        os: "windows-latest",
+        target: "aarch64-pc-windows-msvc",
+        useNapiCross: false,
+      },
+      {
+        crossCompile: true,
+        os: "ubuntu-latest",
+        target: "x86_64-unknown-linux-musl",
+        useNapiCross: false,
+      },
+      {
+        crossCompile: false,
         os: "ubuntu-latest",
         target: "aarch64-unknown-linux-gnu",
-        useZig: true,
-        zigAbiSuffix: "2.17",
+        useNapiCross: true,
       },
-      { os: "ubuntu-latest", target: "aarch64-unknown-linux-musl", useZig: true },
+      {
+        crossCompile: true,
+        os: "ubuntu-latest",
+        target: "aarch64-unknown-linux-musl",
+        useNapiCross: false,
+      },
     ]);
   });
 
