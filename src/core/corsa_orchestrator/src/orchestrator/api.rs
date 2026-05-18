@@ -1,3 +1,4 @@
+use super::panic_payload::panic_payload_message;
 use crate::Result;
 use crate::api::{ApiClient, ApiProfile, ManagedSnapshot, UpdateSnapshotParams};
 use corsa_core::{
@@ -10,7 +11,9 @@ use log::warn;
 use parking_lot::{Mutex, RwLock};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
+    any::Any,
     collections::VecDeque,
+    panic::{AssertUnwindSafe, catch_unwind},
     sync::mpsc,
     sync::{
         Arc,
@@ -290,7 +293,7 @@ impl ApiOrchestrator {
         let queue_capacity = self.config.work_queue_capacity.max(1);
         let (work_tx, work_rx) = mpsc::sync_channel::<(usize, T)>(queue_capacity);
         let work_rx = Arc::new(std::sync::Mutex::new(work_rx));
-        let (result_tx, result_rx) = mpsc::sync_channel::<Result<(usize, R)>>(queue_capacity);
+        let (result_tx, result_rx) = mpsc::channel::<Result<(usize, R)>>();
         thread::scope(|scope| {
             for _ in 0..replicas.max(1) {
                 let profile = profile.clone();
@@ -298,14 +301,25 @@ impl ApiOrchestrator {
                 let result_tx = result_tx.clone();
                 scope.spawn(move || {
                     loop {
-                        let job = work_rx.lock().unwrap().recv();
+                        let job = match work_rx.lock() {
+                            Ok(work_rx) => work_rx.recv(),
+                            Err(_) => {
+                                let _ = result_tx.send(Err(crate::TsgoError::Join(
+                                    CompactString::from("orchestrator work queue lock poisoned"),
+                                )));
+                                break;
+                            }
+                        };
                         let Ok((index, input)) = job else {
                             break;
                         };
-                        let output = block_on(async {
-                            let client = self.lease(&profile).await?;
-                            Ok::<_, crate::TsgoError>((index, task(client, input).await?))
-                        });
+                        let output = catch_unwind(AssertUnwindSafe(|| {
+                            block_on(async {
+                                let client = self.lease(&profile).await?;
+                                Ok::<_, crate::TsgoError>((index, task(client, input).await?))
+                            })
+                        }))
+                        .unwrap_or_else(|panic| Err(batch_worker_panic(panic)));
                         if result_tx.send(output).is_err() {
                             break;
                         }
@@ -386,4 +400,11 @@ impl ApiOrchestrator {
             }
         }
     }
+}
+
+fn batch_worker_panic(panic: Box<dyn Any + Send>) -> crate::TsgoError {
+    let message = panic_payload_message(panic.as_ref());
+    crate::TsgoError::Join(compact_format(format_args!(
+        "orchestrator batch worker panicked: {message}"
+    )))
 }

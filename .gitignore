@@ -9,6 +9,7 @@ dist
 
 /ref/corsa-upstream/
 /ref/typescript-go/
+/origin/
 .DS_Store
 .cache
 src/bindings/moonbit/**/_build
