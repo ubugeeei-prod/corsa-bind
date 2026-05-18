@@ -18,6 +18,10 @@ on:
         options:
           - trusted
           - token
+      tag:
+        description: Existing release tag to publish during manual recovery
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -31,7 +35,7 @@ env:
 
 jobs:
   release-gates:
-    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
+    if: ${{ (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'publish-npm' && inputs.tag != '') }}
     name: Release Gates
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -39,6 +43,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Install Rust
@@ -64,7 +69,7 @@ jobs:
 
       - name: Validate release tag
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: node --strip-types ./scripts/assert_release_tag.ts
 
       - name: Check JS and TS
@@ -91,7 +96,7 @@ jobs:
         run: vp run -w release_dry_run
 
   resolve-native-targets:
-    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
+    if: ${{ (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'publish-npm' && inputs.tag != '') }}
     name: Resolve native binding targets
     needs:
       - release-gates
@@ -103,6 +108,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Setup Node.js
@@ -117,7 +123,7 @@ jobs:
           printf 'matrix=%s\n' "$(node --strip-types ./scripts/print_napi_build_matrix.ts)" >> "$GITHUB_OUTPUT"
 
   build-native-bindings:
-    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
+    if: ${{ (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'publish-npm' && inputs.tag != '') }}
     name: Build native binding (${{ matrix.target }})
     needs:
       - release-gates
@@ -131,6 +137,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Install Rust
@@ -163,7 +170,7 @@ jobs:
           if [[ -n "${{ matrix.zigAbiSuffix }}" ]]; then
             args+=(--zig-abi-suffix "${{ matrix.zigAbiSuffix }}")
           fi
-          node ../../../../node_modules/@napi-rs/cli/scripts/index.js "${args[@]}"
+          ../../../../node_modules/.bin/napi "${args[@]}"
 
       - name: Upload native binding artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -174,7 +181,7 @@ jobs:
           retention-days: 7
 
   publish:
-    if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-npm') && github.ref_type == 'tag' }}
+    if: ${{ (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'publish-npm' && inputs.tag != '') }}
     name: Publish npm packages
     needs:
       - release-gates
@@ -189,6 +196,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Install Rust
