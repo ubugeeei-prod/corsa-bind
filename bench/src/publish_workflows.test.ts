@@ -30,7 +30,7 @@ describe("publish workflows", () => {
   it("sets up Node 24 before running the Rust publish script", () => {
     const workflow = readWorkflow(".github/workflows/publish-rust.yml");
     expect(workflow).toContain("Setup Node.js for release scripts");
-    expect(workflow).toContain("uses: actions/setup-node@v6");
+    expect(workflow).toMatch(/uses: actions\/setup-node@[a-f0-9]{40} # v6/);
     expect(workflow).toContain('node-version: "24"');
     expect(workflow).toContain("node --strip-types ./scripts/publish_rust.ts");
   });
@@ -43,7 +43,7 @@ describe("publish workflows", () => {
       "matrix: ${{ fromJSON(needs.resolve-native-targets.outputs.matrix) }}",
     );
     expect(workflow).toContain("Setup Zig for cross-built Linux targets");
-    expect(workflow).toContain("uses: goto-bus-stop/setup-zig@v2");
+    expect(workflow).toMatch(/uses: goto-bus-stop\/setup-zig@[a-f0-9]{40} # v2/);
     expect(workflow).toContain('args+=(--zig-abi-suffix "${{ matrix.zigAbiSuffix }}")');
   });
 });

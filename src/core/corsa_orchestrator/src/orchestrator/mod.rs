@@ -7,6 +7,7 @@
 mod api;
 #[cfg(feature = "experimental-distributed")]
 mod distributed;
+mod panic_payload;
 #[cfg(feature = "experimental-distributed")]
 mod raft;
 #[cfg(feature = "experimental-distributed")]

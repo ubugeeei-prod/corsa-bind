@@ -1,3 +1,4 @@
+use super::panic_payload::panic_payload_message;
 use crate::Result;
 use crate::api::{ApiClient, ApiProfile, ManagedSnapshot, UpdateSnapshotParams};
 use corsa_core::{
@@ -402,11 +403,7 @@ impl ApiOrchestrator {
 }
 
 fn batch_worker_panic(panic: Box<dyn Any + Send>) -> crate::TsgoError {
-    let message = panic
-        .downcast_ref::<&str>()
-        .copied()
-        .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
-        .unwrap_or("unknown panic payload");
+    let message = panic_payload_message(panic.as_ref());
     crate::TsgoError::Join(compact_format(format_args!(
         "orchestrator batch worker panicked: {message}"
     )))
