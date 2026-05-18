@@ -1,0 +1,19 @@
+# Automation and release policy
+/.github/workflows/ @ubugeeei
+/.github/dependabot.yml @ubugeeei
+/deny.toml @ubugeeei
+
+# Package and Cargo manifests
+**/package.json @ubugeeei
+**/package-lock.json @ubugeeei
+**/pnpm-lock.yaml @ubugeeei
+/pnpm-workspace.yaml @ubugeeei
+**/Cargo.toml @ubugeeei
+/Cargo.lock @ubugeeei
+
+# Release scripts and docs
+/scripts/ @ubugeeei
+/docs/ @ubugeeei
+
+# Language bindings
+/src/bindings/ @ubugeeei
