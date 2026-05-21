@@ -19,10 +19,17 @@ typedef struct CorsaString {
   size_t len;
 } CorsaString;
 
+typedef enum CorsaResultStatus {
+  CORSA_RESULT_ERROR = 0,
+  CORSA_RESULT_NONE = 1,
+  CORSA_RESULT_SOME = 2
+} CorsaResultStatus;
+
 typedef struct CorsaBytes {
   uint8_t *ptr;
   size_t len;
   bool present;
+  CorsaResultStatus status;
 } CorsaBytes;
 
 typedef struct CorsaStringList {

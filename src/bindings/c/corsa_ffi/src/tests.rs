@@ -12,7 +12,10 @@ use crate::{
         corsa_tsgo_api_client_update_snapshot_json,
     },
     error::corsa_error_message_take,
-    types::{CorsaStrRef, CorsaString, corsa_utils_string_free, corsa_utils_string_list_free},
+    types::{
+        CorsaResultStatus, CorsaStrRef, CorsaString, corsa_utils_string_free,
+        corsa_utils_string_list_free, into_c_bytes,
+    },
     utils::{
         corsa_utils_classify_type_text, corsa_utils_has_unsafe_any_flow,
         corsa_utils_is_any_like_type_texts, corsa_utils_is_error_like_type_texts,
@@ -250,6 +253,40 @@ fn edits_virtual_documents_over_ffi() {
     unsafe {
         corsa_virtual_document_free(document);
     }
+}
+
+#[test]
+fn returns_virtual_document_text_with_interior_nul_without_panicking() {
+    let document = unsafe {
+        corsa_virtual_document_untitled(
+            text_ref("/nul.ts"),
+            text_ref("typescript"),
+            text_ref("const value = \"a\0b\";"),
+        )
+    };
+    assert!(!document.is_null());
+    let text = unsafe { corsa_virtual_document_text(document) };
+    let rendered = unsafe {
+        std::str::from_utf8(std::slice::from_raw_parts(text.ptr.cast::<u8>(), text.len))
+            .unwrap()
+            .to_owned()
+    };
+    unsafe {
+        corsa_utils_string_free(text);
+        corsa_virtual_document_free(document);
+    }
+    assert_eq!(rendered, "const value = \"a\0b\";");
+}
+
+#[test]
+fn bytes_status_distinguishes_none_from_error_default() {
+    let absent = into_c_bytes(None);
+    assert!(!absent.present);
+    assert_eq!(absent.status, CorsaResultStatus::None);
+
+    let error = crate::types::CorsaBytes::default();
+    assert!(!error.present);
+    assert_eq!(error.status, CorsaResultStatus::Error);
 }
 
 #[test]

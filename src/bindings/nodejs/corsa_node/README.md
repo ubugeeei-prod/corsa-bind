@@ -23,6 +23,14 @@ binary through platform-specific optional dependencies.
 You must provide a compatible `typescript-go` (`tsgo`) executable yourself and
 pass its path through `TsgoApiClient.spawn({ executable: "/path/to/tsgo" })`.
 
+## API style
+
+The wrapper exposes Promise-based methods such as `spawnAsync`,
+`initializeAsync`, `updateSnapshotAsync`, `callJsonAsync`, `callBinaryAsync`,
+and `closeAsync` for production Node services and editor integrations. The
+older synchronous methods remain available for short scripts and latency-bounded
+tooling, but they run on the JavaScript call path.
+
 ## Development
 
 ```bash

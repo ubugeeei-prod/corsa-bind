@@ -8,6 +8,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{
     io::{BufRead, Write},
+    panic::{AssertUnwindSafe, catch_unwind},
     sync::mpsc::{self, TrySendError},
     sync::{
         Arc,
@@ -22,6 +23,9 @@ use super::{
     frame::{read_frame, write_frame},
     message::{MessageKind, RawMessage, RpcResponseError},
 };
+
+const DEFAULT_READER_JOIN_TIMEOUT: Duration = Duration::from_millis(250);
+type ReaderResult = thread::Result<()>;
 
 /// Locally registered callback for a JSON-RPC method.
 ///
@@ -139,6 +143,7 @@ struct Inner {
     outbound: Mutex<Option<mpsc::SyncSender<RawMessage>>>,
     pending: Mutex<FastMap<RequestId, mpsc::SyncSender<Result<Value>>>>,
     read_task: Mutex<Option<thread::JoinHandle<()>>>,
+    read_done: Mutex<Option<mpsc::Receiver<ReaderResult>>>,
     write_task: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
@@ -172,6 +177,7 @@ impl JsonRpcConnection {
     {
         let (outbound_tx, outbound_rx) = mpsc::sync_channel(options.outbound_capacity.max(1));
         let (events, _) = broadcast();
+        let (read_done_tx, read_done_rx) = mpsc::sync_channel(1);
         let inner = Arc::new(Inner {
             closed: AtomicBool::new(false),
             next_id: AtomicI64::new(0),
@@ -182,11 +188,15 @@ impl JsonRpcConnection {
             outbound: Mutex::new(Some(outbound_tx)),
             pending: Mutex::new(FastMap::default()),
             read_task: Mutex::new(None),
+            read_done: Mutex::new(Some(read_done_rx)),
             write_task: Mutex::new(None),
         });
         let read_inner = Arc::clone(&inner);
         let write_inner = Arc::clone(&inner);
-        *inner.read_task.lock() = Some(thread::spawn(move || read_inner.read_loop(reader)));
+        *inner.read_task.lock() = Some(thread::spawn(move || {
+            let result = catch_unwind(AssertUnwindSafe(|| read_inner.read_loop(reader)));
+            let _ = read_done_tx.send(result);
+        }));
         *inner.write_task.lock() = Some(thread::spawn(move || {
             write_inner.write_loop(writer, outbound_rx);
         }));
@@ -281,6 +291,12 @@ impl JsonRpcConnection {
     ///
     /// After closure, new requests fail immediately with [`TsgoError::Closed`].
     pub async fn close(&self) -> Result<()> {
+        self.begin_close()?;
+        self.join_reader(DEFAULT_READER_JOIN_TIMEOUT)
+    }
+
+    /// Signals writer shutdown and fails outstanding requests without waiting for the reader.
+    pub fn begin_close(&self) -> Result<()> {
         if self.inner.closed.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
@@ -290,12 +306,43 @@ impl JsonRpcConnection {
         if let Some(task) = self.inner.write_task.lock().take() {
             let _ = task.join();
         }
-        self.inner.read_task.lock().take();
         Ok(())
+    }
+
+    /// Joins the reader thread, falling back after `timeout` if the transport stays blocked.
+    pub fn join_reader(&self, timeout: Duration) -> Result<()> {
+        self.inner.join_reader(timeout)
     }
 }
 
 impl Inner {
+    fn join_reader(&self, timeout: Duration) -> Result<()> {
+        let done = self.read_done.lock();
+        let Some(done_rx) = done.as_ref() else {
+            return Ok(());
+        };
+        match done_rx.recv_timeout(timeout) {
+            Ok(result) => {
+                drop(done);
+                self.read_done.lock().take();
+                if let Some(task) = self.read_task.lock().take() {
+                    let _ = task.join();
+                }
+                result.map_err(|_| {
+                    TsgoError::Join(CompactString::from("jsonrpc reader thread panicked"))
+                })
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                warn!(
+                    "jsonrpc reader thread did not stop within {} ms; continuing shutdown",
+                    timeout.as_millis()
+                );
+                Ok(())
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(TsgoError::Closed("jsonrpc reader")),
+        }
+    }
+
     fn read_loop<R>(self: Arc<Self>, mut reader: R)
     where
         R: BufRead + Send + 'static,

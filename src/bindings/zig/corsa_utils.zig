@@ -64,9 +64,10 @@ pub fn takeStringList(allocator: std.mem.Allocator, value: c.CorsaStringList) ![
 
 pub fn takeOptionalBytes(allocator: std.mem.Allocator, value: c.CorsaBytes) !?[]u8 {
     defer c.corsa_bytes_free(value);
-    if (!value.present) {
+    if (value.status == c.CORSA_RESULT_NONE) {
         return null;
     }
+    if (value.status != c.CORSA_RESULT_SOME) return error.CorsaFfiError;
     if (value.ptr == null or value.len == 0) {
         return allocator.alloc(u8, 0);
     }

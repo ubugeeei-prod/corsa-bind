@@ -129,24 +129,52 @@ export class CorsaApiClient {
     return new CorsaApiClient(binding.TsgoApiClient.spawn(toJson(options)));
   }
 
+  static async spawnAsync(options: ApiClientOptions): Promise<CorsaApiClient> {
+    return new CorsaApiClient(await binding.spawnTsgoApiClientAsync(toJson(options)));
+  }
+
   initialize(): InitializeResponse {
     return fromJson(this.#inner.initializeJson());
+  }
+
+  async initializeAsync(): Promise<InitializeResponse> {
+    return fromJson(await this.#inner.initializeJsonAsync());
   }
 
   parseConfigFile(file: string): ConfigResponse {
     return fromJson(this.#inner.parseConfigFileJson(file));
   }
 
+  async parseConfigFileAsync(file: string): Promise<ConfigResponse> {
+    return fromJson(await this.#inner.parseConfigFileJsonAsync(file));
+  }
+
   updateSnapshot(params?: UpdateSnapshotParams): UpdateSnapshotResponse {
     return fromJson(this.#inner.updateSnapshotJson(params ? toJson(params) : undefined));
+  }
+
+  async updateSnapshotAsync(params?: UpdateSnapshotParams): Promise<UpdateSnapshotResponse> {
+    return fromJson(await this.#inner.updateSnapshotJsonAsync(params ? toJson(params) : undefined));
   }
 
   getSourceFile(snapshot: string, project: string, file: string): Uint8Array | null {
     return this.#inner.getSourceFile(snapshot, project, file) ?? null;
   }
 
+  async getSourceFileAsync(
+    snapshot: string,
+    project: string,
+    file: string,
+  ): Promise<Uint8Array | null> {
+    return (await this.#inner.getSourceFileAsync(snapshot, project, file)) ?? null;
+  }
+
   getStringType(snapshot: string, project: string): TypeResponse {
     return fromJson(this.#inner.getStringTypeJson(snapshot, project));
+  }
+
+  async getStringTypeAsync(snapshot: string, project: string): Promise<TypeResponse> {
+    return fromJson(await this.#inner.getStringTypeJsonAsync(snapshot, project));
   }
 
   getTypeAtPosition(
@@ -158,6 +186,19 @@ export class CorsaApiClient {
     return (
       fromJson<TypeResponse | null>(
         this.#inner.getTypeAtPositionJson(snapshot, project, file, position),
+      ) ?? undefined
+    );
+  }
+
+  async getTypeAtPositionAsync(
+    snapshot: string,
+    project: string,
+    file: string,
+    position: number,
+  ): Promise<TypeResponse | undefined> {
+    return (
+      fromJson<TypeResponse | null>(
+        await this.#inner.getTypeAtPositionJsonAsync(snapshot, project, file, position),
       ) ?? undefined
     );
   }
@@ -175,6 +216,19 @@ export class CorsaApiClient {
     );
   }
 
+  async getSymbolAtPositionAsync(
+    snapshot: string,
+    project: string,
+    file: string,
+    position: number,
+  ): Promise<SymbolResponse | undefined> {
+    return (
+      fromJson<SymbolResponse | null>(
+        await this.#inner.getSymbolAtPositionJsonAsync(snapshot, project, file, position),
+      ) ?? undefined
+    );
+  }
+
   getTypeArguments(
     snapshot: string,
     project: string,
@@ -184,10 +238,33 @@ export class CorsaApiClient {
     return fromJson(this.#inner.getTypeArgumentsJson(snapshot, project, typeHandle, objectFlags));
   }
 
+  async getTypeArgumentsAsync(
+    snapshot: string,
+    project: string,
+    typeHandle: string,
+    objectFlags?: number,
+  ): Promise<TypeResponse[]> {
+    return fromJson(
+      await this.#inner.getTypeArgumentsJsonAsync(snapshot, project, typeHandle, objectFlags),
+    );
+  }
+
   getTypeOfSymbol(snapshot: string, project: string, symbol: string): TypeResponse | undefined {
     return (
       fromJson<TypeResponse | null>(this.#inner.getTypeOfSymbolJson(snapshot, project, symbol)) ??
       undefined
+    );
+  }
+
+  async getTypeOfSymbolAsync(
+    snapshot: string,
+    project: string,
+    symbol: string,
+  ): Promise<TypeResponse | undefined> {
+    return (
+      fromJson<TypeResponse | null>(
+        await this.#inner.getTypeOfSymbolJsonAsync(snapshot, project, symbol),
+      ) ?? undefined
     );
   }
 
@@ -203,6 +280,18 @@ export class CorsaApiClient {
     );
   }
 
+  async getDeclaredTypeOfSymbolAsync(
+    snapshot: string,
+    project: string,
+    symbol: string,
+  ): Promise<TypeResponse | undefined> {
+    return (
+      fromJson<TypeResponse | null>(
+        await this.#inner.getDeclaredTypeOfSymbolJsonAsync(snapshot, project, symbol),
+      ) ?? undefined
+    );
+  }
+
   typeToString(
     snapshot: string,
     project: string,
@@ -213,20 +302,46 @@ export class CorsaApiClient {
     return this.#inner.typeToString(snapshot, project, typeHandle, location, flags);
   }
 
+  async typeToStringAsync(
+    snapshot: string,
+    project: string,
+    typeHandle: string,
+    location?: string,
+    flags?: number,
+  ): Promise<string> {
+    return this.#inner.typeToStringAsync(snapshot, project, typeHandle, location, flags);
+  }
+
   callJson<T>(method: string, params?: unknown): T {
     return fromJson(this.#inner.callJson(method, params ? toJson(params) : undefined));
+  }
+
+  async callJsonAsync<T>(method: string, params?: unknown): Promise<T> {
+    return fromJson(await this.#inner.callJsonAsync(method, params ? toJson(params) : undefined));
   }
 
   callBinary(method: string, params?: unknown): Uint8Array | null {
     return this.#inner.callBinary(method, params ? toJson(params) : undefined) ?? null;
   }
 
+  async callBinaryAsync(method: string, params?: unknown): Promise<Uint8Array | null> {
+    return (await this.#inner.callBinaryAsync(method, params ? toJson(params) : undefined)) ?? null;
+  }
+
   releaseHandle(handle: string): void {
     this.#inner.releaseHandle(handle);
   }
 
+  async releaseHandleAsync(handle: string): Promise<void> {
+    await this.#inner.releaseHandleAsync(handle);
+  }
+
   close(): void {
     this.#inner.close();
+  }
+
+  async closeAsync(): Promise<void> {
+    await this.#inner.closeAsync();
   }
 }
 

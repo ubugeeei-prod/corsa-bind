@@ -43,6 +43,7 @@ export function createTypeChecker(context: ContextWithParserOptions): TsgoTypeCh
       return sessionForContext(context).session.getTypeAtPosition(
         filenameFor(context, lookupNode),
         toPosition(lookupNode),
+        sourceTextFor(context, lookupNode),
       );
     },
     getContextualType(node) {
@@ -53,6 +54,7 @@ export function createTypeChecker(context: ContextWithParserOptions): TsgoTypeCh
       return sessionForContext(context).session.getSymbolAtPosition(
         filenameFor(context, lookupNode),
         toPosition(lookupNode),
+        sourceTextFor(context, lookupNode),
       );
     },
     getTypeOfSymbol(symbol) {
@@ -101,6 +103,13 @@ export function createTypeChecker(context: ContextWithParserOptions): TsgoTypeCh
       return sessionForContext(context).session.getTypeArguments(type);
     },
   };
+}
+
+function sourceTextFor(
+  context: ContextWithParserOptions,
+  node: Node | TsgoNode | TsgoType | TsgoSymbol | TsgoSignature,
+): string | undefined {
+  return filenameFor(context, node) === context.filename ? context.sourceCode.text : undefined;
 }
 
 function nodeForTypeLookup(node: Node | TsgoNode): Node | TsgoNode {

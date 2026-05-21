@@ -88,16 +88,20 @@ func (value *ApiClient) GetSourceFile(snapshot string, project string, file stri
 	defer projectValue.free()
 	fileValue := newBorrowedString(file)
 	defer fileValue.free()
-	payload, present := takeBytes(C.corsa_tsgo_api_client_get_source_file(
+	payload, status := takeBytes(C.corsa_tsgo_api_client_get_source_file(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
 		fileValue.ref,
 	))
-	if !present {
+	switch status {
+	case C.CORSA_RESULT_SOME:
+		return payload, nil
+	case C.CORSA_RESULT_NONE:
+		return nil, nil
+	default:
 		return nil, takeError()
 	}
-	return payload, nil
 }
 
 func (value *ApiClient) GetStringTypeJSON(snapshot string, project string) (string, error) {
@@ -222,11 +226,15 @@ func (value *ApiClient) CallBinary(method string, paramsJSON string) ([]byte, er
 	defer methodValue.free()
 	paramsValue := newBorrowedString(paramsJSON)
 	defer paramsValue.free()
-	payload, present := takeBytes(C.corsa_tsgo_api_client_call_binary(value.ptr, methodValue.ref, paramsValue.ref))
-	if !present {
+	payload, status := takeBytes(C.corsa_tsgo_api_client_call_binary(value.ptr, methodValue.ref, paramsValue.ref))
+	switch status {
+	case C.CORSA_RESULT_SOME:
+		return payload, nil
+	case C.CORSA_RESULT_NONE:
+		return nil, nil
+	default:
 		return nil, takeError()
 	}
-	return payload, nil
 }
 
 func (value *ApiClient) ReleaseHandle(handle string) error {
@@ -245,15 +253,15 @@ func optionalBorrowedString(value *string) borrowedString {
 	return newBorrowedString(*value)
 }
 
-func takeBytes(value C.CorsaBytes) ([]byte, bool) {
+func takeBytes(value C.CorsaBytes) ([]byte, C.CorsaResultStatus) {
 	defer C.corsa_bytes_free(value)
-	if !bool(value.present) {
-		return nil, false
+	if value.status != C.CORSA_RESULT_SOME {
+		return nil, value.status
 	}
 	if value.ptr == nil || value.len == 0 {
-		return make([]byte, 0), true
+		return make([]byte, 0), value.status
 	}
-	return C.GoBytes(unsafe.Pointer(value.ptr), C.int(value.len)), true
+	return C.GoBytes(unsafe.Pointer(value.ptr), C.int(value.len)), value.status
 }
 
 func takeCheckedString(value C.CorsaString) (string, error) {

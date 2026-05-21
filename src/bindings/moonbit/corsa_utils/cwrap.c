@@ -23,7 +23,7 @@ static moonbit_bytes_t corsa_bytes_from_string(CorsaString value) {
 
 static moonbit_bytes_t corsa_bytes_from_optional(CorsaBytes value) {
   moonbit_bytes_t out = moonbit_make_bytes_raw((int32_t)value.len);
-  if (value.present && value.ptr != NULL && value.len != 0) {
+  if (value.status == CORSA_RESULT_SOME && value.ptr != NULL && value.len != 0) {
     memcpy(out, value.ptr, value.len);
   }
   corsa_bytes_free(value);

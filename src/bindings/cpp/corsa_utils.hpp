@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -48,8 +49,14 @@ inline std::vector<std::string> take_string_list(CorsaStringList value) {
 }
 
 inline std::optional<std::vector<std::uint8_t>> take_bytes(CorsaBytes value) {
-  if (!value.present) {
+  if (value.status == CORSA_RESULT_NONE) {
+    corsa_bytes_free(value);
     return std::nullopt;
+  }
+  if (value.status != CORSA_RESULT_SOME) {
+    corsa_bytes_free(value);
+    auto message = take_string(corsa_error_message_take());
+    throw std::runtime_error(message.empty() ? "corsa FFI returned an error payload" : message);
   }
   std::vector<std::uint8_t> out;
   out.reserve(value.len);

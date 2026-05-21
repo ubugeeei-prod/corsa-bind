@@ -1,7 +1,4 @@
-use std::{
-    ffi::{CString, c_char},
-    ptr, slice,
-};
+use std::{ffi::c_char, ptr, slice};
 
 use smallvec::SmallVec;
 
@@ -25,6 +22,16 @@ pub struct CorsaBytes {
     pub ptr: *mut u8,
     pub len: usize,
     pub present: bool,
+    pub status: CorsaResultStatus,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum CorsaResultStatus {
+    #[default]
+    Error = 0,
+    None = 1,
+    Some = 2,
 }
 
 #[repr(C)]
@@ -48,10 +55,14 @@ pub fn into_c_string(value: &str) -> CorsaString {
     if value.is_empty() {
         return CorsaString::default();
     }
-    let cstring = CString::new(value).expect("utils outputs never contain interior NUL");
+    let mut bytes = Vec::with_capacity(value.len() + 1);
+    bytes.extend_from_slice(value.as_bytes());
+    bytes.push(0);
+    let len = bytes.len() - 1;
+    let boxed = bytes.into_boxed_slice();
     CorsaString {
-        len: value.len(),
-        ptr: cstring.into_raw(),
+        len,
+        ptr: Box::into_raw(boxed).cast::<c_char>(),
     }
 }
 
@@ -73,7 +84,10 @@ pub fn into_c_string_list(values: Vec<String>) -> CorsaStringList {
 
 pub fn into_c_bytes(value: Option<Vec<u8>>) -> CorsaBytes {
     let Some(value) = value else {
-        return CorsaBytes::default();
+        return CorsaBytes {
+            status: CorsaResultStatus::None,
+            ..CorsaBytes::default()
+        };
     };
     let boxed = value.into_boxed_slice();
     let len = boxed.len();
@@ -81,6 +95,7 @@ pub fn into_c_bytes(value: Option<Vec<u8>>) -> CorsaBytes {
         ptr: Box::into_raw(boxed) as *mut u8,
         len,
         present: true,
+        status: CorsaResultStatus::Some,
     }
 }
 
@@ -105,7 +120,8 @@ pub unsafe extern "C" fn corsa_utils_string_free(value: CorsaString) {
     if value.ptr.is_null() {
         return;
     }
-    let _ = unsafe { CString::from_raw(value.ptr) };
+    let slice = ptr::slice_from_raw_parts_mut(value.ptr.cast::<u8>(), value.len + 1);
+    let _ = unsafe { Box::from_raw(slice) };
 }
 
 #[unsafe(no_mangle)]

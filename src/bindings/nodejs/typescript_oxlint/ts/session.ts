@@ -1,4 +1,4 @@
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 import { type ProjectResponse, TsgoApiClient } from "@corsa-bind/napi";
 
@@ -7,9 +7,17 @@ import type { ResolvedProjectConfig, ResolvedRuntimeOptions } from "./types";
 
 type FileCache = {
   mtimeMs: number;
+  lintSourceText?: string;
+  sourceText?: string;
   projectId: string;
   typeByPosition: Map<number, TsgoType | undefined>;
   symbolByPosition: Map<number, TsgoSymbol | undefined>;
+};
+
+type PreparedFileState = {
+  mtimeMs: number;
+  lintSourceText?: string;
+  sourceText?: string;
 };
 
 export class TsgoProjectSession {
@@ -19,6 +27,7 @@ export class TsgoProjectSession {
   #projects: ProjectResponse[] = [];
   #files = new Map<string, FileCache>();
   #lastRefreshMs = 0;
+  #supportsOverlayChanges?: boolean;
 
   constructor(
     readonly project: ResolvedProjectConfig,
@@ -32,6 +41,7 @@ export class TsgoProjectSession {
     }
     this.#client?.close();
     this.#client = undefined;
+    this.#supportsOverlayChanges = undefined;
     this.#files.clear();
   }
 
@@ -43,8 +53,8 @@ export class TsgoProjectSession {
     return this.config().fileNames;
   }
 
-  getTypeAtPosition(fileName: string, position: number): TsgoType | undefined {
-    const state = this.fileState(fileName);
+  getTypeAtPosition(fileName: string, position: number, sourceText?: string): TsgoType | undefined {
+    const state = this.fileState(fileName, sourceText);
     if (!state.typeByPosition.has(position)) {
       state.typeByPosition.set(
         position,
@@ -56,8 +66,12 @@ export class TsgoProjectSession {
     return state.typeByPosition.get(position);
   }
 
-  getSymbolAtPosition(fileName: string, position: number): TsgoSymbol | undefined {
-    const state = this.fileState(fileName);
+  getSymbolAtPosition(
+    fileName: string,
+    position: number,
+    sourceText?: string,
+  ): TsgoSymbol | undefined {
+    const state = this.fileState(fileName, sourceText);
     if (!state.symbolByPosition.has(position)) {
       state.symbolByPosition.set(
         position,
@@ -170,8 +184,8 @@ export class TsgoProjectSession {
     return config;
   }
 
-  private fileState(fileName: string): FileCache {
-    this.refreshIfNeeded(fileName);
+  private fileState(fileName: string, sourceText?: string): FileCache {
+    const prepared = this.refreshIfNeeded(fileName, sourceText);
     const current = this.#files.get(fileName);
     if (current) {
       return current;
@@ -181,7 +195,9 @@ export class TsgoProjectSession {
       file: fileName,
     });
     const state: FileCache = {
-      mtimeMs: statMtimeMs(fileName),
+      mtimeMs: prepared.mtimeMs,
+      lintSourceText: prepared.lintSourceText,
+      sourceText: prepared.sourceText,
       projectId: project?.id ?? this.projectId(),
       typeByPosition: new Map(),
       symbolByPosition: new Map(),
@@ -190,20 +206,30 @@ export class TsgoProjectSession {
     return state;
   }
 
-  private refreshIfNeeded(fileName: string): void {
+  private refreshIfNeeded(fileName: string, sourceText?: string): PreparedFileState {
     const now = Date.now();
     const expired = now - this.#lastRefreshMs > this.runtime.cacheLifetimeMs;
-    const stale =
-      !this.#snapshot || statMtimeMs(fileName) !== this.#files.get(fileName)?.mtimeMs || expired;
+    const cached = this.#files.get(fileName);
+    const mtimeMs = statMtimeMs(fileName);
+    const overlayText = this.supportedOverlayText(fileName, sourceText, mtimeMs, cached);
+    const textChanged = overlayText !== cached?.sourceText;
+    const prepared = {
+      mtimeMs,
+      lintSourceText: sourceText,
+      sourceText: overlayText,
+    };
+    const stale = !this.#snapshot || mtimeMs !== cached?.mtimeMs || textChanged || expired;
     if (!stale) {
-      return;
+      return prepared;
     }
     const previous = this.#snapshot;
-    const response = this.client().updateSnapshot(
-      previous
+    const overlayChanges = this.overlayChanges(fileName, overlayText, cached);
+    const response = this.client().updateSnapshot({
+      ...(previous
         ? { fileChanges: { changed: [fileName] } }
-        : { openProject: this.project.configPath },
-    );
+        : { openProject: this.project.configPath }),
+      ...(overlayChanges === undefined ? {} : { overlayChanges }),
+    });
     this.#snapshot = response.snapshot;
     this.#projects = response.projects;
     this.#lastRefreshMs = now;
@@ -211,6 +237,7 @@ export class TsgoProjectSession {
     if (previous && previous !== this.#snapshot) {
       this.client().releaseHandle(previous);
     }
+    return prepared;
   }
 
   private projectId(): string {
@@ -220,6 +247,77 @@ export class TsgoProjectSession {
     }
     return id;
   }
+
+  private supportedOverlayText(
+    fileName: string,
+    sourceText: string | undefined,
+    mtimeMs: number,
+    cached?: FileCache,
+  ): string | undefined {
+    if (sourceText === undefined || !this.supportsOverlayChanges()) {
+      return undefined;
+    }
+    if (cached?.lintSourceText === sourceText && cached.mtimeMs === mtimeMs) {
+      return cached.sourceText;
+    }
+    return overlayTextFor(fileName, sourceText);
+  }
+
+  private overlayChanges(
+    fileName: string,
+    overlayText: string | undefined,
+    cached?: FileCache,
+  ):
+    | {
+        upsert?: { document: string; text: string; languageId: string }[];
+        delete?: string[];
+      }
+    | undefined {
+    if (!this.supportsOverlayChanges()) {
+      return undefined;
+    }
+    if (overlayText !== undefined) {
+      return {
+        upsert: [
+          {
+            document: fileName,
+            text: overlayText,
+            languageId: languageIdFor(fileName),
+          },
+        ],
+      };
+    }
+    if (cached?.sourceText !== undefined) {
+      return { delete: [fileName] };
+    }
+    return undefined;
+  }
+
+  private supportsOverlayChanges(): boolean {
+    if (this.#supportsOverlayChanges !== undefined) {
+      return this.#supportsOverlayChanges;
+    }
+    try {
+      const capabilities = this.client().callJson<{
+        overlay?: { updateSnapshotOverlayChanges?: boolean };
+      }>("describeCapabilities");
+      this.#supportsOverlayChanges = capabilities?.overlay?.updateSnapshotOverlayChanges === true;
+    } catch {
+      this.#supportsOverlayChanges = false;
+    }
+    return this.#supportsOverlayChanges;
+  }
+}
+
+function overlayTextFor(fileName: string, sourceText?: string): string | undefined {
+  if (sourceText === undefined) {
+    return undefined;
+  }
+  try {
+    return readFileSync(fileName, "utf8") === sourceText ? undefined : sourceText;
+  } catch {
+    return sourceText;
+  }
 }
 
 function statMtimeMs(fileName: string): number {
@@ -228,4 +326,17 @@ function statMtimeMs(fileName: string): number {
   } catch {
     return 0;
   }
+}
+
+function languageIdFor(fileName: string): string {
+  if (fileName.endsWith(".tsx")) {
+    return "typescriptreact";
+  }
+  if (fileName.endsWith(".jsx")) {
+    return "javascriptreact";
+  }
+  if (fileName.endsWith(".js")) {
+    return "javascript";
+  }
+  return "typescript";
 }

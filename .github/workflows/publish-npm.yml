@@ -187,11 +187,16 @@ jobs:
           fi
           ../../../../node_modules/.bin/napi "${args[@]}"
 
+      - name: Generate native SBOM
+        run: node --strip-types ./scripts/generate_sbom.ts --target native --native-target "${{ matrix.target }}" --out ".cache/sbom/native-${{ matrix.target }}.spdx.json"
+
       - name: Upload native binding artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-binding-${{ matrix.target }}
-          path: src/bindings/nodejs/corsa_node/*.node
+          path: |
+            src/bindings/nodejs/corsa_node/*.node
+            .cache/sbom/native-${{ matrix.target }}.spdx.json
           if-no-files-found: error
           retention-days: 7
 
@@ -242,6 +247,19 @@ jobs:
 
       - name: Build publishable npm artifacts
         run: vp run -w build
+
+      - name: Generate npm SBOM
+        run: node --strip-types ./scripts/generate_sbom.ts --target npm --out .cache/sbom/npm.spdx.json
+
+      - name: Upload npm and native SBOMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-sboms
+          path: |
+            .cache/sbom/npm.spdx.json
+            artifacts/**/*.spdx.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Publish packed tarballs with npm trusted publishing
         if: ${{ github.event_name == 'push' || inputs.auth_mode == 'trusted' }}

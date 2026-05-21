@@ -11,6 +11,7 @@ The supported production surface is currently:
 - published Node bindings for the documented prebuilt targets
 - LSP stdio integrations
 - local worker orchestration and cache reuse
+- C ABI, C++ headers, and Go wrappers that pass the non-Node binding CI smoke suite
 
 The following remains experimental and outside the production support
 commitment:
@@ -18,6 +19,8 @@ commitment:
 - the `experimental-distributed` cargo feature
 - the in-process Raft replication layer
 - upstream endpoints explicitly called out as unstable
+- C#, Swift, Zig, and MoonBit wrappers until their toolchains are added to the
+  required CI matrix
 
 ## Release Channels
 
@@ -41,6 +44,7 @@ CI is expected to exercise:
 
 - workspace quality checks on Linux, macOS, and Windows
 - real `tsgo` smoke coverage on Linux, macOS, and Windows
+- C ABI, C++ header, and Go wrapper smoke coverage on Ubuntu
 - benchmark verification on Ubuntu
 
 ## Semver Policy

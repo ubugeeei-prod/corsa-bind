@@ -121,6 +121,17 @@ jobs:
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
+      - name: Generate Rust SBOM
+        run: node --strip-types ./scripts/generate_sbom.ts --target rust --out .cache/sbom/rust.spdx.json
+
+      - name: Upload Rust SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rust-sbom
+          path: .cache/sbom/rust.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Exchange OIDC token for crates.io token
         if: ${{ github.event_name == 'push' || inputs.auth_mode == 'trusted' }}
         id: auth

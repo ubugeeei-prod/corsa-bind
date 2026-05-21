@@ -88,6 +88,18 @@ The `bench-tsgo-ref` job keeps the heavier Ubuntu-only path:
 - benchmark report regeneration
 - benchmark guard validation
 
+## Non-Node Binding Smoke Checks
+
+The `non-node-bindings` job validates the production-supported native wrappers
+outside Node:
+
+- builds the Rust C ABI crate and mock `tsgo` server
+- runs the Go wrapper tests in `src/bindings/go/corsa_utils`
+- compiles the C++ header surface against the generated C ABI header
+
+C#, Swift, Zig, and MoonBit remain tracked as experimental wrappers until their
+toolchains are promoted into the required matrix.
+
 ## Local Reproduction
 
 ## Recommended Environment

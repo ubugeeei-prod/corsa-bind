@@ -2,7 +2,12 @@ use crate::{Result, common, jsonrpc};
 use base64::Engine as _;
 use corsa::jsonrpc::{RawMessage, RequestId};
 use serde_json::{Value, json};
-use std::io::{BufReader, BufWriter};
+use std::{
+    fs::{OpenOptions, create_dir_all},
+    io::{BufReader, BufWriter, Write as _},
+    path::Path,
+    time::Duration,
+};
 
 pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
     let stdin = std::io::stdin();
@@ -14,8 +19,10 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             return Ok(());
         };
         let method = message.method.unwrap_or_default();
+        record_method(method.as_str());
         let id = message.id.clone();
         let params = message.params.unwrap_or(Value::Null);
+        record_params(method.as_str(), &params);
         let response = match method.as_str() {
             "initialize" => Some(json!({
                 "useCaseSensitiveFileNames": true,
@@ -128,6 +135,45 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             let response = response.unwrap_or(Value::Null);
             jsonrpc::write_message(&mut writer, &RawMessage::response(id, response))?;
         }
+    }
+}
+
+fn record_params(method: &str, params: &Value) {
+    let Ok(dir) = std::env::var("CORSA_MOCK_TSGO_PARAMS_DIR") else {
+        return;
+    };
+    if create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = Path::new(&dir).join(format!("{method}.jsonl"));
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{}", params);
+    }
+}
+
+fn record_method(method: &str) {
+    maybe_delay(method);
+    let Ok(dir) = std::env::var("CORSA_MOCK_TSGO_COUNT_DIR") else {
+        return;
+    };
+    if create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = Path::new(&dir).join(format!("{method}.count"));
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "1");
+    }
+}
+
+fn maybe_delay(method: &str) {
+    let Ok(delay_ms) = std::env::var("CORSA_MOCK_TSGO_DELAY_MS") else {
+        return;
+    };
+    if method != "initialize" && method != "describeCapabilities" {
+        return;
+    }
+    if let Ok(delay_ms) = delay_ms.parse::<u64>() {
+        std::thread::sleep(Duration::from_millis(delay_ms));
     }
 }
 

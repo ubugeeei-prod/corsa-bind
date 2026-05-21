@@ -1,6 +1,11 @@
 use crate::Result;
 use serde_json::{Value, json};
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::{
+    fs::{OpenOptions, create_dir_all},
+    io::{BufReader, BufWriter, Read, Write},
+    path::Path,
+    time::Duration,
+};
 
 const MSG_REQUEST: u8 = 1;
 const MSG_CALL_RESPONSE: u8 = 2;
@@ -17,7 +22,9 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             return Err(format!("unexpected message type {kind}").into());
         }
         let method = String::from_utf8(method)?;
+        record_method(method.as_str());
         let params: Value = serde_json::from_slice(&payload)?;
+        record_params(method.as_str(), &params);
         let response = match method.as_str() {
             "initialize" => json!({
                 "useCaseSensitiveFileNames": true,
@@ -72,6 +79,45 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             method.as_bytes(),
             &serde_json::to_vec(&response)?,
         )?;
+    }
+}
+
+fn record_params(method: &str, params: &Value) {
+    let Ok(dir) = std::env::var("CORSA_MOCK_TSGO_PARAMS_DIR") else {
+        return;
+    };
+    if create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = Path::new(&dir).join(format!("{method}.jsonl"));
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{}", params);
+    }
+}
+
+fn record_method(method: &str) {
+    maybe_delay(method);
+    let Ok(dir) = std::env::var("CORSA_MOCK_TSGO_COUNT_DIR") else {
+        return;
+    };
+    if create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = Path::new(&dir).join(format!("{method}.count"));
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "1");
+    }
+}
+
+fn maybe_delay(method: &str) {
+    let Ok(delay_ms) = std::env::var("CORSA_MOCK_TSGO_DELAY_MS") else {
+        return;
+    };
+    if method != "initialize" && method != "describeCapabilities" {
+        return;
+    }
+    if let Ok(delay_ms) = delay_ms.parse::<u64>() {
+        std::thread::sleep(Duration::from_millis(delay_ms));
     }
 }
 
