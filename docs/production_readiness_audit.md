@@ -3,8 +3,8 @@
 This audit records the source-level gaps that currently block a fully
 production-ready posture. It was prepared from the tracked implementation on
 2026-05-21, covering the Rust core, JSON-RPC transport, client lifecycle,
-orchestrator, Node binding, oxlint integration, C ABI, non-Node bindings, CI,
-and release workflows.
+orchestrator, real `tsgo` typecheck/type emit coverage, Node binding, oxlint
+integration, C ABI, non-Node bindings, CI, and release workflows.
 
 The project already has meaningful production controls: bounded defaults,
 release dry runs, cargo-deny, pinned GitHub Actions, npm provenance, Scorecard
@@ -22,6 +22,7 @@ before treating every public surface as production-ready.
 | P1       | [#97](https://github.com/ubugeeei/corsa-bind/issues/97)   | Client lifecycle   | Concurrent `initialize` and capability callers can race and send duplicate handshakes.                            |
 | P1       | [#99](https://github.com/ubugeeei/corsa-bind/issues/99)   | FFI wrappers       | Optional payloads and errors share the same absent-byte shape, making wrappers misclassify valid empty responses. |
 | P1       | [#101](https://github.com/ubugeeei/corsa-bind/issues/101) | oxlint integration | Type-aware lint sessions can compute type data from stale on-disk text instead of the source being linted.        |
+| P1       | [#105](https://github.com/ubugeeei/corsa-bind/issues/105) | Semantic coverage  | Real-server tests need positive and negative typecheck/type emit fixtures, not only smoke and speed checks.       |
 | P2       | [#95](https://github.com/ubugeeei/corsa-bind/issues/95)   | Snapshot cleanup   | Snapshot drop spawns detached cleanup work per release and hides release failures.                                |
 | P2       | [#100](https://github.com/ubugeeei/corsa-bind/issues/100) | Node binding       | Synchronous N-API methods block the JavaScript event loop during tsgo requests.                                   |
 | P2       | [#102](https://github.com/ubugeeei/corsa-bind/issues/102) | CI coverage        | Non-Node language bindings are present without first-class compile or smoke-test coverage.                        |
@@ -32,6 +33,7 @@ before treating every public surface as production-ready.
 Before declaring the whole project production-ready, the release owner should:
 
 - close or explicitly risk-accept every P0 and P1 issue
+- prove real typecheck and type emit behavior with paired pass/fail fixtures
 - make each supported binding compile and smoke-test in CI
 - document unsupported or experimental bindings in the public support matrix
 - attach SBOMs, or document a replacement attestation strategy, for public binary
