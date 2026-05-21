@@ -161,7 +161,15 @@ impl RaftCluster {
             });
             (leader.current_term, prev_len, prev_term)
         };
-        let entry = nodes.get(leader_id).unwrap().log[prev_len].clone();
+        let entry = nodes
+            .get(leader_id)
+            .and_then(|node| node.log.get(prev_len))
+            .cloned()
+            .ok_or_else(|| {
+                TsgoError::Protocol(compact_format(format_args!(
+                    "raft leader log entry disappeared: {leader_id}"
+                )))
+            })?;
         let mut acknowledgements = 1;
         for (node_id, node) in nodes.iter_mut() {
             if node_id == leader_id {

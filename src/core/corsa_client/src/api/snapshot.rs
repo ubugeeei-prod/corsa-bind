@@ -1,7 +1,7 @@
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, MutexGuard,
         atomic::{AtomicBool, Ordering},
         mpsc,
     },
@@ -35,7 +35,7 @@ impl SnapshotReleaseQueue {
         driver: Arc<ClientDriver>,
         profiler: Option<SharedProfiler>,
         capacity: usize,
-    ) -> Self {
+    ) -> Result<Self> {
         let (tx, rx) =
             mpsc::sync_channel::<SnapshotHandle>(capacity.clamp(1, DEFAULT_RELEASE_QUEUE_CAPACITY));
         let (done_tx, done_rx) = mpsc::sync_channel(1);
@@ -51,18 +51,18 @@ impl SnapshotReleaseQueue {
                 }));
                 let _ = done_tx.send(result);
             })
-            .expect("failed to spawn snapshot release worker");
-        Self {
+            .map_err(TsgoError::Io)?;
+        Ok(Self {
             driver,
             profiler,
             sender: Mutex::new(Some(tx)),
             done: Mutex::new(Some(done_rx)),
             worker: Mutex::new(Some(worker)),
-        }
+        })
     }
 
     pub(crate) fn enqueue(&self, handle: SnapshotHandle) {
-        let Some(sender) = self.sender.lock().unwrap().as_ref().cloned() else {
+        let Some(sender) = lock_unpoisoned(&self.sender).as_ref().cloned() else {
             warn!(
                 "failed to release tsgo snapshot `{}`: release queue is closed",
                 handle.as_str()
@@ -88,7 +88,7 @@ impl SnapshotReleaseQueue {
     }
 
     pub(crate) async fn close(&self, timeout: Duration) -> Result<()> {
-        self.sender.lock().unwrap().take();
+        lock_unpoisoned(&self.sender).take();
         wait_for_worker(self, timeout, "snapshot release queue")
     }
 }
@@ -111,15 +111,15 @@ fn wait_for_worker(
     timeout: Duration,
     operation: &'static str,
 ) -> Result<()> {
-    let done = queue.done.lock().unwrap();
+    let done = lock_unpoisoned(&queue.done);
     let Some(done_rx) = done.as_ref() else {
         return Ok(());
     };
     match done_rx.recv_timeout(timeout) {
         Ok(result) => {
             drop(done);
-            queue.done.lock().unwrap().take();
-            if let Some(worker) = queue.worker.lock().unwrap().take() {
+            lock_unpoisoned(&queue.done).take();
+            if let Some(worker) = lock_unpoisoned(&queue.worker).take() {
                 let _ = worker.join();
             }
             result
@@ -131,6 +131,12 @@ fn wait_for_worker(
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => Err(TsgoError::Closed(operation)),
     }
+}
+
+fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Live snapshot handle with automatic release-on-drop semantics.

@@ -8,7 +8,7 @@
 use std::{
     future::Future,
     pin::Pin,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, MutexGuard},
     task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
 };
 
@@ -27,11 +27,6 @@ use std::{
 /// - `clone`, `wake`, `wake_by_ref`, and `drop` balance the `Arc` strong count
 /// - the parker's notification bit is cleared only immediately before polling,
 ///   so wake-ups emitted during or after the poll are still observed by `park`
-///
-/// # Panics
-///
-/// Panics if writing wake-up state into the internal synchronization primitives
-/// panics, which in practice only happens if a mutex is poisoned.
 ///
 /// # Examples
 ///
@@ -74,20 +69,29 @@ struct Parker {
 
 impl Parker {
     fn clear(&self) {
-        *self.notified.lock().unwrap() = false;
+        *self.lock_notified() = false;
     }
 
     fn wake(&self) {
-        let mut notified = self.notified.lock().unwrap();
+        let mut notified = self.lock_notified();
         *notified = true;
         self.ready.notify_one();
     }
 
     fn park(&self) {
-        let mut notified = self.notified.lock().unwrap();
+        let mut notified = self.lock_notified();
         while !*notified {
-            notified = self.ready.wait(notified).unwrap();
+            notified = self
+                .ready
+                .wait(notified)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
         }
+    }
+
+    fn lock_notified(&self) -> MutexGuard<'_, bool> {
+        self.notified
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -210,5 +214,21 @@ mod tests {
 
         let value = block_on(SelfWakingFuture { remaining: 256 });
         assert_eq!(value, 123);
+    }
+
+    #[test]
+    fn parker_recovers_after_notification_lock_poisoning() {
+        let parker = super::Parker::default();
+        thread::scope(|scope| {
+            let handle = scope.spawn(|| {
+                let _guard = parker.notified.lock().unwrap();
+                panic!("poison parker");
+            });
+            let _ = handle.join();
+        });
+
+        parker.clear();
+        parker.wake();
+        parker.park();
     }
 }
