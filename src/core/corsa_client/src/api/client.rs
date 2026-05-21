@@ -157,9 +157,18 @@ impl ApiClient {
                     parsed.runtime.capability_endpoint = true;
                     Arc::new(parsed)
                 }
-                Err(TsgoError::Rpc(error)) if error.code == -32601 => Arc::new(
-                    CapabilitiesResponse::fallback(self.runtime_capabilities.clone()),
-                ),
+                Err(TsgoError::Rpc(error))
+                    if error.code == -32601 || is_unknown_api_method_message(&error.message) =>
+                {
+                    Arc::new(CapabilitiesResponse::fallback(
+                        self.runtime_capabilities.clone(),
+                    ))
+                }
+                Err(TsgoError::Protocol(message)) if is_unknown_api_method_message(&message) => {
+                    Arc::new(CapabilitiesResponse::fallback(
+                        self.runtime_capabilities.clone(),
+                    ))
+                }
                 Err(error) => return Err(error),
             };
             let mut slot = self.capabilities.lock();
@@ -356,7 +365,12 @@ impl ApiClient {
         unsupported_message: &'static str,
     ) -> TsgoError {
         match error {
-            TsgoError::Rpc(rpc) if rpc.code == -32601 => {
+            TsgoError::Rpc(rpc)
+                if rpc.code == -32601 || is_unknown_api_method_message(&rpc.message) =>
+            {
+                TsgoError::Unsupported(unsupported_message)
+            }
+            TsgoError::Protocol(message) if is_unknown_api_method_message(&message) => {
                 TsgoError::Unsupported(unsupported_message)
             }
             other => other,
@@ -462,4 +476,56 @@ fn infer_runtime_kind(path: &Path) -> Option<CompactString> {
         "custom"
     };
     Some(CompactString::from(kind))
+}
+
+fn is_unknown_api_method_message(message: &str) -> bool {
+    message.contains("unknown API method")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ApiClient, is_unknown_api_method_message};
+    use crate::TsgoError;
+    use corsa_core::{RpcResponseError, fast::CompactString};
+
+    #[test]
+    fn recognizes_msgpack_unknown_method_protocol_error() {
+        assert!(is_unknown_api_method_message(
+            "api: invalid request: unknown API method \"describeCapabilities\""
+        ));
+    }
+
+    #[test]
+    fn missing_msgpack_api_method_maps_to_unsupported() {
+        let error = ApiClient::map_missing_method(
+            TsgoError::Protocol(CompactString::from(
+                "api: invalid request: unknown API method \"getDiagnosticsForFile\"",
+            )),
+            "file diagnostics are not supported",
+        );
+
+        assert!(matches!(
+            error,
+            TsgoError::Unsupported("file diagnostics are not supported")
+        ));
+    }
+
+    #[test]
+    fn missing_jsonrpc_api_method_maps_to_unsupported() {
+        let error = ApiClient::map_missing_method(
+            TsgoError::Rpc(RpcResponseError {
+                code: -32603,
+                message: CompactString::from(
+                    "api: invalid request: unknown API method \"getDiagnosticsForFile\"",
+                ),
+                data: None,
+            }),
+            "file diagnostics are not supported",
+        );
+
+        assert!(matches!(
+            error,
+            TsgoError::Unsupported("file diagnostics are not supported")
+        ));
+    }
 }
