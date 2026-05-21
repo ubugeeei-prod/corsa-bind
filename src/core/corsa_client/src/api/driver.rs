@@ -10,6 +10,7 @@ use std::{sync::Arc, time::Instant};
 use super::{
     msgpack_worker::MsgpackWorker,
     profiling::{ApiProfileEvent, ApiProfilePhase, SharedProfiler, profile},
+    requests_core::ReleaseRequest,
 };
 
 pub(crate) enum ClientDriver {
@@ -243,6 +244,26 @@ impl ClientDriver {
             }
         }
     }
+
+    pub(crate) async fn release_handle(
+        &self,
+        handle: &str,
+        profiler: Option<&SharedProfiler>,
+    ) -> Result<()> {
+        let request = ReleaseRequest { handle };
+        let _: Value = self.request_typed("release", &request, profiler).await?;
+        Ok(())
+    }
+
+    pub(crate) fn shutdown_timeout(&self) -> Duration {
+        match self {
+            Self::JsonRpc {
+                shutdown_timeout, ..
+            } => *shutdown_timeout,
+            Self::Msgpack { .. } => Duration::from_secs(2),
+        }
+    }
+
     pub(crate) async fn close(&self) -> Result<()> {
         match self {
             Self::JsonRpc {
@@ -250,10 +271,11 @@ impl ClientDriver {
                 process,
                 shutdown_timeout,
             } => {
-                rpc.close().await?;
+                rpc.begin_close()?;
                 if let Some(process) = process {
                     process.shutdown(*shutdown_timeout).await?;
                 }
+                rpc.join_reader(*shutdown_timeout)?;
                 Ok(())
             }
             Self::Msgpack { worker } => worker.close().await,

@@ -48,6 +48,14 @@ public sealed class CorsaTsgoApiClient : IDisposable
         public readonly nuint Len;
         [MarshalAs(UnmanagedType.I1)]
         public readonly bool Present;
+        public readonly CorsaResultStatus Status;
+    }
+
+    private enum CorsaResultStatus
+    {
+        Error = 0,
+        None = 1,
+        Some = 2,
     }
 
     [DllImport(LibraryName, EntryPoint = "corsa_error_message_take")]
@@ -214,10 +222,14 @@ public sealed class CorsaTsgoApiClient : IDisposable
 
     private static byte[]? TakeOptionalBytes(CorsaBytes value)
     {
-        var present = value.Present;
+        var status = value.Status;
         try
         {
-            if (!present)
+            if (status == CorsaResultStatus.None)
+            {
+                return null;
+            }
+            if (status != CorsaResultStatus.Some)
             {
                 var error = TakeString(TakeErrorMessageNative());
                 return error.Length != 0 ? throw new InvalidOperationException(error) : null;

@@ -50,6 +50,8 @@ pub struct ApiSpawnConfig {
     pub shutdown_timeout: Duration,
     /// Maximum number of queued outbound transport messages.
     pub outbound_capacity: usize,
+    /// Maximum number of snapshot handles queued for background release.
+    pub release_queue_capacity: usize,
     /// Allows calls to upstream endpoints that are known to be unstable.
     pub allow_unstable_upstream_calls: bool,
     /// Optional observer for structured transport events.
@@ -71,6 +73,7 @@ impl ApiSpawnConfig {
             request_timeout: Some(Duration::from_secs(30)),
             shutdown_timeout: Duration::from_secs(2),
             outbound_capacity: 256,
+            release_queue_capacity: 256,
             allow_unstable_upstream_calls: false,
             observer: None,
             profiler: None,
@@ -80,6 +83,16 @@ impl ApiSpawnConfig {
     /// Sets the worker current directory.
     pub fn with_cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
         self.command = self.command.clone().with_cwd(cwd);
+        self
+    }
+
+    /// Sets an environment variable on spawned workers.
+    pub fn with_env(
+        mut self,
+        key: impl Into<CompactString>,
+        value: impl Into<CompactString>,
+    ) -> Self {
+        self.command = self.command.clone().with_env(key, value);
         self
     }
 
@@ -110,6 +123,12 @@ impl ApiSpawnConfig {
     /// Sets the maximum number of queued outbound transport messages.
     pub fn with_outbound_capacity(mut self, capacity: usize) -> Self {
         self.outbound_capacity = capacity.max(1);
+        self
+    }
+
+    /// Sets the maximum number of snapshot handles queued for background release.
+    pub fn with_release_queue_capacity(mut self, capacity: usize) -> Self {
+        self.release_queue_capacity = capacity.max(1);
         self
     }
 

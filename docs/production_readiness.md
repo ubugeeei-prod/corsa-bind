@@ -60,6 +60,8 @@ For editor-like integrations:
 - `vp run -w bench_verify`
 - `vp run -w verify_ref`
 - `cargo deny check advisories bans licenses sources`
+- non-Node binding smoke coverage for the supported C ABI, C++, and Go surfaces
+- SPDX SBOM generation for Rust, npm, and native release artifacts
 - `vp run -w release_dry_run`
 
 ## Cross-Platform Expectations

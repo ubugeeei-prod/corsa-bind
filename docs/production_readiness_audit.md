@@ -1,49 +1,45 @@
 # Production Readiness Audit
 
-This audit records the source-level gaps that currently block a fully
-production-ready posture. It was prepared from the tracked implementation on
-2026-05-21, covering the Rust core, JSON-RPC transport, client lifecycle,
-orchestrator, real `tsgo` typecheck/type emit coverage, Node binding, oxlint
-integration, C ABI, non-Node bindings, CI, and release workflows.
+This audit records the source-level gaps that blocked a fully production-ready
+posture in the 2026-05-21 review of the Rust core, JSON-RPC transport, client
+lifecycle, orchestrator, real `tsgo` typecheck/type emit coverage, Node binding,
+oxlint integration, C ABI, non-Node bindings, CI, and release workflows.
 
-The project already has meaningful production controls: bounded defaults,
+The project already had meaningful production controls: bounded defaults,
 release dry runs, cargo-deny, pinned GitHub Actions, npm provenance, Scorecard
 monitoring, and an explicit experimental scope for distributed mode. The items
-below are the remaining issues that should be resolved or explicitly accepted
-before treating every public surface as production-ready.
+below are the issues that were tracked from the audit and their remediation
+status.
 
-## Findings
+## Remediation Status
 
-| Priority | Issue                                                     | Area               | Production risk                                                                                                   |
-| -------- | --------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| P0       | [#94](https://github.com/ubugeeei/corsa-bind/issues/94)   | Orchestrator       | `execute_all` can deadlock when bounded work and result queues apply backpressure to larger batches.              |
-| P0       | [#98](https://github.com/ubugeeei/corsa-bind/issues/98)   | C ABI              | Returned strings assume no interior NUL bytes, so user-controlled text can panic across FFI boundaries.           |
-| P1       | [#96](https://github.com/ubugeeei/corsa-bind/issues/96)   | JSON-RPC           | Connection shutdown drops the reader handle instead of deterministically closing and joining it.                  |
-| P1       | [#97](https://github.com/ubugeeei/corsa-bind/issues/97)   | Client lifecycle   | Concurrent `initialize` and capability callers can race and send duplicate handshakes.                            |
-| P1       | [#99](https://github.com/ubugeeei/corsa-bind/issues/99)   | FFI wrappers       | Optional payloads and errors share the same absent-byte shape, making wrappers misclassify valid empty responses. |
-| P1       | [#101](https://github.com/ubugeeei/corsa-bind/issues/101) | oxlint integration | Type-aware lint sessions can compute type data from stale on-disk text instead of the source being linted.        |
-| P1       | [#105](https://github.com/ubugeeei/corsa-bind/issues/105) | Semantic coverage  | Real-server tests need positive and negative typecheck/type emit fixtures, not only smoke and speed checks.       |
-| P2       | [#95](https://github.com/ubugeeei/corsa-bind/issues/95)   | Snapshot cleanup   | Snapshot drop spawns detached cleanup work per release and hides release failures.                                |
-| P2       | [#100](https://github.com/ubugeeei/corsa-bind/issues/100) | Node binding       | Synchronous N-API methods block the JavaScript event loop during tsgo requests.                                   |
-| P2       | [#102](https://github.com/ubugeeei/corsa-bind/issues/102) | CI coverage        | Non-Node language bindings are present without first-class compile or smoke-test coverage.                        |
-| P2       | [#103](https://github.com/ubugeeei/corsa-bind/issues/103) | Supply chain       | Published artifacts do not yet include generated SBOMs.                                                           |
-| P2       | [#108](https://github.com/ubugeeei/corsa-bind/issues/108) | CI reproducibility | Real-tsgo CI and release gates hardcode Go instead of deriving it from the pinned upstream go.mod.                |
+| Priority | Issue                                                     | Area               | Status                                                                                    |
+| -------- | --------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
+| P0       | [#94](https://github.com/ubugeeei/corsa-bind/issues/94)   | Orchestrator       | Covered by unbounded result fan-in and regression tests for oversized batches and panics. |
+| P0       | [#98](https://github.com/ubugeeei/corsa-bind/issues/98)   | C ABI              | C strings now carry explicit lengths and tolerate interior NUL bytes.                     |
+| P1       | [#96](https://github.com/ubugeeei/corsa-bind/issues/96)   | JSON-RPC           | Connections now close outbound state and join reader threads with bounded fallback.       |
+| P1       | [#97](https://github.com/ubugeeei/corsa-bind/issues/97)   | Client lifecycle   | Initialize and capability handshakes now use singleflight caching.                        |
+| P1       | [#99](https://github.com/ubugeeei/corsa-bind/issues/99)   | FFI wrappers       | Optional byte payloads now expose explicit error, none, and some status.                  |
+| P1       | [#101](https://github.com/ubugeeei/corsa-bind/issues/101) | oxlint integration | Type-aware sessions send in-memory source overlays when the runtime supports them.        |
+| P1       | [#105](https://github.com/ubugeeei/corsa-bind/issues/105) | Semantic coverage  | Real `tsgo` positive and negative semantic fixtures are covered in the Rust test suite.   |
+| P2       | [#95](https://github.com/ubugeeei/corsa-bind/issues/95)   | Snapshot cleanup   | Snapshot releases flow through a bounded shared cleanup worker.                           |
+| P2       | [#100](https://github.com/ubugeeei/corsa-bind/issues/100) | Node binding       | Promise-based N-API methods are available for tsgo requests and lifecycle operations.     |
+| P2       | [#102](https://github.com/ubugeeei/corsa-bind/issues/102) | CI coverage        | CI now smoke-checks the supported C ABI, C++ header, and Go wrapper surfaces.             |
+| P2       | [#103](https://github.com/ubugeeei/corsa-bind/issues/103) | Supply chain       | Release and supply-chain workflows now generate SPDX SBOM artifacts.                      |
 
 ## Readiness Gate
 
-Before declaring the whole project production-ready, the release owner should:
+Before declaring a release production-ready, the release owner should still:
 
-- close or explicitly risk-accept every P0 and P1 issue
-- prove real typecheck and type emit behavior with paired pass/fail fixtures
-- make each supported binding compile and smoke-test in CI
-- document unsupported or experimental bindings in the public support matrix
-- attach SBOMs, or document a replacement attestation strategy, for public binary
-  distribution
+- confirm all audit remediation issues are closed by the release PR
+- rerun real typecheck and type emit fixtures against the pinned `tsgo`
+- ensure every supported binding compile and smoke-test job is green
+- keep unsupported or experimental bindings explicit in the public support matrix
+- attach generated SBOM artifacts for public binary distribution
 - rerun the release checklist in [Production Readiness Guide](./production_readiness.md)
 
 ## Review Notes
 
-This audit intentionally tracks gaps as issues instead of bundling large behavior
-changes into the documentation pull request. The issues contain implementation
-evidence and acceptance criteria so each fix can be reviewed, tested, and
-released independently.
+This audit intentionally tracks production-readiness gaps as issues. Each issue
+contains implementation evidence and acceptance criteria so fixes can be
+reviewed, tested, and released with clear provenance.

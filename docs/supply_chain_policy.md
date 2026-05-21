@@ -51,8 +51,18 @@ Before publishing public npm packages, the npm trusted publish workflow is
 expected to pass the same release dry-run validation and use GitHub-hosted
 runners with OIDC enabled.
 
-SBOM generation remains a future hardening target for the first public binary
-distribution flow.
+Release workflows generate SPDX 2.3 JSON SBOMs with
+[`scripts/generate_sbom.ts`](../scripts/generate_sbom.ts):
+
+- `publish-rust` uploads `rust-sbom` for the crate dependency inventory
+- `publish-npm` uploads `npm-sboms`, including npm package metadata and each
+  native binding target SBOM
+- the `Supply Chain` workflow uploads a `workspace-sbom` artifact on PRs,
+  default-branch pushes, scheduled runs, and manual runs
+
+Downstream users should download the SBOM artifacts from the GitHub Actions run
+that produced the release and compare the workflow run, tag, and GitHub
+provenance metadata before importing the inventory into vulnerability tooling.
 
 ## OpenSSF Scorecard Monitoring
 

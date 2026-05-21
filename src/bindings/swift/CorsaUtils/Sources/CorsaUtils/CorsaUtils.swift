@@ -14,7 +14,12 @@ public struct CorsaBytes {
     public let ptr: UnsafeMutablePointer<UInt8>?
     public let len: Int
     public let present: Bool
+    public let status: Int32
 }
+
+let corsaResultError: Int32 = 0
+let corsaResultNone: Int32 = 1
+let corsaResultSome: Int32 = 2
 
 public struct CorsaStringList {
     public let ptr: UnsafeMutablePointer<CorsaString>?
@@ -199,7 +204,7 @@ func takeStringList(_ value: CorsaStringList) -> [String] {
 
 func takeBytes(_ value: CorsaBytes) -> Data? {
     defer { freeBytesNative(value) }
-    guard value.present else {
+    guard value.status == corsaResultSome else {
         return nil
     }
     guard let ptr = value.ptr, value.len > 0 else {

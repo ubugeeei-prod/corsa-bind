@@ -331,9 +331,9 @@ private func takeCheckedString(_ value: CorsaString) throws -> String {
 }
 
 private func takeCheckedBytes(_ value: CorsaBytes) throws -> Data? {
-    let present = value.present
+    let status = value.status
     let data = takeBytes(value)
-    if !present {
+    if status == corsaResultError {
         let message = takeString(takeErrorMessageNative())
         if !message.isEmpty {
             throw CorsaFfiError.message(message)

@@ -1,5 +1,7 @@
 mod support;
 
+use std::{fs, thread, time::Duration};
+
 use corsa::api::{
     ApiClient, ApiMode, DocumentIdentifier, OverlayChanges, OverlayUpdate, PrintNodeOptions,
     UpdateSnapshotParams,
@@ -130,6 +132,85 @@ fn async_api_callbacks_work() {
         assert_eq!(config.options["virtual"], json!(true));
         client.close().await.unwrap();
     });
+}
+
+#[test]
+fn concurrent_initialize_and_capability_calls_share_one_wire_request() {
+    let count_dir = tempfile::tempdir().unwrap();
+    block_on(async {
+        let client = ApiClient::spawn(
+            support::api_config(ApiMode::AsyncJsonRpcStdio)
+                .with_env(
+                    "CORSA_MOCK_TSGO_COUNT_DIR",
+                    count_dir.path().display().to_string(),
+                )
+                .with_env("CORSA_MOCK_TSGO_DELAY_MS", "25"),
+        )
+        .await
+        .unwrap();
+
+        let initialize_workers = (0..8)
+            .map(|_| {
+                let client = client.clone();
+                thread::spawn(move || block_on(async move { client.initialize().await.unwrap() }))
+            })
+            .collect::<Vec<_>>();
+        for worker in initialize_workers {
+            worker.join().unwrap();
+        }
+
+        let capability_workers = (0..8)
+            .map(|_| {
+                let client = client.clone();
+                thread::spawn(move || {
+                    block_on(async move { client.describe_capabilities().await.unwrap() })
+                })
+            })
+            .collect::<Vec<_>>();
+        for worker in capability_workers {
+            worker.join().unwrap();
+        }
+
+        client.close().await.unwrap();
+    });
+
+    assert_eq!(count_lines(count_dir.path().join("initialize.count")), 1);
+    assert_eq!(
+        count_lines(count_dir.path().join("describeCapabilities.count")),
+        1
+    );
+}
+
+#[test]
+fn dropping_many_snapshots_uses_bounded_release_queue() {
+    let count_dir = tempfile::tempdir().unwrap();
+    block_on(async {
+        let client = ApiClient::spawn(
+            support::api_config(ApiMode::AsyncJsonRpcStdio)
+                .with_env(
+                    "CORSA_MOCK_TSGO_COUNT_DIR",
+                    count_dir.path().display().to_string(),
+                )
+                .with_request_timeout(Some(Duration::from_secs(1)))
+                .with_shutdown_timeout(Duration::from_secs(10))
+                .with_release_queue_capacity(1),
+        )
+        .await
+        .unwrap();
+        for index in 0..64 {
+            let snapshot = client
+                .update_snapshot(UpdateSnapshotParams {
+                    open_project: Some(format!("/workspace/{index}/tsconfig.json")),
+                    file_changes: None,
+                    overlay_changes: None,
+                })
+                .await
+                .unwrap();
+            drop(snapshot);
+        }
+        client.close().await.unwrap();
+    });
+    assert_eq!(count_lines(count_dir.path().join("release.count")), 64);
 }
 
 #[test]
@@ -411,6 +492,12 @@ fn async_api_full_surface_methods() {
         );
         client.close().await.unwrap();
     });
+}
+
+fn count_lines(path: impl AsRef<std::path::Path>) -> usize {
+    fs::read_to_string(path)
+        .map(|text| text.lines().count())
+        .unwrap_or(0)
 }
 
 #[test]

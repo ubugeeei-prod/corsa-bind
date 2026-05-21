@@ -228,6 +228,58 @@ jobs:
       - name: Validate public facade without experimental features
         run: cargo test -p corsa --no-default-features --test orchestrator
 
+  non-node-bindings:
+    name: Non-Node Bindings
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Setup Go for Go binding
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: src/bindings/go/corsa_utils/go.mod
+          cache: false
+
+      - name: Build C ABI and mock server
+        run: |
+          cargo build -p corsa_ffi
+          cargo build -p corsa --bin mock_tsgo
+
+      - name: Test Go binding
+        working-directory: src/bindings/go/corsa_utils
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target/debug
+        run: go test ./...
+
+      - name: Compile C++ headers
+        shell: bash
+        run: |
+          mkdir -p .cache/bindings
+          cat > .cache/bindings/cpp_smoke.cpp <<'CPP'
+          #include "corsa_tsgo_api.hpp"
+          #include "corsa_utils.hpp"
+          #include "corsa_virtual_document.hpp"
+          int main() {
+            auto ref = corsa::utils::to_ref("string");
+            return ref.len == 0 ? 1 : 0;
+          }
+          CPP
+          c++ -std=c++20 \
+            -I src/bindings/cpp \
+            -I src/bindings/c/corsa_ffi/include \
+            -c .cache/bindings/cpp_smoke.cpp \
+            -o .cache/bindings/cpp_smoke.o
+
   quality:
     name: Quality (${{ matrix.os }})
     runs-on: ubuntu-latest
@@ -240,6 +292,7 @@ jobs:
       - build
       - test
       - public-facade
+      - non-node-bindings
     if: ${{ always() }}
     strategy:
       fail-fast: false
@@ -258,6 +311,7 @@ jobs:
           BUILD: ${{ needs.build.result }}
           TEST: ${{ needs.test.result }}
           PUBLIC_FACADE: ${{ needs['public-facade'].result }}
+          NON_NODE_BINDINGS: ${{ needs['non-node-bindings'].result }}
         run: |
           failed=0
           for check in \
@@ -267,7 +321,8 @@ jobs:
             "RUST_LINT=$RUST_LINT" \
             "BUILD=$BUILD" \
             "TEST=$TEST" \
-            "PUBLIC_FACADE=$PUBLIC_FACADE"; do
+            "PUBLIC_FACADE=$PUBLIC_FACADE" \
+            "NON_NODE_BINDINGS=$NON_NODE_BINDINGS"; do
             name="${check%%=*}"
             result="${check#*=}"
             echo "$name: $result"

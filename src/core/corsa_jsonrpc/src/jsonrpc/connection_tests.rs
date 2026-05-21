@@ -72,3 +72,31 @@ fn request_times_out_when_no_response_arrives() {
         }]
     );
 }
+
+#[test]
+fn close_joins_reader_after_peer_closes() {
+    let (client_socket, server_socket) = UnixStream::pair().unwrap();
+    let client = JsonRpcConnection::spawn(
+        BufReader::new(client_socket.try_clone().unwrap()),
+        client_socket,
+        RpcHandlerMap::default(),
+    );
+    drop(server_socket);
+
+    corsa_runtime::block_on(client.close()).unwrap();
+}
+
+#[test]
+fn close_uses_bounded_reader_join_when_peer_stays_open() {
+    let (client_socket, _server_socket) = UnixStream::pair().unwrap();
+    let client = JsonRpcConnection::spawn(
+        BufReader::new(client_socket.try_clone().unwrap()),
+        client_socket,
+        RpcHandlerMap::default(),
+    );
+    let started = std::time::Instant::now();
+
+    corsa_runtime::block_on(client.close()).unwrap();
+
+    assert!(started.elapsed() < Duration::from_secs(2));
+}

@@ -3,7 +3,13 @@ use corsa_core::fast::CompactString;
 use parking_lot::Mutex;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
-use std::{path::Path, sync::Arc};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, mpsc, mpsc::Receiver},
+    task::{Context, Poll, Waker},
+};
+use std::{path::Path, thread};
 
 #[cfg(unix)]
 use crate::jsonrpc::JsonRpcConnection;
@@ -22,11 +28,11 @@ use super::{
     encoded::EncodedPayload,
     profiling::SharedProfiler,
     requests_core::{
-        ParseConfigFileRequest, ReleaseRequest, SnapshotFileRequest, SnapshotProjectFileRequest,
+        ParseConfigFileRequest, SnapshotFileRequest, SnapshotProjectFileRequest,
         UpdateSnapshotRequest,
     },
     responses::{ConfigResponse, InitializeResponse, ProjectResponse},
-    snapshot::ManagedSnapshot,
+    snapshot::{ManagedSnapshot, SnapshotReleaseQueue},
     spawn_stdio::{spawn_jsonrpc_stdio, spawn_msgpack_stdio},
 };
 
@@ -59,11 +65,158 @@ use super::{
 #[derive(Clone)]
 pub struct ApiClient {
     driver: Arc<ClientDriver>,
-    initialized: Arc<Mutex<Option<Arc<InitializeResponse>>>>,
-    capabilities: Arc<Mutex<Option<Arc<CapabilitiesResponse>>>>,
+    initialized: Arc<SingleflightCell<InitializeResponse>>,
+    capabilities: Arc<SingleflightCell<CapabilitiesResponse>>,
+    release_queue: Arc<SnapshotReleaseQueue>,
     runtime_capabilities: RuntimeCapabilities,
     allow_unstable_upstream_calls: bool,
     profiler: Option<SharedProfiler>,
+}
+
+struct SingleflightCell<T> {
+    state: Mutex<SingleflightState<T>>,
+}
+
+enum SingleflightState<T> {
+    Empty,
+    InFlight(Vec<mpsc::SyncSender<Result<Arc<T>>>>),
+    Ready(Arc<T>),
+}
+
+struct SingleflightWait<T> {
+    state: Arc<Mutex<SingleflightWaitState<T>>>,
+    closed_name: &'static str,
+}
+
+struct SingleflightWaitState<T> {
+    receiver: Option<Receiver<Result<Arc<T>>>>,
+    result: Option<Result<Arc<T>>>,
+    spawned: bool,
+    waker: Option<Waker>,
+}
+
+impl<T> Default for SingleflightCell<T> {
+    fn default() -> Self {
+        Self {
+            state: Mutex::new(SingleflightState::Empty),
+        }
+    }
+}
+
+impl<T> SingleflightCell<T>
+where
+    T: Send + Sync + 'static,
+{
+    async fn get_or_try_init<F, Fut>(&self, task: F, closed_name: &'static str) -> Result<Arc<T>>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        let wait = {
+            let mut state = self.state.lock();
+            match &mut *state {
+                SingleflightState::Ready(value) => return Ok(value.clone()),
+                SingleflightState::InFlight(waiters) => {
+                    let (tx, rx) = mpsc::sync_channel(1);
+                    waiters.push(tx);
+                    Some(rx)
+                }
+                SingleflightState::Empty => {
+                    *state = SingleflightState::InFlight(Vec::new());
+                    None
+                }
+            }
+        };
+        if let Some(rx) = wait {
+            return SingleflightWait::new(rx, closed_name).await;
+        }
+
+        let result = task().await.map(Arc::new);
+        let waiters = {
+            let mut state = self.state.lock();
+            match std::mem::replace(&mut *state, SingleflightState::Empty) {
+                SingleflightState::InFlight(waiters) => {
+                    if let Ok(value) = &result {
+                        *state = SingleflightState::Ready(value.clone());
+                    }
+                    waiters
+                }
+                SingleflightState::Ready(value) => {
+                    *state = SingleflightState::Ready(value);
+                    Vec::new()
+                }
+                SingleflightState::Empty => Vec::new(),
+            }
+        };
+        for waiter in waiters {
+            let _ = waiter.send(clone_shared_result(&result));
+        }
+        result
+    }
+}
+
+impl<T> SingleflightWait<T> {
+    fn new(receiver: Receiver<Result<Arc<T>>>, closed_name: &'static str) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(SingleflightWaitState {
+                receiver: Some(receiver),
+                result: None,
+                spawned: false,
+                waker: None,
+            })),
+            closed_name,
+        }
+    }
+}
+
+impl<T> Future for SingleflightWait<T>
+where
+    T: Send + Sync + 'static,
+{
+    type Output = Result<Arc<T>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut state = self.state.lock();
+        if let Some(result) = state.result.take() {
+            return Poll::Ready(result);
+        }
+        state.waker = Some(cx.waker().clone());
+        if !state.spawned {
+            state.spawned = true;
+            let Some(receiver) = state.receiver.take() else {
+                return Poll::Ready(Err(TsgoError::Closed(self.closed_name)));
+            };
+            let shared = Arc::clone(&self.state);
+            let closed_name = self.closed_name;
+            if let Err(error) = thread::Builder::new()
+                .name("corsa-singleflight-wait".into())
+                .spawn(move || {
+                    let result = receiver
+                        .recv()
+                        .map_err(|_| TsgoError::Closed(closed_name))
+                        .and_then(|result| result);
+                    let waker = {
+                        let mut state = shared.lock();
+                        state.result = Some(result);
+                        state.waker.take()
+                    };
+                    if let Some(waker) = waker {
+                        waker.wake();
+                    }
+                })
+            {
+                return Poll::Ready(Err(TsgoError::Io(error)));
+            }
+        }
+        Poll::Pending
+    }
+}
+
+fn clone_shared_result<T>(result: &Result<Arc<T>>) -> Result<Arc<T>> {
+    match result {
+        Ok(value) => Ok(value.clone()),
+        Err(error) => Err(error.clone_for_pending()),
+    }
 }
 
 impl ApiClient {
@@ -97,10 +250,16 @@ impl ApiClient {
                 Arc::new(driver)
             }
         };
+        let release_queue = Arc::new(SnapshotReleaseQueue::spawn(
+            driver.clone(),
+            config.profiler.clone(),
+            config.release_queue_capacity,
+        ));
         Ok(Self {
             driver,
-            initialized: Arc::new(Mutex::new(None)),
-            capabilities: Arc::new(Mutex::new(None)),
+            initialized: Arc::new(SingleflightCell::default()),
+            capabilities: Arc::new(SingleflightCell::default()),
+            release_queue,
             runtime_capabilities: RuntimeCapabilities::from_spawn_config(&config),
             allow_unstable_upstream_calls: config.allow_unstable_upstream_calls,
             profiler: config.profiler.clone(),
@@ -120,22 +279,16 @@ impl ApiClient {
     ///
     /// Repeated calls are cheap: only the first call performs network I/O.
     pub async fn initialize(&self) -> Result<Arc<InitializeResponse>> {
-        if self.initialized.lock().is_none() {
-            let init: Arc<InitializeResponse> = Arc::new(
-                self.driver
-                    .request_typed("initialize", &Value::Null, self.profiler.as_ref())
-                    .await?,
-            );
-            let mut slot = self.initialized.lock();
-            if slot.is_none() {
-                *slot = Some(init.clone());
-            }
-        }
         self.initialized
-            .lock()
-            .as_ref()
-            .cloned()
-            .ok_or(TsgoError::Closed("api initialize"))
+            .get_or_try_init(
+                || async {
+                    self.driver
+                        .request_typed("initialize", &Value::Null, self.profiler.as_ref())
+                        .await
+                },
+                "api initialize",
+            )
+            .await
     }
 
     /// Returns the advertised runtime capabilities for this client.
@@ -144,43 +297,39 @@ impl ApiClient {
     /// falls back to local spawn metadata and marks all proposed endpoints as
     /// unsupported.
     pub async fn describe_capabilities(&self) -> Result<Arc<CapabilitiesResponse>> {
-        if self.capabilities.lock().is_none() {
-            let capabilities = match self
-                .raw_json_request("describeCapabilities", Value::Null)
-                .await
-            {
-                Ok(value) => {
-                    let mut parsed: CapabilitiesResponse = serde_json::from_value(value)?;
-                    parsed.runtime = parsed
-                        .runtime
-                        .merge_with_local(self.runtime_capabilities.clone());
-                    parsed.runtime.capability_endpoint = true;
-                    Arc::new(parsed)
-                }
-                Err(TsgoError::Rpc(error))
-                    if error.code == -32601 || is_unknown_api_method_message(&error.message) =>
-                {
-                    Arc::new(CapabilitiesResponse::fallback(
-                        self.runtime_capabilities.clone(),
-                    ))
-                }
-                Err(TsgoError::Protocol(message)) if is_unknown_api_method_message(&message) => {
-                    Arc::new(CapabilitiesResponse::fallback(
-                        self.runtime_capabilities.clone(),
-                    ))
-                }
-                Err(error) => return Err(error),
-            };
-            let mut slot = self.capabilities.lock();
-            if slot.is_none() {
-                *slot = Some(capabilities.clone());
-            }
-        }
         self.capabilities
-            .lock()
-            .as_ref()
-            .cloned()
-            .ok_or(TsgoError::Closed("api describeCapabilities"))
+            .get_or_try_init(
+                || async {
+                    let capabilities = match self
+                        .raw_json_request("describeCapabilities", Value::Null)
+                        .await
+                    {
+                        Ok(value) => {
+                            let mut parsed: CapabilitiesResponse = serde_json::from_value(value)?;
+                            parsed.runtime = parsed
+                                .runtime
+                                .merge_with_local(self.runtime_capabilities.clone());
+                            parsed.runtime.capability_endpoint = true;
+                            parsed
+                        }
+                        Err(TsgoError::Rpc(error))
+                            if error.code == -32601
+                                || is_unknown_api_method_message(&error.message) =>
+                        {
+                            CapabilitiesResponse::fallback(self.runtime_capabilities.clone())
+                        }
+                        Err(TsgoError::Protocol(message))
+                            if is_unknown_api_method_message(&message) =>
+                        {
+                            CapabilitiesResponse::fallback(self.runtime_capabilities.clone())
+                        }
+                        Err(error) => return Err(error),
+                    };
+                    Ok(capabilities)
+                },
+                "api describeCapabilities",
+            )
+            .await
     }
 
     /// Parses a `tsconfig` file through `tsgo`.
@@ -218,6 +367,7 @@ impl ApiClient {
             .await?;
         Ok(super::snapshot::ManagedSnapshot::new(
             self.clone(),
+            self.release_queue.clone(),
             response,
         ))
     }
@@ -265,6 +415,9 @@ impl ApiClient {
     /// This is idempotent. After closing, further requests return
     /// [`TsgoError::Closed`].
     pub async fn close(&self) -> Result<()> {
+        self.release_queue
+            .close(self.driver.shutdown_timeout())
+            .await?;
         self.driver.close().await
     }
 
@@ -314,8 +467,9 @@ impl ApiClient {
     }
 
     pub(crate) async fn release_handle(&self, handle: &str) -> Result<()> {
-        let request = ReleaseRequest { handle };
-        let _: Value = self.request_after_initialize("release", &request).await?;
+        self.driver
+            .release_handle(handle, self.profiler.as_ref())
+            .await?;
         Ok(())
     }
 
@@ -426,14 +580,17 @@ async fn connect_pipe_socket(path: PathBuf) -> Result<ApiClient> {
     let reader = BufReader::new(stream.try_clone()?);
     let writer = BufWriter::new(stream);
     let rpc = JsonRpcConnection::spawn(reader, writer, Default::default());
+    let driver = Arc::new(ClientDriver::JsonRpc {
+        rpc,
+        process: None,
+        shutdown_timeout: std::time::Duration::from_secs(2),
+    });
+    let release_queue = Arc::new(SnapshotReleaseQueue::spawn(driver.clone(), None, 256));
     Ok(ApiClient {
-        driver: Arc::new(ClientDriver::JsonRpc {
-            rpc,
-            process: None,
-            shutdown_timeout: std::time::Duration::from_secs(2),
-        }),
-        initialized: Arc::new(Mutex::new(None)),
-        capabilities: Arc::new(Mutex::new(None)),
+        driver,
+        initialized: Arc::new(SingleflightCell::default()),
+        capabilities: Arc::new(SingleflightCell::default()),
+        release_queue,
         runtime_capabilities: RuntimeCapabilities {
             kind: Some(CompactString::from("pipe")),
             executable: None,

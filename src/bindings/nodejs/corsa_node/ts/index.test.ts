@@ -213,6 +213,50 @@ describe("CorsaApiClient", () => {
     }
   });
 
+  it("roundtrips through the mock tsgo binary without blocking on async APIs", async () => {
+    const client = await CorsaApiClient.spawnAsync({
+      executable: mockBinary,
+      cwd: workspaceRoot,
+      mode: "jsonrpc",
+    });
+
+    try {
+      const init = await client.initializeAsync();
+      expect(init.currentDirectory).toBe(workspaceRoot);
+
+      const snapshot = await client.updateSnapshotAsync({
+        openProject: "/workspace/tsconfig.json",
+      });
+      const project = snapshot.projects[0];
+      expect(project).toBeDefined();
+
+      await expect(client.callJsonAsync<string>("ping")).resolves.toBe("pong");
+      const sourceViaGeneric = await client.callBinaryAsync("getSourceFile", {
+        snapshot: snapshot.snapshot,
+        project: project.id,
+        file: "/workspace/src/index.ts",
+      });
+      expect(Buffer.from(sourceViaGeneric ?? []).toString("utf8")).toBe("source-file");
+
+      const stringType = await client.getStringTypeAsync(snapshot.snapshot, project.id);
+      expect(stringType.id).toBe("t0000000000000010");
+      const nodeType = await client.getTypeAtPositionAsync(
+        snapshot.snapshot,
+        project.id,
+        "/workspace/src/index.ts",
+        1,
+      );
+      expect(nodeType?.id).toBe("t0000000000000001");
+      await expect(
+        client.typeToStringAsync(snapshot.snapshot, project.id, stringType.id),
+      ).resolves.toBe("type:string");
+
+      await client.releaseHandleAsync(snapshot.snapshot);
+    } finally {
+      await client.closeAsync();
+    }
+  });
+
   for (const mode of ["msgpack", "jsonrpc"] as const) {
     const realCase = realTsgoReady ? it : it.skip;
 
