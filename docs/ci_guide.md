@@ -317,6 +317,9 @@ Using `go-version-file` means:
 - CI follows upstream automatically when the pinned ref moves
 - there is less room for silent drift
 
+Because `ref/typescript-go` is a managed checkout, fresh CI jobs must run
+`corsa_ref sync` before `actions/setup-go` can read `ref/typescript-go/go.mod`.
+
 ## Reproducibility Beats Convenience
 
 Repo-local caches, explicit shell environments, and strict ref verification all make the workflow a little more opinionated.

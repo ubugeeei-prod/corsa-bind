@@ -54,10 +54,13 @@ jobs:
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
+      - name: Sync pinned tsgo ref
+        run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
+
       - name: Setup Go for pinned tsgo ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.26.0"
+          go-version-file: ref/typescript-go/go.mod
           cache: false
 
       - name: Setup Vite+

@@ -27,6 +27,7 @@ before treating every public surface as production-ready.
 | P2       | [#100](https://github.com/ubugeeei/corsa-bind/issues/100) | Node binding       | Synchronous N-API methods block the JavaScript event loop during tsgo requests.                                   |
 | P2       | [#102](https://github.com/ubugeeei/corsa-bind/issues/102) | CI coverage        | Non-Node language bindings are present without first-class compile or smoke-test coverage.                        |
 | P2       | [#103](https://github.com/ubugeeei/corsa-bind/issues/103) | Supply chain       | Published artifacts do not yet include generated SBOMs.                                                           |
+| P2       | [#108](https://github.com/ubugeeei/corsa-bind/issues/108) | CI reproducibility | Real-tsgo CI and release gates hardcode Go instead of deriving it from the pinned upstream go.mod.                |
 
 ## Readiness Gate
 
