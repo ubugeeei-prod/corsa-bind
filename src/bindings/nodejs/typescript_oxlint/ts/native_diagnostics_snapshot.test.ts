@@ -59,6 +59,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "no-unsafe-member-access: accessing a member through any",
+          "diagnostics": [
+            "no-unsafe-member-access/unsafeMemberExpression@6..10: Unsafe member access on an \`any\` value.",
+          ],
+        },
+        {
           "caseName": "no-unsafe-unary-minus: unary minus on string union",
           "diagnostics": [
             "no-unsafe-unary-minus/unaryMinus@0..6: Argument of unary negation should be assignable to number | bigint.",
@@ -201,6 +207,17 @@ const diagnosticCases = [
     node: node("CallExpression", [0, 7], {
       children: { callee: id("call", [0, 4], ["any"]) },
       childLists: { arguments: [] },
+    }),
+  },
+  {
+    ruleName: "no-unsafe-member-access",
+    scenario: "accessing a member through any",
+    node: node("MemberExpression", [0, 10], {
+      fields: { computed: false, optional: false },
+      children: {
+        object: id("value", [0, 5], ["any"]),
+        property: id("prop", [6, 10]),
+      },
     }),
   },
   {

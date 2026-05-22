@@ -289,6 +289,63 @@ fn reports_unsafe_new_and_template_tag_from_any() {
 }
 
 #[test]
+fn reports_unsafe_member_access_from_any() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-member-access",
+            &member_expression_node(
+                typed_node("Identifier", TextRange::new(0, 5), "any"),
+                node_with_field("Identifier", TextRange::new(6, 10), "name", json!("prop")),
+                false,
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-unsafe-member-access");
+    assert_eq!(diagnostics[0].message_id, "unsafeMemberExpression");
+    assert_eq!(diagnostics[0].range, TextRange::new(6, 10));
+}
+
+#[test]
+fn reports_unsafe_computed_member_access_from_any_key() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-member-access",
+            &member_expression_node(
+                typed_node("Identifier", TextRange::new(0, 6), "{ value: string }"),
+                typed_node("Identifier", TextRange::new(7, 10), "any"),
+                true,
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "unsafeComputedMemberAccess");
+    assert_eq!(diagnostics[0].range, TextRange::new(7, 10));
+}
+
+#[test]
+fn respects_unsafe_member_optional_chain_option() {
+    let mut node = member_expression_node(
+        typed_node("Identifier", TextRange::new(0, 5), "any"),
+        node_with_field("Identifier", TextRange::new(7, 11), "name", json!("prop")),
+        false,
+    );
+    node.fields.insert("optional".to_owned(), json!(true));
+    node.fields.insert(
+        "__ruleOptions".to_owned(),
+        json!([{ "allowOptionalChaining": true }]),
+    );
+
+    let diagnostics = registry()
+        .run_rule("no-unsafe-member-access", &node)
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn ignores_dynamic_import_call() {
     let mut callee = node("Import", TextRange::new(0, 6));
     callee.type_texts = vec!["any".to_owned()];
@@ -532,6 +589,7 @@ fn lists_default_rule_meta() {
             "no-mixed-enums",
             "no-unsafe-assignment",
             "no-unsafe-call",
+            "no-unsafe-member-access",
             "no-unsafe-return",
             "no-unsafe-unary-minus",
             "only-throw-error",
@@ -729,6 +787,17 @@ fn template_node(expressions: Vec<LintNode>) -> LintNode {
         "expressions",
         expressions,
     )
+}
+
+fn member_expression_node(object: LintNode, property: LintNode, computed: bool) -> LintNode {
+    let mut node = node_with_children(
+        "MemberExpression",
+        TextRange::new(0, 12),
+        [("object", object), ("property", property)],
+    );
+    node.fields.insert("computed".to_owned(), json!(computed));
+    node.fields.insert("optional".to_owned(), json!(false));
+    node
 }
 
 fn array_delete_node() -> LintNode {

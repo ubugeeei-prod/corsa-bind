@@ -127,6 +127,30 @@ describe("corsa-oxlint native rules", () => {
     });
   });
 
+  integrationCase("runs no-unsafe-member-access through RuleTester", () => {
+    createTester().run(
+      "no-unsafe-member-access",
+      typescriptOxlintRules["no-unsafe-member-access"] as never,
+      {
+        valid: [{ code: "declare const value: { prop: string }; value.prop;" }],
+        invalid: [
+          {
+            code: "declare const value: unknown; (value as any).prop;",
+            errors: [{ messageId: "unsafeMemberExpression" }],
+          },
+          {
+            code: `
+              declare const value: { prop: string };
+              declare const key: unknown;
+              value[key as any];
+            `,
+            errors: [{ messageId: "unsafeComputedMemberAccess" }],
+          },
+        ],
+      },
+    );
+  });
+
   integrationCase("runs no-unsafe-return through RuleTester", () => {
     createTester().run("no-unsafe-return", typescriptOxlintRules["no-unsafe-return"] as never, {
       valid: [{ code: "declare const value: any; function ok(): unknown { return value; }" }],
