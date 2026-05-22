@@ -51,12 +51,15 @@ export default defineConfig({
       "@corsa-bind/napi": resolve(nodePackageDir, "ts/index.ts"),
       "corsa-oxlint/ast-utils": resolve(typescriptOxlintDir, "ts/ast_utils.ts"),
       "corsa-oxlint/compat": resolve(typescriptOxlintDir, "ts/oxlint_compat.ts"),
+      "corsa-oxlint/eslint-utils": resolve(typescriptOxlintDir, "ts/oxlint_utils.ts"),
       "corsa-oxlint/json-schema": resolve(typescriptOxlintDir, "ts/json_schema.ts"),
       "corsa-oxlint/oxlint-utils": resolve(typescriptOxlintDir, "ts/oxlint_utils.ts"),
       "corsa-oxlint/utils": resolve(typescriptOxlintDir, "ts/utils.ts"),
       "corsa-oxlint/rule-tester": resolve(typescriptOxlintDir, "ts/rule_tester.ts"),
       "corsa-oxlint/rules": resolve(typescriptOxlintDir, "ts/rules/index.ts"),
       "corsa-oxlint/ts-estree": resolve(typescriptOxlintDir, "ts/ts_estree.ts"),
+      "corsa-oxlint/ts-eslint": resolve(typescriptOxlintDir, "ts/ts_eslint.ts"),
+      "corsa-oxlint/ts-utils": resolve(typescriptOxlintDir, "ts/ts_utils.ts"),
       "corsa-oxlint": resolve(typescriptOxlintDir, "ts/index.ts"),
     },
   },
@@ -199,7 +202,7 @@ export default defineConfig({
       bench_tooling_compare: {
         command:
           "cargo run --release -p corsa --bin bench_tooling_compare -- --iterations 10 --warmup-iterations 2 --json-output .cache/bench_tooling_compare.json",
-        dependsOn: ["build_tsgo", "bench_tooling_setup"],
+        dependsOn: ["build_tsgo", "build_typescript_oxlint", "bench_tooling_setup"],
       },
       bench_bindings: {
         command: "node --strip-types ./scripts/bench_bindings.ts",

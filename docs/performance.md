@@ -30,7 +30,7 @@ For the reasoning behind these benchmark layers, implementation notes, and exten
 
 The tooling benchmark is the `bench_tooling_compare` binary. It tracks two workloads:
 
-- `project_check`: `tsc`, `tsgo`, `typescript-eslint`, and `tsgolint` on the same dataset
+- `project_check`: `tsc`, `tsgo`, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` on the same dataset
 - `editor_workflow`: `corsa` msgpack cold and warm orchestration over a representative multi-query API flow
 
 Before running it for the first time, install the comparison dependencies:
@@ -49,6 +49,9 @@ cargo run --release -p corsa --bin bench_tooling_compare -- \
 ```
 
 `project_check` is the apples-to-apples CLI comparison.
+The lint lanes use the overlapping type-aware rules currently published by
+`corsa-oxlint/rules`, so `typescript-eslint`, `corsa-oxlint`, and `tsgolint`
+are timed against the same rule workload.
 `editor_workflow` is intentionally a different workload: it asks whether session reuse and orchestration can beat rerunning a full `tsgo --noEmit` project check.
 
 The runner creates temporary overlay `tsconfig` files for CLI parity, enforces per-process timeouts, and always kills plus reaps spawned children before returning.

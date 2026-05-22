@@ -35,6 +35,8 @@ struct ToolSupport {
     tsc_script: PathBuf,
     eslint_script: PathBuf,
     eslint_config: PathBuf,
+    oxlint_script: PathBuf,
+    corsa_oxlint_config: PathBuf,
     tsgolint_script: PathBuf,
 }
 
@@ -118,6 +120,16 @@ async fn run_project_check_suite(
     rows.push(row(
         "project_check",
         dataset,
+        "corsa-oxlint",
+        measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
+            let mut command = corsa_oxlint_command(cli, dataset, support, overlay);
+            run_command(&mut command, timeout, &[0, 1], "corsa-oxlint")
+        })
+        .await?,
+    ));
+    rows.push(row(
+        "project_check",
+        dataset,
         "tsgolint",
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
             let mut command = tsgolint_command(support, overlay);
@@ -192,6 +204,29 @@ fn eslint_command(
         .arg(&support.eslint_config)
         .arg("--no-config-lookup")
         .env("TSGO_RS_BENCH_TSCONFIG", &overlay.path);
+    for file in &dataset.source_files {
+        command.arg(file.as_str());
+    }
+    command
+}
+
+fn corsa_oxlint_command(
+    cli: &Cli,
+    dataset: &DatasetCase,
+    support: &ToolSupport,
+    overlay: &OverlayConfig,
+) -> Command {
+    let mut command = Command::new(support.node_command.as_str());
+    command
+        .current_dir(&support.workspace_root)
+        .arg(&support.oxlint_script)
+        .arg("--config")
+        .arg(&support.corsa_oxlint_config)
+        .arg("--disable-nested-config")
+        .arg("--silent")
+        .env("TSGO_RS_BENCH_TSCONFIG", &overlay.path)
+        .env("TSGO_RS_BENCH_TSGO", &cli.tsgo_path)
+        .env("TSGO_RS_BENCH_ROOT", &support.workspace_root);
     for file in &dataset.source_files {
         command.arg(file.as_str());
     }
@@ -432,6 +467,26 @@ impl ToolSupport {
             )));
         }
         let eslint_config = cli_compare_root.join("eslint.config.mjs");
+        let oxlint_script = workspace_root
+            .join("src/bindings/nodejs/typescript_oxlint/node_modules/oxlint/bin/oxlint");
+        if !oxlint_script.exists() {
+            return Err(TsgoError::Protocol(CompactString::from(
+                "missing src/bindings/nodejs/typescript_oxlint/node_modules/oxlint/bin/oxlint; run `vp install` first",
+            )));
+        }
+        let corsa_oxlint_config = cli_compare_root.join("corsa-oxlint.config.mjs");
+        if !corsa_oxlint_config.exists() {
+            return Err(TsgoError::Protocol(CompactString::from(
+                "missing bench/cli_compare/corsa-oxlint.config.mjs",
+            )));
+        }
+        let corsa_oxlint_rules =
+            workspace_root.join("src/bindings/nodejs/typescript_oxlint/dist/rules/index.js");
+        if !corsa_oxlint_rules.exists() {
+            return Err(TsgoError::Protocol(CompactString::from(
+                "missing src/bindings/nodejs/typescript_oxlint/dist/rules/index.js; run `vp run -w build_typescript_oxlint` first",
+            )));
+        }
         let tsgolint_script = cli_compare_root.join("node_modules/oxlint-tsgolint/bin/tsgolint.js");
         if !tsgolint_script.exists() {
             return Err(TsgoError::Protocol(CompactString::from(
@@ -445,6 +500,8 @@ impl ToolSupport {
             tsc_script,
             eslint_script,
             eslint_config,
+            oxlint_script,
+            corsa_oxlint_config,
             tsgolint_script,
         })
     }
@@ -472,10 +529,24 @@ impl OverlayConfig {
                 },
                 "rules": {
                     "typescript/await-thenable": "error",
+                    "typescript/no-array-delete": "error",
+                    "typescript/no-base-to-string": "error",
                     "typescript/no-floating-promises": "error",
-                    "typescript/no-misused-promises": "error",
-                    "typescript/no-unnecessary-condition": "error",
-                    "typescript/no-unnecessary-type-assertion": "error",
+                    "typescript/no-for-in-array": "error",
+                    "typescript/no-implied-eval": "error",
+                    "typescript/no-mixed-enums": "error",
+                    "typescript/no-unsafe-assignment": "error",
+                    "typescript/no-unsafe-return": "error",
+                    "typescript/no-unsafe-unary-minus": "error",
+                    "typescript/only-throw-error": "error",
+                    "typescript/prefer-find": "error",
+                    "typescript/prefer-includes": "error",
+                    "typescript/prefer-promise-reject-errors": "error",
+                    "typescript/prefer-regexp-exec": "error",
+                    "typescript/prefer-string-starts-ends-with": "error",
+                    "typescript/require-array-sort-compare": "error",
+                    "typescript/restrict-plus-operands": "error",
+                    "typescript/use-unknown-in-catch-callback-variable": "error",
                 }
             }))?,
         )?;

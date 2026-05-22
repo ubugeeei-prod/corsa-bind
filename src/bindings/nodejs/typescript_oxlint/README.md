@@ -12,6 +12,7 @@ plugins with real type information powered by `tsgo`.
 ## What It Does
 
 - exposes `OxlintUtils.RuleCreator()` and `getParserServices()` backed by `tsgo`
+- exposes compatibility namespaces such as `ESLintUtils`, `TSESLint`, `TSESTree`, and `TSUtils`
 - keeps a compact self-hosted helper surface with no extra lint-framework dependency
 - binds Rust-implemented hot paths into JS through `napi-rs`
 - lets custom Oxlint rules query types and symbols from JS or TS
@@ -183,6 +184,7 @@ vp check
 vp test run --config ./vite.config.ts src/bindings/nodejs/typescript_oxlint/ts/**/*.test.ts
 vp test bench --config ./vite.config.ts bench/src/typescript_oxlint.bench.ts
 vp test bench --config ./vite.config.ts bench/src/typescript_oxlint_rules.bench.ts
+vp run -w bench_tooling_compare
 ```
 
 Repository-level examples live under [`examples/`](../../examples/README.md),
