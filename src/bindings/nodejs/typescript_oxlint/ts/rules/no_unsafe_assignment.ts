@@ -4,6 +4,9 @@ export const noUnsafeAssignmentRule = createRustNativeRule(
   "no-unsafe-assignment",
   {},
   {
+    includePropertyNames: false,
+    includeTypeTexts: (_node, depth) => depth === 1,
+    maxDepth: 2,
     shouldRun: shouldRunNoUnsafeAssignment,
   },
 );

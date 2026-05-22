@@ -17,6 +17,11 @@ import {
 import { isIdentifierNamed, memberPropertyName, stripChainExpression } from "./ast";
 import type { ContextWithParserOptions, TsgoType, TsgoTypeCheckerShape } from "../types";
 
+const baseTypeCache = new WeakMap<object, TsgoType | null>();
+const propertyNamesCache = new WeakMap<object, readonly string[]>();
+const symbolTypeCache = new WeakMap<object, TsgoType | null>();
+const typeTextsCache = new WeakMap<object, readonly string[]>();
+
 export function checkerFor(context: ContextWithParserOptions): TsgoTypeCheckerShape {
   return OxlintUtils.getParserServices(context).program.getTypeChecker();
 }
@@ -32,23 +37,35 @@ export function baseTypeAtNode(
   context: ContextWithParserOptions,
   node: Node | { readonly range: readonly [number, number] },
 ): TsgoType | undefined {
-  const type = typeAtNode(context, node);
-  if (!type) {
-    return undefined;
+  const key = nodeCacheKey(node);
+  if (key && baseTypeCache.has(key)) {
+    return baseTypeCache.get(key) ?? undefined;
   }
-  return checkerFor(context).getBaseTypeOfLiteralType(type) ?? type;
+  const type = typeAtNode(context, node);
+  const resolved = type ? (checkerFor(context).getBaseTypeOfLiteralType(type) ?? type) : undefined;
+  if (key) {
+    baseTypeCache.set(key, resolved ?? null);
+  }
+  return resolved;
 }
 
 export function symbolTypeAtNode(
   context: ContextWithParserOptions,
   node: Node | { readonly range: readonly [number, number] },
 ): TsgoType | undefined {
+  const key = nodeCacheKey(node);
+  if (key && symbolTypeCache.has(key)) {
+    return symbolTypeCache.get(key) ?? undefined;
+  }
   const checker = checkerFor(context);
   const symbol = checker.getSymbolAtLocation(node as Node);
-  if (!symbol) {
-    return undefined;
+  const resolved = symbol
+    ? (checker.getTypeOfSymbol(symbol) ?? checker.getDeclaredTypeOfSymbol(symbol))
+    : undefined;
+  if (key) {
+    symbolTypeCache.set(key, resolved ?? null);
   }
-  return checker.getTypeOfSymbol(symbol) ?? checker.getDeclaredTypeOfSymbol(symbol);
+  return resolved;
 }
 
 export function typeTextAtNode(
@@ -75,6 +92,11 @@ export function propertyNamesOfNode(
   context: ContextWithParserOptions,
   node: Node | { readonly range: readonly [number, number] },
 ): readonly string[] {
+  const key = nodeCacheKey(node);
+  const cached = key ? propertyNamesCache.get(key) : undefined;
+  if (cached) {
+    return cached;
+  }
   const checker = checkerFor(context);
   const names = new Set<string>();
   for (const type of [baseTypeAtNode(context, node), symbolTypeAtNode(context, node)]) {
@@ -85,7 +107,11 @@ export function propertyNamesOfNode(
       names.add(property.name);
     }
   }
-  return [...names];
+  const resolved = [...names];
+  if (key) {
+    propertyNamesCache.set(key, resolved);
+  }
+  return resolved;
 }
 
 export function isPromiseLikeNode(
@@ -184,11 +210,20 @@ export function typeTextsAtNode(
   context: ContextWithParserOptions,
   node: Node | { readonly range: readonly [number, number] },
 ): readonly string[] {
+  const key = nodeCacheKey(node);
+  const cached = key ? typeTextsCache.get(key) : undefined;
+  if (cached) {
+    return cached;
+  }
   const values = new Set<string>();
   const checker = checkerFor(context);
   collectTexts(baseTypeAtNode(context, node));
   collectTexts(symbolTypeAtNode(context, node));
-  return [...values];
+  const resolved = [...values];
+  if (key) {
+    typeTextsCache.set(key, resolved);
+  }
+  return resolved;
 
   function collectTexts(type: TsgoType | undefined): void {
     if (!type) {
@@ -201,6 +236,12 @@ export function typeTextsAtNode(
       }
     }
   }
+}
+
+function nodeCacheKey(
+  node: Node | { readonly range: readonly [number, number] },
+): object | undefined {
+  return typeof node === "object" && node !== null ? node : undefined;
 }
 
 export function classifyTypeText(
