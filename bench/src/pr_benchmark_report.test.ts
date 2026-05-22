@@ -7,7 +7,7 @@ import {
 } from "../../scripts/pr_benchmark_report.ts";
 
 describe("PR benchmark report", () => {
-  it("compares head means against base means by TypeScript major", () => {
+  it("compares head means against base means by TypeScript channel", () => {
     const comparisons = compareReports([
       captured("base", "6", [
         row("project_check", "api", "tsgo", 100),
@@ -35,13 +35,25 @@ describe("PR benchmark report", () => {
 
   it("renders a sticky PR comment with full rows", () => {
     const body = createCommentBody([
-      captured("base", "7", [row("project_check", "native-preview", "tsc", 200)]),
-      captured("head", "7", [row("project_check", "native-preview", "tsc", 230)]),
+      captured(
+        "base",
+        "next",
+        [row("project_check", "native-preview", "tsc", 200)],
+        "typescript@next",
+        "6.0.0-dev.20260416",
+      ),
+      captured(
+        "head",
+        "next",
+        [row("project_check", "native-preview", "tsc", 230)],
+        "typescript@next",
+        "6.0.0-dev.20260416",
+      ),
     ]);
 
     expect(body).toContain("<!-- corsa-pr-performance-benchmark -->");
     expect(body).toContain("5-sample mean");
-    expect(body).toContain("TS v7");
+    expect(body).toContain("TS next");
     expect(body).toContain("slower");
     expect(body).toContain("+15.00%");
   });
@@ -49,8 +61,10 @@ describe("PR benchmark report", () => {
 
 function captured(
   branchRole: "base" | "head",
-  major: string,
+  channel: string,
   rows: CapturedBenchReport["report"]["rows"],
+  requested = `typescript@^${channel}`,
+  installed = `${channel}.0.0`,
 ): CapturedBenchReport {
   return {
     schemaVersion: 1,
@@ -58,9 +72,9 @@ function captured(
     refName: branchRole === "base" ? "main" : "feature",
     sha: branchRole === "base" ? "1111111111111111111111111111111111111111" : "2222222",
     typescript: {
-      major,
-      requested: `typescript@^${major}`,
-      installed: `${major}.0.0`,
+      channel,
+      requested,
+      installed,
     },
     github: {
       runId: "1",

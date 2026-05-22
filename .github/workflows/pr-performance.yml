@@ -25,7 +25,7 @@ env:
 
 jobs:
   benchmark:
-    name: Benchmark ${{ matrix.ref-role }} TS v${{ matrix.typescript-major }}
+    name: Benchmark ${{ matrix.ref-role }} TypeScript ${{ matrix.typescript.channel }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -34,9 +34,11 @@ jobs:
         ref-role:
           - base
           - head
-        typescript-major:
-          - "6"
-          - "7"
+        typescript:
+          - channel: "6"
+            package: "typescript@^6"
+          - channel: next
+            package: "typescript@next"
     steps:
       - name: Resolve benchmark ref
         id: bench-ref
@@ -89,11 +91,11 @@ jobs:
       - name: Install benchmark comparison dependencies
         run: vp run -w bench_tooling_setup
 
-      - name: Select TypeScript v${{ matrix.typescript-major }}
+      - name: Select TypeScript ${{ matrix.typescript.channel }}
         shell: bash
         run: |
           set -euo pipefail
-          spec="typescript@^${{ matrix.typescript-major }}"
+          spec="${{ matrix.typescript.package }}"
           npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix ref/typescript-go
           npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix bench/cli_compare
           node -p "require('./ref/typescript-go/node_modules/typescript/package.json').version"
@@ -108,28 +110,36 @@ jobs:
             --iterations "$BENCH_ITERATIONS" \
             --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \
             --timeout-ms "$BENCH_TIMEOUT_MS" \
-            --json-output ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript-major }}.json"
+            --json-output ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json"
+
+      - name: Checkout PR helper scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .cache/pr-benchmark/workflow-scripts
+          persist-credentials: false
 
       - name: Capture benchmark metadata
         shell: bash
         run: |
           set -euo pipefail
           installed_ts="$(node -p "require('./ref/typescript-go/node_modules/typescript/package.json').version")"
-          node --strip-types ./scripts/pr_benchmark_report.ts capture \
-            --input ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript-major }}.json" \
-            --output ".cache/pr-benchmark/report-${{ matrix.ref-role }}-ts${{ matrix.typescript-major }}.json" \
+          node --strip-types ./.cache/pr-benchmark/workflow-scripts/scripts/pr_benchmark_report.ts capture \
+            --input ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json" \
+            --output ".cache/pr-benchmark/report-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json" \
             --branch-role "${{ matrix.ref-role }}" \
             --ref-name "${{ steps.bench-ref.outputs.name }}" \
             --sha "${{ steps.bench-ref.outputs.sha }}" \
-            --typescript-major "${{ matrix.typescript-major }}" \
-            --typescript-requested "typescript@^${{ matrix.typescript-major }}" \
+            --typescript-channel "${{ matrix.typescript.channel }}" \
+            --typescript-requested "${{ matrix.typescript.package }}" \
             --typescript-version "$installed_ts"
 
       - name: Upload benchmark report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript-major }}
-          path: .cache/pr-benchmark/report-${{ matrix.ref-role }}-ts${{ matrix.typescript-major }}.json
+          name: pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}
+          path: .cache/pr-benchmark/report-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json
           if-no-files-found: error
 
   comment:

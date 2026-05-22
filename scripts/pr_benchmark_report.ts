@@ -29,7 +29,7 @@ export type CapturedBenchReport = {
   readonly refName: string;
   readonly sha: string;
   readonly typescript: {
-    readonly major: string;
+    readonly channel: string;
     readonly requested: string;
     readonly installed: string;
   };
@@ -53,7 +53,7 @@ type ComparisonRow = {
 };
 
 type TypeScriptComparison = {
-  readonly major: string;
+  readonly channel: string;
   readonly requested: string;
   readonly base: CapturedBenchReport;
   readonly head: CapturedBenchReport;
@@ -90,7 +90,7 @@ function captureReport(options: ReadonlyMap<string, string>): void {
     refName: requiredOption(options, "ref-name"),
     sha: requiredOption(options, "sha"),
     typescript: {
-      major: requiredOption(options, "typescript-major"),
+      channel: requiredOption(options, "typescript-channel"),
       requested: requiredOption(options, "typescript-requested"),
       installed: requiredOption(options, "typescript-version"),
     },
@@ -136,7 +136,7 @@ export function createCommentBody(reports: readonly CapturedBenchReport[]): stri
   for (const comparison of comparisons) {
     lines.push(
       [
-        `TS v${comparison.major} (${comparison.base.typescript.installed})`,
+        `${formatTypeScriptChannel(comparison.channel)} (${comparison.base.typescript.installed})`,
         shortRef(comparison.base),
         shortRef(comparison.head),
         formatSignedPercent(comparison.geometricMeanDeltaPercent),
@@ -153,7 +153,7 @@ export function createCommentBody(reports: readonly CapturedBenchReport[]): stri
     lines.push(
       "",
       `<details>`,
-      `<summary>TS v${comparison.major} full benchmark rows</summary>`,
+      `<summary>${formatTypeScriptChannel(comparison.channel)} full benchmark rows</summary>`,
       "",
     );
     lines.push("| Workload | Dataset | Tool | Base mean | PR mean | Change | Result | Samples |");
@@ -184,15 +184,15 @@ export function createCommentBody(reports: readonly CapturedBenchReport[]): stri
 export function compareReports(
   reports: readonly CapturedBenchReport[],
 ): readonly TypeScriptComparison[] {
-  const byMajor = new Map<string, CapturedBenchReport[]>();
+  const byChannel = new Map<string, CapturedBenchReport[]>();
   for (const report of reports) {
-    const items = byMajor.get(report.typescript.major) ?? [];
+    const items = byChannel.get(report.typescript.channel) ?? [];
     items.push(report);
-    byMajor.set(report.typescript.major, items);
+    byChannel.set(report.typescript.channel, items);
   }
-  return [...byMajor.entries()]
+  return [...byChannel.entries()]
     .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
-    .flatMap(([major, items]) => {
+    .flatMap(([channel, items]) => {
       const base = items.find((item) => item.branchRole === "base");
       const head = items.find((item) => item.branchRole === "head");
       if (!base || !head) {
@@ -203,7 +203,7 @@ export function compareReports(
       const slowerCount = rows.filter((row) => row.result === "slower").length;
       return [
         {
-          major,
+          channel,
           requested: head.typescript.requested,
           base,
           head,
@@ -349,6 +349,10 @@ function rowKey(row: Pick<RawBenchRow, "workload" | "dataset" | "tool">): string
 
 function shortRef(report: CapturedBenchReport): string {
   return `${report.refName} (${report.sha.slice(0, 7)})`;
+}
+
+function formatTypeScriptChannel(channel: string): string {
+  return /^\d+$/.test(channel) ? `TS v${channel}` : `TS ${channel}`;
 }
 
 function formatMs(value: number): string {

@@ -47,7 +47,7 @@ The PR performance workflow lives in
 On PR open, reopen, ready-for-review, and synchronize events it benchmarks:
 
 - PR base branch versus PR head branch
-- TypeScript major `6` versus TypeScript major `7`
+- TypeScript `6` versus the npm `next` TypeScript channel
 - five measured samples per row, reported by mean milliseconds
 
 The workflow uploads the four benchmark reports as artifacts, then updates one
