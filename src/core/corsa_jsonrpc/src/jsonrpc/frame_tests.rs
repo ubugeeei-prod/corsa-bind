@@ -1,4 +1,4 @@
-use super::{MAX_HEADER_BYTES, read_frame, write_frame};
+use super::{MAX_BODY_BYTES, MAX_HEADER_BYTES, read_frame, write_frame};
 use crate::TsgoError;
 use std::io::BufReader;
 #[cfg(unix)]
@@ -61,6 +61,12 @@ fn rejects_overflowing_content_length() {
         build_frame(b"Content-Length: 184467440737095516161\r\n\r\n", br#"{}"#),
         "overflow",
     );
+}
+
+#[test]
+fn rejects_oversized_body_before_allocation() {
+    let header = format!("Content-Length: {}\r\n\r\n", MAX_BODY_BYTES + 1);
+    assert_protocol(build_frame(header.as_bytes(), b""), "body is too large");
 }
 
 #[test]
