@@ -78,6 +78,93 @@ fn reports_for_in_array_literal() {
 }
 
 #[test]
+fn reports_base_to_string_template_object() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-base-to-string",
+            &node_with_child_list(
+                "TemplateLiteral",
+                TextRange::new(0, 24),
+                "expressions",
+                vec![node("ObjectExpression", TextRange::new(17, 29))],
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-base-to-string");
+    assert_eq!(diagnostics[0].message_id, "unexpected");
+    assert_eq!(diagnostics[0].range, TextRange::new(17, 29));
+}
+
+#[test]
+fn ignores_base_to_string_known_safe_type() {
+    let mut argument = node("Identifier", TextRange::new(7, 12));
+    argument.type_texts = vec!["Date".to_owned()];
+    let diagnostics = registry()
+        .run_rule(
+            "no-base-to-string",
+            &call_node(
+                node_with_field("Identifier", TextRange::new(0, 6), "name", json!("String")),
+                vec![argument],
+            ),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn reports_unsafe_assignment_from_any() {
+    let mut init = node("Identifier", TextRange::new(30, 35));
+    init.type_texts = vec!["Set<any>".to_owned()];
+    let mut id = node("Identifier", TextRange::new(6, 12));
+    id.type_texts = vec!["Set<string>".to_owned()];
+    id.children.insert(
+        "typeAnnotation".to_owned(),
+        node("TSTypeAnnotation", TextRange::new(12, 25)),
+    );
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-assignment",
+            &node_with_children(
+                "VariableDeclarator",
+                TextRange::new(6, 35),
+                [("id", id), ("init", init)],
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-unsafe-assignment");
+    assert_eq!(diagnostics[0].message_id, "unsafe");
+}
+
+#[test]
+fn ignores_unsafe_assignment_to_unknown() {
+    let mut init = node("Identifier", TextRange::new(30, 35));
+    init.type_texts = vec!["any".to_owned()];
+    let mut id = node("Identifier", TextRange::new(6, 12));
+    id.type_texts = vec!["unknown".to_owned()];
+    id.children.insert(
+        "typeAnnotation".to_owned(),
+        node("TSTypeAnnotation", TextRange::new(12, 21)),
+    );
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-assignment",
+            &node_with_children(
+                "VariableDeclarator",
+                TextRange::new(6, 35),
+                [("id", id), ("init", init)],
+            ),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn lists_default_rule_meta() {
     let registry = registry();
     assert_eq!(
@@ -85,9 +172,11 @@ fn lists_default_rule_meta() {
         vec![
             "no-array-delete",
             "no-for-in-array",
+            "no-base-to-string",
             "await-thenable",
             "no-implied-eval",
             "no-mixed-enums",
+            "no-unsafe-assignment",
             "no-unsafe-unary-minus",
             "only-throw-error",
             "prefer-find",
@@ -109,6 +198,59 @@ fn lists_default_rule_meta() {
 
 fn registry() -> LintRuleRegistry {
     LintRuleRegistry::with_default_type_aware_rules()
+}
+
+fn node(kind: &str, range: TextRange) -> LintNode {
+    LintNode {
+        kind: kind.to_owned(),
+        range,
+        text: None,
+        type_texts: Vec::new(),
+        property_names: Vec::new(),
+        fields: BTreeMap::new(),
+        children: BTreeMap::new(),
+        child_lists: BTreeMap::new(),
+    }
+}
+
+fn node_with_field(kind: &str, range: TextRange, key: &str, value: serde_json::Value) -> LintNode {
+    let mut node = node(kind, range);
+    node.fields.insert(key.to_owned(), value);
+    node
+}
+
+fn node_with_children<const N: usize>(
+    kind: &str,
+    range: TextRange,
+    children: [(&str, LintNode); N],
+) -> LintNode {
+    let mut node = node(kind, range);
+    node.children = children
+        .into_iter()
+        .map(|(key, child)| (key.to_owned(), child))
+        .collect();
+    node
+}
+
+fn node_with_child_list(
+    kind: &str,
+    range: TextRange,
+    key: &str,
+    children: Vec<LintNode>,
+) -> LintNode {
+    let mut node = node(kind, range);
+    node.child_lists.insert(key.to_owned(), children);
+    node
+}
+
+fn call_node(callee: LintNode, arguments: Vec<LintNode>) -> LintNode {
+    let mut node = node_with_children(
+        "CallExpression",
+        TextRange::new(0, 16),
+        [("callee", callee)],
+    );
+    node.child_lists.insert("arguments".to_owned(), arguments);
+    node
 }
 
 fn array_delete_node() -> LintNode {
