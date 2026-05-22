@@ -65,29 +65,58 @@ export const NullThrowsReasons = Object.freeze({
   MissingToken: (token: string, thing: string) => `Expected to find a ${token} for the ${thing}.`,
 });
 
-export const RuleCreator = OxlintUtils.RuleCreator;
+export const RuleCreator = Object.assign(OxlintUtils.RuleCreator, {
+  withoutDocs<TRule extends Omit<RuleCreatorRule, "name">>(
+    rule: TRule,
+  ): Omit<TRule, "defaultOptions"> &
+    Rule & {
+      readonly defaultOptions: TRule extends { readonly defaultOptions: infer TOptions }
+        ? TOptions
+        : readonly [];
+    } {
+    return decorateRule({
+      ...rule,
+      defaultOptions: rule.defaultOptions ?? [],
+    } as unknown as Rule) as never;
+  },
+});
 export { getParserServices } from "./parser_services";
 
-export function applyDefault<
-  Values extends readonly unknown[],
-  Defaults extends readonly unknown[],
->(values: Values | undefined, defaults: Defaults): readonly unknown[] {
-  return deepMerge(defaults, values ?? []) as readonly unknown[];
+export function applyDefault<User extends readonly unknown[], Defaults extends readonly unknown[]>(
+  defaultOptions: Defaults,
+  userOptions: User | null | undefined,
+): readonly unknown[] {
+  const options = structuredClone(defaultOptions) as unknown as unknown[];
+  if (userOptions == null) {
+    return options;
+  }
+  options.forEach((option, index) => {
+    if (userOptions[index] === undefined) {
+      return;
+    }
+    const userOption = userOptions[index];
+    options[index] =
+      isObjectNotArray(option) && isObjectNotArray(userOption)
+        ? deepMerge(option, userOption)
+        : userOption;
+  });
+  return options;
 }
 
 export function deepMerge<T>(base: T, override: unknown): T {
-  if (Array.isArray(base) && Array.isArray(override)) {
-    return base.map((value, index) => deepMerge(value, override[index])) as unknown as T;
-  }
   if (isObject(base) && isObject(override)) {
     return Object.fromEntries(
       [...new Set([...Object.keys(base), ...Object.keys(override)])].map((key) => [
         key,
-        deepMerge((base as any)[key], (override as any)[key]),
+        key in base && key in override
+          ? deepMerge((base as any)[key], (override as any)[key])
+          : key in base
+            ? (base as any)[key]
+            : (override as any)[key],
       ]),
     ) as T;
   }
-  return (override ?? base) as T;
+  return (override === undefined ? base : override) as T;
 }
 
 export function nullThrows<T>(
