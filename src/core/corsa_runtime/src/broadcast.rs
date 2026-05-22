@@ -12,7 +12,7 @@
 
 use smallvec::SmallVec;
 use std::{
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex, MutexGuard, mpsc},
     time::Duration,
 };
 
@@ -60,8 +60,14 @@ impl<T> Sender<T> {
     /// Previously sent values are not replayed.
     pub fn subscribe(&self) -> Receiver<T> {
         let (tx, rx) = mpsc::channel();
-        self.inner.lock().unwrap().push(tx);
+        self.subscribers().push(tx);
         Receiver { inner: rx }
+    }
+
+    fn subscribers(&self) -> MutexGuard<'_, SmallVec<[mpsc::Sender<T>; 4]>> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -74,7 +80,7 @@ where
     /// Receivers that have been dropped are removed from the subscriber list as
     /// part of this send operation.
     pub fn send(&self, value: T) -> usize {
-        let mut subscribers = self.inner.lock().unwrap();
+        let mut subscribers = self.subscribers();
         let mut delivered = 0;
         subscribers.retain(|subscriber| match subscriber.send(value.clone()) {
             Ok(()) => {
@@ -108,7 +114,7 @@ impl<T> Receiver<T> {
 #[cfg(test)]
 mod tests {
     use super::channel;
-    use std::time::Duration;
+    use std::{thread, time::Duration};
 
     #[test]
     fn broadcast_delivers_to_multiple_receivers() {
@@ -134,5 +140,21 @@ mod tests {
         let (sender, receiver) = channel::<u32>();
         drop(sender);
         assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn sender_recovers_after_subscriber_list_poisoning() {
+        let (sender, first) = channel::<u32>();
+        let inner = sender.inner.clone();
+        let _ = thread::spawn(move || {
+            let _guard = inner.lock().unwrap();
+            panic!("poison subscriber list");
+        })
+        .join();
+
+        let second = sender.subscribe();
+        assert_eq!(sender.send(7_u32), 2);
+        assert_eq!(first.recv_timeout(Duration::from_millis(50)).unwrap(), 7);
+        assert_eq!(second.recv_timeout(Duration::from_millis(50)).unwrap(), 7);
     }
 }

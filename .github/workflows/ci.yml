@@ -368,7 +368,9 @@ jobs:
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
-          cache: true
+          # Windows can fail inside setup-vp's dependency cache resolver after
+          # the managed typescript-go checkout has been materialized.
+          cache: ${{ runner.os != 'Windows' }}
           run-install: true
 
       - name: Build pinned tsgo binary

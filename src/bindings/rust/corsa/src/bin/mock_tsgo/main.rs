@@ -12,7 +12,11 @@ fn main() -> Result<()> {
     let cwd = args
         .windows(2)
         .find_map(|window| (window[0] == "--cwd").then(|| window[1].clone()))
-        .unwrap_or_else(|| std::env::current_dir().unwrap().display().to_string());
+        .unwrap_or_else(|| {
+            std::env::current_dir()
+                .map(|cwd| cwd.display().to_string())
+                .unwrap_or_else(|_| ".".into())
+        });
     let callbacks = args
         .iter()
         .find_map(|arg| arg.strip_prefix("--callbacks="))

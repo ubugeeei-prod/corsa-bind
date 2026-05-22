@@ -66,21 +66,18 @@ impl ApiClient {
         project: super::ProjectHandle,
         file: impl Into<DocumentIdentifier>,
     ) -> Result<FileDiagnosticsResponse> {
+        let mut params_value = serde_json::to_value(SnapshotFileRequest {
+            snapshot,
+            file: file.into(),
+        })?;
+        let Some(params) = params_value.as_object_mut() else {
+            return Err(TsgoError::Protocol(
+                "file diagnostics request must serialize to an object".into(),
+            ));
+        };
+        params.insert("project".into(), serde_json::to_value(project)?);
         let value = self
-            .raw_json_request(
-                "getDiagnosticsForFile",
-                serde_json::to_value(SnapshotFileRequest {
-                    snapshot,
-                    file: file.into(),
-                })?
-                .as_object()
-                .cloned()
-                .map(|mut value| {
-                    value.insert("project".into(), serde_json::to_value(project).unwrap());
-                    serde_json::Value::Object(value)
-                })
-                .unwrap_or(serde_json::Value::Null),
-            )
+            .raw_json_request("getDiagnosticsForFile", params_value)
             .await
             .map_err(|error| {
                 ApiClient::map_missing_method(

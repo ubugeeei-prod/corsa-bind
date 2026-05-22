@@ -254,7 +254,7 @@ impl ApiClient {
             driver.clone(),
             config.profiler.clone(),
             config.release_queue_capacity,
-        ));
+        )?);
         Ok(Self {
             driver,
             initialized: Arc::new(SingleflightCell::default()),
@@ -585,7 +585,7 @@ async fn connect_pipe_socket(path: PathBuf) -> Result<ApiClient> {
         process: None,
         shutdown_timeout: std::time::Duration::from_secs(2),
     });
-    let release_queue = Arc::new(SnapshotReleaseQueue::spawn(driver.clone(), None, 256));
+    let release_queue = Arc::new(SnapshotReleaseQueue::spawn(driver.clone(), None, 256)?);
     Ok(ApiClient {
         driver,
         initialized: Arc::new(SingleflightCell::default()),
