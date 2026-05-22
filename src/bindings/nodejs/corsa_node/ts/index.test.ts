@@ -130,6 +130,7 @@ describe("CorsaApiClient", () => {
       "prefer-find",
       "prefer-includes",
       "prefer-promise-reject-errors",
+      "prefer-reduce-type-parameter",
       "prefer-regexp-exec",
       "prefer-string-starts-ends-with",
       "require-array-sort-compare",

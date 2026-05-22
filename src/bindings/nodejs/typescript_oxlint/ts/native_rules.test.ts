@@ -219,6 +219,24 @@ describe("corsa-oxlint native rules", () => {
     );
   });
 
+  integrationCase("runs prefer-reduce-type-parameter through RuleTester", () => {
+    createTester().run(
+      "prefer-reduce-type-parameter",
+      typescriptOxlintRules["prefer-reduce-type-parameter"] as never,
+      {
+        valid: [
+          { code: "const result = [1, 2, 3].reduce<number[]>((acc, value) => acc, []);" },
+        ],
+        invalid: [
+          {
+            code: "const result = [1, 2, 3].reduce((acc, value) => acc, [] as number[]);",
+            errors: [{ messageId: "preferTypeParameter" }],
+          },
+        ],
+      },
+    );
+  });
+
   integrationCase("runs prefer-regexp-exec through RuleTester", () => {
     createTester().run("prefer-regexp-exec", typescriptOxlintRules["prefer-regexp-exec"] as never, {
       valid: [{ code: "/a/g.exec(text);" }],

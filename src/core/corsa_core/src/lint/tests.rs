@@ -516,6 +516,115 @@ fn respects_array_sort_string_option() {
 }
 
 #[test]
+fn reports_prefer_reduce_type_parameter_array_assertion() {
+    let diagnostics = registry()
+        .run_rule(
+            "prefer-reduce-type-parameter",
+            &reduce_call_node(
+                "number[]",
+                as_expression_node(
+                    node("ArrayExpression", TextRange::new(42, 44)),
+                    "number[]",
+                    TextRange::new(42, 56),
+                ),
+                false,
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "prefer-reduce-type-parameter");
+    assert_eq!(diagnostics[0].message_id, "preferTypeParameter");
+    assert_eq!(diagnostics[0].range, TextRange::new(42, 56));
+    assert_eq!(diagnostics[0].suggestions.len(), 1);
+    assert_eq!(
+        diagnostics[0].suggestions[0].message_id,
+        "moveTypeParameter"
+    );
+    assert_eq!(
+        diagnostics[0].suggestions[0].fixes[0].range,
+        TextRange::new(44, 56)
+    );
+    assert_eq!(
+        diagnostics[0].suggestions[0].fixes[1].range,
+        TextRange::new(13, 13)
+    );
+    assert_eq!(
+        diagnostics[0].suggestions[0].fixes[1].replacement_text,
+        "<number[]>"
+    );
+}
+
+#[test]
+fn reports_prefer_reduce_type_parameter_existing_type_arg_without_insert() {
+    let diagnostics = registry()
+        .run_rule(
+            "prefer-reduce-type-parameter",
+            &reduce_call_node(
+                "string[]",
+                as_expression_node(
+                    typed_node(
+                        "CallExpression",
+                        TextRange::new(39, 50),
+                        "string | undefined",
+                    ),
+                    "string | undefined",
+                    TextRange::new(39, 72),
+                ),
+                true,
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].suggestions[0].fixes.len(), 1);
+    assert_eq!(
+        diagnostics[0].suggestions[0].fixes[0].range,
+        TextRange::new(50, 72)
+    );
+}
+
+#[test]
+fn ignores_prefer_reduce_type_parameter_for_non_array_reduce() {
+    let diagnostics = registry()
+        .run_rule(
+            "prefer-reduce-type-parameter",
+            &reduce_call_node(
+                "{ reduce(callback: unknown, initial: unknown): unknown }",
+                as_expression_node(
+                    node("ArrayExpression", TextRange::new(42, 44)),
+                    "number[]",
+                    TextRange::new(42, 56),
+                ),
+                false,
+            ),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn ignores_prefer_reduce_type_parameter_for_bare_type_parameter() {
+    let diagnostics = registry()
+        .run_rule(
+            "prefer-reduce-type-parameter",
+            &reduce_call_node(
+                "string[]",
+                as_expression_node(
+                    node("ObjectExpression", TextRange::new(42, 44)),
+                    "T",
+                    TextRange::new(42, 49),
+                ),
+                false,
+            ),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn reports_manual_string_starts_with_check() {
     let diagnostics = registry()
         .run_rule("prefer-string-starts-ends-with", &starts_with_binary_node())
@@ -649,6 +758,7 @@ fn lists_default_rule_meta() {
             "prefer-find",
             "prefer-includes",
             "prefer-promise-reject-errors",
+            "prefer-reduce-type-parameter",
             "prefer-regexp-exec",
             "prefer-string-starts-ends-with",
             "require-array-sort-compare",
@@ -743,6 +853,47 @@ fn sort_call_node(object_type_text: &str, arguments: Vec<LintNode>) -> LintNode 
         ),
         arguments,
     )
+}
+
+fn reduce_call_node(
+    object_type_text: &str,
+    initial_value: LintNode,
+    has_type_args: bool,
+) -> LintNode {
+    let mut object = node_with_field("Identifier", TextRange::new(0, 6), "name", json!("values"));
+    object.text = Some("values".to_owned());
+    object.type_texts = vec![object_type_text.to_owned()];
+    let mut call = call_node(
+        node_with_children(
+            "MemberExpression",
+            TextRange::new(0, 13),
+            [
+                ("object", object),
+                (
+                    "property",
+                    node_with_field("Identifier", TextRange::new(7, 13), "name", json!("reduce")),
+                ),
+            ],
+        ),
+        vec![
+            node("ArrowFunctionExpression", TextRange::new(14, 38)),
+            initial_value,
+        ],
+    );
+    if has_type_args {
+        call.children.insert(
+            "typeArguments".to_owned(),
+            node("TSTypeParameterInstantiation", TextRange::new(13, 21)),
+        );
+    }
+    call
+}
+
+fn as_expression_node(expression: LintNode, type_annotation: &str, range: TextRange) -> LintNode {
+    let mut node = node_with_children("TSAsExpression", range, [("expression", expression)]);
+    node.fields
+        .insert("__typeAnnotationText".to_owned(), json!(type_annotation));
+    node
 }
 
 fn promise_member_call_node(method_name: &str, arguments: Vec<LintNode>) -> LintNode {

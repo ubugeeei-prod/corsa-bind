@@ -17,6 +17,7 @@ import { onlyThrowErrorRule } from "./only_throw_error";
 import { preferFindRule } from "./prefer_find";
 import { preferIncludesRule } from "./prefer_includes";
 import { preferPromiseRejectErrorsRule } from "./prefer_promise_reject_errors";
+import { preferReduceTypeParameterRule } from "./prefer_reduce_type_parameter";
 import { preferRegexpExecRule } from "./prefer_regexp_exec";
 import { preferStringStartsEndsWithRule } from "./prefer_string_starts_ends_with";
 import { requireArraySortCompareRule } from "./require_array_sort_compare";
@@ -42,6 +43,7 @@ export const implementedNativeRuleNames = [
   "prefer-find",
   "prefer-includes",
   "prefer-promise-reject-errors",
+  "prefer-reduce-type-parameter",
   "prefer-regexp-exec",
   "prefer-string-starts-ends-with",
   "require-array-sort-compare",
@@ -77,7 +79,6 @@ export const pendingNativeRuleNames = [
   "prefer-optional-chain",
   "prefer-readonly",
   "prefer-readonly-parameter-types",
-  "prefer-reduce-type-parameter",
   "prefer-return-this-type",
   "promise-function-async",
   "related-getter-setter-pairs",
@@ -107,6 +108,7 @@ export const typescriptOxlintRules = Object.freeze({
   "prefer-find": preferFindRule,
   "prefer-includes": preferIncludesRule,
   "prefer-promise-reject-errors": preferPromiseRejectErrorsRule,
+  "prefer-reduce-type-parameter": preferReduceTypeParameterRule,
   "prefer-regexp-exec": preferRegexpExecRule,
   "prefer-string-starts-ends-with": preferStringStartsEndsWithRule,
   "require-array-sort-compare": requireArraySortCompareRule,
