@@ -125,6 +125,7 @@ describe("CorsaApiClient", () => {
       "no-unsafe-call",
       "no-unsafe-member-access",
       "no-unsafe-return",
+      "no-unsafe-type-assertion",
       "no-unsafe-unary-minus",
       "only-throw-error",
       "prefer-find",

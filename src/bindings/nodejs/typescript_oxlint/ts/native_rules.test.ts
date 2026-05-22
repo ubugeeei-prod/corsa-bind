@@ -176,6 +176,26 @@ describe("corsa-oxlint native rules", () => {
     });
   });
 
+  integrationCase("runs no-unsafe-type-assertion through RuleTester", () => {
+    createTester().run(
+      "no-unsafe-type-assertion",
+      typescriptOxlintRules["no-unsafe-type-assertion"] as never,
+      {
+        valid: [{ code: "declare const value: any; value as unknown;" }],
+        invalid: [
+          {
+            code: "declare const value: any; value as string;",
+            errors: 1,
+          },
+          {
+            code: "declare const value: unknown; value as any;",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
   integrationCase("runs no-unsafe-unary-minus through RuleTester", () => {
     createTester().run(
       "no-unsafe-unary-minus",

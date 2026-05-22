@@ -2,11 +2,11 @@ use super::{
     AwaitThenableRule, LintDiagnostic, LintNode, NoArrayDeleteRule, NoBaseToStringRule,
     NoFloatingPromisesRule, NoForInArrayRule, NoImpliedEvalRule, NoMeaninglessVoidOperatorRule,
     NoMixedEnumsRule, NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeMemberAccessRule,
-    NoUnsafeReturnRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule,
-    PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferReduceTypeParameterRule,
-    PreferRegexpExecRule, PreferStringStartsEndsWithRule, RequireArraySortCompareRule,
-    RestrictPlusOperandsRule, RestrictTemplateExpressionsRule, RuleContext, RuleMeta, RustLintRule,
-    UseUnknownInCatchCallbackVariableRule,
+    NoUnsafeReturnRule, NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule,
+    PreferFindRule, PreferIncludesRule, PreferPromiseRejectErrorsRule,
+    PreferReduceTypeParameterRule, PreferRegexpExecRule, PreferStringStartsEndsWithRule,
+    RequireArraySortCompareRule, RestrictPlusOperandsRule, RestrictTemplateExpressionsRule,
+    RuleContext, RuleMeta, RustLintRule, UseUnknownInCatchCallbackVariableRule,
 };
 
 /// Collection of Rust-authored lint rules addressable by stable rule name.
@@ -42,6 +42,7 @@ impl LintRuleRegistry {
             .with_rule(NoUnsafeCallRule)
             .with_rule(NoUnsafeMemberAccessRule)
             .with_rule(NoUnsafeReturnRule)
+            .with_rule(NoUnsafeTypeAssertionRule)
             .with_rule(NoUnsafeUnaryMinusRule)
             .with_rule(OnlyThrowErrorRule)
             .with_rule(PreferFindRule)

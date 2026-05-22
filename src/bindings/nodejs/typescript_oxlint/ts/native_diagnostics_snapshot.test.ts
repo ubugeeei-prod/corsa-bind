@@ -83,6 +83,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "no-unsafe-type-assertion: narrowing string or number to string",
+          "diagnostics": [
+            "no-unsafe-type-assertion/unsafeTypeAssertion@0..15: Unsafe type assertion: the asserted type is more narrow than the original type.",
+          ],
+        },
+        {
           "caseName": "only-throw-error: throwing a string",
           "diagnostics": [
             "only-throw-error/unexpected@0..13: Only Error-like values should be thrown.",
@@ -256,6 +262,14 @@ const diagnosticCases = [
     node: node("ReturnStatement", [11, 24], {
       fields: { __returnTypeTexts: ["string"] },
       children: { argument: id("value", [18, 23], ["any"]) },
+    }),
+  },
+  {
+    ruleName: "no-unsafe-type-assertion",
+    scenario: "narrowing string or number to string",
+    node: node("TSAsExpression", [0, 15], {
+      fields: { __typeAnnotationText: "string" },
+      children: { expression: id("value", [0, 5], ["string | number"]) },
     }),
   },
   {

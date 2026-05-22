@@ -430,6 +430,74 @@ fn reports_unsafe_return_from_any() {
 }
 
 #[test]
+fn reports_unsafe_type_assertion_from_any() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-type-assertion",
+            &as_expression_node(
+                typed_node("Identifier", TextRange::new(0, 5), "any"),
+                "string",
+                TextRange::new(0, 15),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-unsafe-type-assertion");
+    assert_eq!(diagnostics[0].message_id, "unsafeOfAnyTypeAssertion");
+}
+
+#[test]
+fn reports_unsafe_type_assertion_to_any() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-type-assertion",
+            &as_expression_node(
+                typed_node("Identifier", TextRange::new(0, 5), "unknown"),
+                "any",
+                TextRange::new(0, 12),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "unsafeToAnyTypeAssertion");
+}
+
+#[test]
+fn reports_unsafe_type_assertion_union_narrowing() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-type-assertion",
+            &as_expression_node(
+                typed_node("Identifier", TextRange::new(0, 5), "string | number"),
+                "string",
+                TextRange::new(0, 15),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "unsafeTypeAssertion");
+}
+
+#[test]
+fn allows_unsafe_type_assertion_union_widening() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-type-assertion",
+            &as_expression_node(
+                typed_node("Identifier", TextRange::new(0, 5), "string"),
+                "string | number",
+                TextRange::new(0, 24),
+            ),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn reports_promise_reject_string_reason() {
     let diagnostics = registry()
         .run_rule(
@@ -753,6 +821,7 @@ fn lists_default_rule_meta() {
             "no-unsafe-call",
             "no-unsafe-member-access",
             "no-unsafe-return",
+            "no-unsafe-type-assertion",
             "no-unsafe-unary-minus",
             "only-throw-error",
             "prefer-find",
