@@ -8,6 +8,7 @@ pub(crate) const MSG_CALL_ERROR: u8 = 3;
 pub(crate) const MSG_RESPONSE: u8 = 4;
 pub(crate) const MSG_ERROR: u8 = 5;
 pub(crate) const MSG_CALL: u8 = 6;
+const MAX_BIN_BYTES: usize = 512 * 1024 * 1024;
 
 #[derive(Debug)]
 pub(crate) struct MsgpackTuple {
@@ -78,7 +79,18 @@ fn read_bin<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
             ))));
         }
     };
-    let mut buf = vec![0_u8; len];
+    if len > MAX_BIN_BYTES {
+        return Err(TsgoError::Protocol(compact_format(format_args!(
+            "msgpack bin is too large: {len} bytes exceeds {MAX_BIN_BYTES} byte safety limit"
+        ))));
+    }
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len).map_err(|err| {
+        TsgoError::Protocol(compact_format(format_args!(
+            "failed to reserve msgpack bin buffer for {len} bytes: {err}"
+        )))
+    })?;
+    buf.resize(len, 0);
     reader.read_exact(&mut buf)?;
     Ok(buf)
 }
@@ -100,11 +112,19 @@ fn read_len<const N: usize, R: Read>(reader: &mut R) -> Result<usize> {
             reader.read_exact(&mut buf)?;
             Ok(u32::from_be_bytes(buf) as usize)
         }
-        _ => unreachable!(),
+        _ => Err(TsgoError::Protocol(compact_format(format_args!(
+            "unsupported msgpack length width: {N}"
+        )))),
     }
 }
 
 fn write_bin<W: Write>(writer: &mut W, bytes: &[u8]) -> Result<()> {
+    if bytes.len() > MAX_BIN_BYTES {
+        return Err(TsgoError::Protocol(compact_format(format_args!(
+            "msgpack bin is too large: {} bytes exceeds {MAX_BIN_BYTES} byte safety limit",
+            bytes.len()
+        ))));
+    }
     match bytes.len() {
         0..=255 => writer.write_all(&[0xc4, bytes.len() as u8])?,
         256..=65535 => {
