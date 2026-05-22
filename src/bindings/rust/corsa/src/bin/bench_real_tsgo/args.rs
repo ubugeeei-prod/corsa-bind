@@ -79,7 +79,7 @@ pub fn parse() -> Result<Option<Cli>, CompactString> {
                 warm_iterations = parse_usize(read_value(&mut args, &argument)?, &argument)?;
             }
             _ => {
-                return Err(argument);
+                return Err(CompactString::from(format!("unknown option `{argument}`")));
             }
         }
     }
@@ -91,8 +91,21 @@ pub fn parse() -> Result<Option<Cli>, CompactString> {
             "no datasets found; pass --dataset PATH explicitly",
         ));
     }
+    if cold_iterations == 0 {
+        return Err(CompactString::from(
+            "--cold-iterations must be greater than 0",
+        ));
+    }
+    if warm_iterations == 0 {
+        return Err(CompactString::from(
+            "--warm-iterations must be greater than 0",
+        ));
+    }
     if !tsgo_path.exists() {
-        return Err(CompactString::from(tsgo_path.display().to_string()));
+        return Err(CompactString::from(format!(
+            "tsgo executable does not exist: {}",
+            tsgo_path.display()
+        )));
     }
     Ok(Some(Cli {
         root_dir,
@@ -191,7 +204,7 @@ fn read_value(
     flag: &CompactString,
 ) -> Result<CompactString, CompactString> {
     let Some(value) = args.next() else {
-        return Err(CompactString::from(flag.as_str()));
+        return Err(CompactString::from(format!("missing value for `{flag}`")));
     };
     Ok(CompactString::from(value.to_string_lossy().as_ref()))
 }
@@ -209,7 +222,9 @@ fn parse_transport(value: CompactString) -> Result<SmallVec<[ApiMode; 2]>, Compa
             Ok(modes)
         }
         "both" => Ok(both_modes()),
-        _ => Err(value),
+        _ => Err(CompactString::from(format!(
+            "invalid transport `{value}`; expected jsonrpc, msgpack, or both"
+        ))),
     }
 }
 
@@ -217,14 +232,16 @@ fn parse_run_mode(value: CompactString) -> Result<RunMode, CompactString> {
     match value.as_str() {
         "benchmark" => Ok(RunMode::Benchmark),
         "profiling" => Ok(RunMode::Profiling),
-        _ => Err(value),
+        _ => Err(CompactString::from(format!(
+            "invalid run mode `{value}`; expected benchmark or profiling"
+        ))),
     }
 }
 
-fn parse_usize(value: CompactString, _flag: &CompactString) -> Result<usize, CompactString> {
+fn parse_usize(value: CompactString, flag: &CompactString) -> Result<usize, CompactString> {
     value
         .parse::<usize>()
-        .map_err(|_| CompactString::from(value.as_str()))
+        .map_err(|_| CompactString::from(format!("`{flag}` must be an integer, got `{value}`")))
 }
 
 #[cfg(test)]

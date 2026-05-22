@@ -109,18 +109,14 @@ pub fn metadata(path: &Path, revision: &str) -> Result<CommitMetadata> {
 
 /// Clones a repository without checking out a working tree.
 pub fn clone_no_checkout(repository: &str, path: &Path) -> Result<()> {
-    run_git_inherit(
-        None,
-        &[
-            "clone",
-            "--origin",
-            "origin",
-            "--no-checkout",
-            repository,
-            path.to_str().unwrap(),
-        ],
-    )?;
-    Ok(())
+    let status = Command::new("git")
+        .args(["clone", "--origin", "origin", "--no-checkout", repository])
+        .arg(path)
+        .status()?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(git_clone_error(repository, path, status))
 }
 
 /// Fetches a specific commit into the local repository.
@@ -156,26 +152,61 @@ fn run_git_inherit(path: Option<&Path>, args: &[&str]) -> Result<()> {
     if status.success() {
         return Ok(());
     }
-    Err(git_command_error(args))
+    Err(git_command_error(path, args, status, None))
 }
 
 fn run_git_at(path: Option<&Path>, args: &[&str]) -> Result<CompactString> {
     let output = command(path, args).output()?;
     if !output.status.success() {
-        return Err(git_command_error(args));
+        return Err(git_command_error(
+            path,
+            args,
+            output.status,
+            Some(&output.stderr),
+        ));
     }
     Ok(CompactString::from_utf8_lossy(&output.stdout).trim().into())
 }
 
-fn git_command_error(args: &[&str]) -> TsgoError {
+fn git_command_error(
+    path: Option<&Path>,
+    args: &[&str],
+    status: std::process::ExitStatus,
+    stderr: Option<&[u8]>,
+) -> TsgoError {
+    let command = git_command_line(args);
+    let cwd = path
+        .map(|path| compact_format(format_args!("{}", path.display())))
+        .unwrap_or_else(|| CompactString::from("<current directory>"));
+    let stderr = stderr
+        .map(CompactString::from_utf8_lossy)
+        .map(|stderr| CompactString::from(stderr.trim()))
+        .filter(|stderr| !stderr.is_empty());
+    let message = match stderr {
+        Some(stderr) => compact_format(format_args!(
+            "git command failed: {command}\n  cwd: {cwd}\n  status: {status}\n  stderr: {stderr}"
+        )),
+        None => compact_format(format_args!(
+            "git command failed: {command}\n  cwd: {cwd}\n  status: {status}"
+        )),
+    };
+    TsgoError::Protocol(message)
+}
+
+fn git_clone_error(repository: &str, path: &Path, status: std::process::ExitStatus) -> TsgoError {
+    TsgoError::Protocol(compact_format(format_args!(
+        "git command failed: git clone --origin origin --no-checkout {repository} {}\n  cwd: <current directory>\n  status: {status}",
+        path.display()
+    )))
+}
+
+fn git_command_line(args: &[&str]) -> CompactString {
     let mut command = CompactString::from("git");
     for arg in args {
         command.push(' ');
         command.push_str(arg);
     }
-    TsgoError::Protocol(compact_format(format_args!(
-        "git command failed: {command}"
-    )))
+    command
 }
 
 fn command(path: Option<&Path>, args: &[&str]) -> Command {
