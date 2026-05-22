@@ -213,13 +213,14 @@ Flow:
 
 1. Load datasets through the real pinned `tsgo`.
 2. Build temporary overlay `tsconfig` files.
-3. Run `tsc`, `tsgo`, and `typescript-eslint` as child processes for `project_check`.
+3. Run `tsc`, `tsgo`, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` as child processes for `project_check`.
 4. Run a live `corsa` msgpack session for `editor_workflow`.
 5. Emit timing tables and JSON.
 
 Important design choices:
 
-- `typescript-eslint` is allowed to exit with code `1` because lint findings are expected and should not invalidate timing
+- `typescript-eslint`, `corsa-oxlint`, and `tsgolint` are allowed to exit with code `1` because lint findings are expected and should not invalidate timing
+- the three lint lanes use the overlapping type-aware rule set currently exported from `corsa-oxlint/rules`
 - child processes run with timeouts
 - child stdout and stderr are suppressed during timing so the measurement focuses on the actual workload
 

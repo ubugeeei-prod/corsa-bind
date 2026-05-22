@@ -28,6 +28,10 @@
       "types": "./dist/ast_utils.d.ts",
       "import": "./dist/ast_utils.js"
     },
+    "./eslint-utils": {
+      "types": "./dist/oxlint_utils.d.ts",
+      "import": "./dist/oxlint_utils.js"
+    },
     "./oxlint-utils": {
       "types": "./dist/oxlint_utils.d.ts",
       "import": "./dist/oxlint_utils.js"
@@ -55,6 +59,14 @@
     "./ts-estree": {
       "types": "./dist/ts_estree.d.ts",
       "import": "./dist/ts_estree.js"
+    },
+    "./ts-eslint": {
+      "types": "./dist/ts_eslint.d.ts",
+      "import": "./dist/ts_eslint.js"
+    },
+    "./ts-utils": {
+      "types": "./dist/ts_utils.d.ts",
+      "import": "./dist/ts_utils.js"
     },
     "./package.json": "./package.json"
   },

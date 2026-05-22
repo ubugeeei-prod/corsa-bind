@@ -60,6 +60,11 @@ export const OxlintUtils = Object.freeze({
   },
 });
 
+export const NullThrowsReasons = Object.freeze({
+  MissingParent: "Expected node to have a parent.",
+  MissingToken: (token: string, thing: string) => `Expected to find a ${token} for the ${thing}.`,
+});
+
 export const RuleCreator = OxlintUtils.RuleCreator;
 export { getParserServices } from "./parser_services";
 
@@ -90,10 +95,24 @@ export function nullThrows<T>(
   message = "Expected value to be present",
 ): T {
   if (value == null) {
-    throw new Error(message);
+    throw new Error(`Non-null Assertion Failed: ${message}`);
   }
   return value;
 }
+
+export function isObjectNotArray(value: unknown): value is Record<string, unknown> {
+  return isObject(value);
+}
+
+export const ESLintUtils = Object.freeze({
+  NullThrowsReasons,
+  RuleCreator,
+  applyDefault,
+  deepMerge,
+  getParserServices,
+  isObjectNotArray,
+  nullThrows,
+});
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
