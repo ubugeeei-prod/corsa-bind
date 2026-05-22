@@ -131,6 +131,7 @@ describe("CorsaApiClient", () => {
       "prefer-string-starts-ends-with",
       "require-array-sort-compare",
       "restrict-plus-operands",
+      "restrict-template-expressions",
       "use-unknown-in-catch-callback-variable",
     ]);
     expect(diagnostics).toHaveLength(1);

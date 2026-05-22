@@ -16,7 +16,7 @@ pub use rules::{
     NoUnsafeReturnRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule,
     PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferRegexpExecRule,
     PreferStringStartsEndsWithRule, RequireArraySortCompareRule, RestrictPlusOperandsRule,
-    UseUnknownInCatchCallbackVariableRule,
+    RestrictTemplateExpressionsRule, UseUnknownInCatchCallbackVariableRule,
 };
 pub use types::{
     LintDiagnostic, LintFix, LintNode, LintSuggestion, RuleMessage, RuleMeta, TextRange,

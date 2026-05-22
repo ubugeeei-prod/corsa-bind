@@ -4,7 +4,8 @@ use super::{
     NoUnsafeAssignmentRule, NoUnsafeReturnRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule,
     PreferFindRule, PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferRegexpExecRule,
     PreferStringStartsEndsWithRule, RequireArraySortCompareRule, RestrictPlusOperandsRule,
-    RuleContext, RuleMeta, RustLintRule, UseUnknownInCatchCallbackVariableRule,
+    RestrictTemplateExpressionsRule, RuleContext, RuleMeta, RustLintRule,
+    UseUnknownInCatchCallbackVariableRule,
 };
 
 /// Collection of Rust-authored lint rules addressable by stable rule name.
@@ -46,6 +47,7 @@ impl LintRuleRegistry {
             .with_rule(PreferStringStartsEndsWithRule)
             .with_rule(RequireArraySortCompareRule)
             .with_rule(RestrictPlusOperandsRule)
+            .with_rule(RestrictTemplateExpressionsRule)
             .with_rule(UseUnknownInCatchCallbackVariableRule)
     }
 

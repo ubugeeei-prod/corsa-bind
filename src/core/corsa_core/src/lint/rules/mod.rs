@@ -16,6 +16,7 @@ mod prefer_regexp_exec;
 mod prefer_string_starts_ends_with;
 mod require_array_sort_compare;
 mod restrict_plus_operands;
+mod restrict_template_expressions;
 mod use_unknown_in_catch_callback_variable;
 
 pub use await_thenable::AwaitThenableRule;
@@ -36,4 +37,5 @@ pub use prefer_regexp_exec::PreferRegexpExecRule;
 pub use prefer_string_starts_ends_with::PreferStringStartsEndsWithRule;
 pub use require_array_sort_compare::RequireArraySortCompareRule;
 pub use restrict_plus_operands::RestrictPlusOperandsRule;
+pub use restrict_template_expressions::RestrictTemplateExpressionsRule;
 pub use use_unknown_in_catch_callback_variable::UseUnknownInCatchCallbackVariableRule;

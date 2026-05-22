@@ -387,6 +387,75 @@ fn allows_default_string_number_plus() {
 }
 
 #[test]
+fn reports_restricted_template_expression_object() {
+    let diagnostics = registry()
+        .run_rule(
+            "restrict-template-expressions",
+            &template_node(vec![typed_node(
+                "ObjectExpression",
+                TextRange::new(17, 29),
+                "{ value: number }",
+            )]),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "restrict-template-expressions");
+    assert_eq!(diagnostics[0].message_id, "invalidType");
+    assert_eq!(diagnostics[0].range, TextRange::new(17, 29));
+}
+
+#[test]
+fn allows_restricted_template_expression_default_primitives() {
+    let diagnostics = registry()
+        .run_rule(
+            "restrict-template-expressions",
+            &template_node(vec![
+                typed_node("Identifier", TextRange::new(9, 14), "number"),
+                typed_node("Identifier", TextRange::new(17, 21), "boolean | null"),
+            ]),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn respects_restricted_template_expression_boolean_option() {
+    let mut node = template_node(vec![typed_node(
+        "Identifier",
+        TextRange::new(17, 21),
+        "boolean",
+    )]);
+    node.fields
+        .insert("__ruleOptions".to_owned(), json!([{ "allowBoolean": false }]));
+
+    let diagnostics = registry()
+        .run_rule("restrict-template-expressions", &node)
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "invalidType");
+}
+
+#[test]
+fn ignores_tagged_template_expressions() {
+    let mut node = template_node(vec![typed_node(
+        "ObjectExpression",
+        TextRange::new(5, 17),
+        "{ value: number }",
+    )]);
+    node.fields
+        .insert("__taggedTemplate".to_owned(), json!(true));
+
+    let diagnostics = registry()
+        .run_rule("restrict-template-expressions", &node)
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn lists_default_rule_meta() {
     let registry = registry();
     assert_eq!(
@@ -410,6 +479,7 @@ fn lists_default_rule_meta() {
             "prefer-string-starts-ends-with",
             "require-array-sort-compare",
             "restrict-plus-operands",
+            "restrict-template-expressions",
             "use-unknown-in-catch-callback-variable"
         ]
     );
@@ -581,6 +651,21 @@ fn binary_plus_node(left_type_text: &str, right_type_text: &str) -> LintNode {
     );
     node.fields.insert("operator".to_owned(), json!("+"));
     node
+}
+
+fn typed_node(kind: &str, range: TextRange, type_text: &str) -> LintNode {
+    let mut node = node(kind, range);
+    node.type_texts = vec![type_text.to_owned()];
+    node
+}
+
+fn template_node(expressions: Vec<LintNode>) -> LintNode {
+    node_with_child_list(
+        "TemplateLiteral",
+        TextRange::new(0, 32),
+        "expressions",
+        expressions,
+    )
 }
 
 fn array_delete_node() -> LintNode {

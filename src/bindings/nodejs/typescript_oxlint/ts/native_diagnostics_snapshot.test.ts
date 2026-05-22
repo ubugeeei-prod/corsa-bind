@@ -113,6 +113,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "restrict-template-expressions: object in template literal",
+          "diagnostics": [
+            "restrict-template-expressions/invalidType@17..29: Invalid type used in template literal expression.",
+          ],
+        },
+        {
           "caseName": "use-unknown-in-catch-callback-variable: catch parameter typed as Error",
           "diagnostics": [
             "use-unknown-in-catch-callback-variable/unexpected@23..35: Catch callback variables should be explicitly typed as unknown.",
@@ -268,6 +274,15 @@ const diagnosticCases = [
       children: {
         left: id("left", [0, 4], ["string"]),
         right: id("right", [7, 12], ["number"]),
+      },
+    }),
+  },
+  {
+    ruleName: "restrict-template-expressions",
+    scenario: "object in template literal",
+    node: node("TemplateLiteral", [0, 32], {
+      childLists: {
+        expressions: [id("value", [17, 29], ["{ value: number }"])],
       },
     }),
   },
