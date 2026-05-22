@@ -20,7 +20,10 @@ struct EventCollector {
 
 impl TsgoObserver for EventCollector {
     fn on_event(&self, event: &TsgoEvent) {
-        self.events.lock().unwrap().push(event.clone());
+        self.events
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(event.clone());
     }
 }
 
@@ -96,7 +99,7 @@ fn main() -> Result<(), corsa::TsgoError> {
         let events = observer
             .events
             .lock()
-            .unwrap()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .iter()
             .map(event_to_value)
             .collect::<Vec<_>>();

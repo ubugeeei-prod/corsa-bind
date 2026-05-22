@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, sync::Mutex, time::Duration};
+use std::{
+    collections::BTreeMap,
+    sync::{Mutex, MutexGuard},
+    time::Duration,
+};
 
 use corsa::{
     api::{ApiProfileEvent, ApiProfiler},
@@ -21,11 +25,11 @@ pub struct BenchProfiler {
 
 impl BenchProfiler {
     pub fn clear(&self) {
-        self.events.lock().unwrap().clear();
+        self.events().clear();
     }
 
     pub fn drain_iteration_totals(&self) -> BTreeMap<(CompactString, CompactString), Duration> {
-        let mut events = self.events.lock().unwrap();
+        let mut events = self.events();
         let drained = std::mem::take(&mut *events);
         let mut totals = BTreeMap::<(CompactString, CompactString), Duration>::new();
         for event in drained {
@@ -37,11 +41,17 @@ impl BenchProfiler {
         }
         totals
     }
+
+    fn events(&self) -> MutexGuard<'_, SmallVec<[ApiProfileEvent; 32]>> {
+        self.events
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 impl ApiProfiler for BenchProfiler {
     fn on_profile(&self, event: &ApiProfileEvent) {
-        self.events.lock().unwrap().push(event.clone());
+        self.events().push(event.clone());
     }
 }
 

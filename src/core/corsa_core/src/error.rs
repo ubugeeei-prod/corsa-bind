@@ -46,6 +46,43 @@ pub enum TsgoError {
 pub type Result<T, E = TsgoError> = std::result::Result<T, E>;
 
 impl TsgoError {
+    /// Formats the error for command-line tools with a short recovery hint.
+    pub fn diagnostic(&self) -> CompactString {
+        let mut message = compact_format(format_args!("error: {self}"));
+        if let Some(hint) = self.recovery_hint() {
+            message.push_str("\nhelp: ");
+            message.push_str(hint);
+        }
+        message
+    }
+
+    /// Returns a user-facing hint for broad classes of operational failures.
+    pub fn recovery_hint(&self) -> Option<&'static str> {
+        match self {
+            Self::Io(_) => Some(
+                "check that the referenced paths exist and that the current user has permission to read, write, and execute them",
+            ),
+            Self::Json(_) => {
+                Some("check the JSON payload shape and ensure the peer is returning valid JSON")
+            }
+            Self::Base64(_) => Some("check that binary JSON fields are valid base64"),
+            Self::Closed(_) => Some("retry after starting a fresh tsgo process or client session"),
+            Self::Unsupported(_) => {
+                Some("use a compatible tsgo build or disable the unsupported feature for this run")
+            }
+            Self::Join(_) => Some(
+                "retry the operation; if it repeats, inspect the worker thread or child-process logs above this message",
+            ),
+            Self::Timeout(_) => Some(
+                "increase the request timeout or check whether the tsgo process is still responsive",
+            ),
+            Self::Rpc(_)
+            | Self::Protocol(_)
+            | Self::UnexpectedMessage(_)
+            | Self::InvalidHandle(_) => None,
+        }
+    }
+
     /// Clones an error into a form safe to send to pending waiters.
     ///
     /// Some inner error types are not cheaply cloneable, so this method

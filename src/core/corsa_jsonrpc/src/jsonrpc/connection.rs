@@ -151,13 +151,18 @@ impl JsonRpcConnection {
     /// Spawns a connection around a buffered reader and writer.
     ///
     /// The connection starts background reader/writer threads immediately.
+    #[track_caller]
     pub fn spawn<R, W>(reader: R, writer: W, handlers: RpcHandlerMap) -> Self
     where
         R: BufRead + Send + 'static,
         W: Write + Send + 'static,
     {
-        Self::try_spawn(reader, writer, handlers)
-            .expect("failed to spawn jsonrpc connection threads")
+        match Self::try_spawn(reader, writer, handlers) {
+            Ok(connection) => connection,
+            Err(error) => panic!(
+                "failed to spawn jsonrpc connection threads: {error}. use `JsonRpcConnection::try_spawn` to handle this failure without panicking"
+            ),
+        }
     }
 
     /// Tries to spawn a connection around a buffered reader and writer.
@@ -179,6 +184,7 @@ impl JsonRpcConnection {
     }
 
     /// Spawns a connection around a buffered reader and writer with runtime options.
+    #[track_caller]
     pub fn spawn_with_options<R, W>(
         reader: R,
         writer: W,
@@ -189,8 +195,12 @@ impl JsonRpcConnection {
         R: BufRead + Send + 'static,
         W: Write + Send + 'static,
     {
-        Self::try_spawn_with_options(reader, writer, handlers, options)
-            .expect("failed to spawn jsonrpc connection threads")
+        match Self::try_spawn_with_options(reader, writer, handlers, options) {
+            Ok(connection) => connection,
+            Err(error) => panic!(
+                "failed to spawn jsonrpc connection threads: {error}. use `JsonRpcConnection::try_spawn_with_options` to handle this failure without panicking"
+            ),
+        }
     }
 
     /// Tries to spawn a connection around a buffered reader and writer with runtime options.
@@ -237,7 +247,13 @@ impl JsonRpcConnection {
         let read_task = match thread::Builder::new()
             .name("corsa-jsonrpc-reader".into())
             .spawn(move || {
+                let panic_inner = Arc::clone(&read_inner);
                 let result = catch_unwind(AssertUnwindSafe(|| read_inner.read_loop(reader)));
+                if result.is_err() {
+                    panic_inner.fail_pending(TsgoError::Join(CompactString::from(
+                        "jsonrpc reader thread panicked",
+                    )));
+                }
                 let _ = read_done_tx.send(result);
             }) {
             Ok(task) => task,
