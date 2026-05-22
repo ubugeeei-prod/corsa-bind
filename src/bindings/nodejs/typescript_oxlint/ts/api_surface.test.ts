@@ -64,7 +64,6 @@ describe("api surface", () => {
   });
 
   it("marks ESLint-only utility exports as unsupported", () => {
-    expect(() => new astUtilsEntry.ReferenceTracker()).toThrow(/ASTUtils\.ReferenceTracker/);
     expect(() => new main.TSESLint.Linter()).toThrow(/TSESLint\.Linter/);
   });
 
@@ -266,6 +265,102 @@ describe("api surface", () => {
     );
   });
 
+  it("matches ReferenceTracker for global, CommonJS, and ESM references", async () => {
+    const upstream =
+      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+
+    const globalScope = programScope();
+    const mathId = idNode("Math");
+    const maxMember = memberNode(mathId, "max");
+    const maxCall = callNode(maxMember);
+    globalScope.set.set("Math", variable(mathId));
+
+    const localGlobalTrace = {
+      Math: {
+        [astUtilsEntry.ReferenceTracker.READ]: "math read",
+        max: {
+          [astUtilsEntry.ReferenceTracker.READ]: "max read",
+          [astUtilsEntry.ReferenceTracker.CALL]: "max call",
+        },
+      },
+    };
+    const upstreamGlobalTrace = {
+      Math: {
+        [upstream.ASTUtils.ReferenceTracker.READ]: "math read",
+        max: {
+          [upstream.ASTUtils.ReferenceTracker.READ]: "max read",
+          [upstream.ASTUtils.ReferenceTracker.CALL]: "max call",
+        },
+      },
+    };
+
+    expect(
+      summarizeReferences(
+        new astUtilsEntry.ReferenceTracker(globalScope as never).iterateGlobalReferences(
+          localGlobalTrace,
+        ),
+      ),
+    ).toEqual(
+      summarizeReferences(
+        new upstream.ASTUtils.ReferenceTracker(globalScope).iterateGlobalReferences(
+          upstreamGlobalTrace,
+        ),
+      ),
+    );
+    expect(maxCall.type).toBe("CallExpression");
+
+    const cjsScope = programScope();
+    const requireId = idNode("require");
+    const requireCall = callNode(requireId, literalNode("fs"));
+    const readFileCall = callNode(memberNode(requireCall, "readFileSync"));
+    cjsScope.set.set("require", variable(requireId));
+
+    const localCjsTrace = {
+      fs: { readFileSync: { [astUtilsEntry.ReferenceTracker.CALL]: "cjs call" } },
+    };
+    const upstreamCjsTrace = {
+      fs: { readFileSync: { [upstream.ASTUtils.ReferenceTracker.CALL]: "cjs call" } },
+    };
+    expect(
+      summarizeReferences(
+        new astUtilsEntry.ReferenceTracker(cjsScope as never).iterateCjsReferences(localCjsTrace),
+      ),
+    ).toEqual(
+      summarizeReferences(
+        new upstream.ASTUtils.ReferenceTracker(cjsScope).iterateCjsReferences(upstreamCjsTrace),
+      ),
+    );
+    expect(readFileCall.type).toBe("CallExpression");
+
+    const esmScope = programScope();
+    const localId = idNode("readFile");
+    const importDeclaration = importNamedDeclaration("fs", "readFile", localId);
+    esmScope.block.body = [importDeclaration];
+    esmScope.set.set("readFile", variable(callNode(localId).callee));
+
+    const localEsmTrace = {
+      fs: {
+        [astUtilsEntry.ReferenceTracker.ESM]: true,
+        readFile: { [astUtilsEntry.ReferenceTracker.CALL]: "esm call" },
+      },
+    };
+    const upstreamEsmTrace = {
+      fs: {
+        [upstream.ASTUtils.ReferenceTracker.ESM]: true,
+        readFile: { [upstream.ASTUtils.ReferenceTracker.CALL]: "esm call" },
+      },
+    };
+    expect(
+      summarizeReferences(
+        new astUtilsEntry.ReferenceTracker(esmScope as never).iterateEsmReferences(localEsmTrace),
+      ),
+    ).toEqual(
+      summarizeReferences(
+        new upstream.ASTUtils.ReferenceTracker(esmScope).iterateEsmReferences(upstreamEsmTrace),
+      ),
+    );
+  });
+
   it("re-exports the native rules surface from both entrypoints", () => {
     expect(typeof main.rules.typescriptOxlintPlugin).toBe("object");
     expect(rules.implementedNativeRuleNames).toContain("restrict-plus-operands");
@@ -294,4 +389,93 @@ function expectMissingKeys(
     .filter((key) => !ignoredKeys.has(key))
     .filter((key) => !localKeys.has(key));
   expect(missing, `${label} missing keys`).toEqual([]);
+}
+
+function programScope() {
+  return {
+    block: { type: "Program", body: [] as unknown[], range: [0, 100] },
+    childScopes: [],
+    set: new Map<string, unknown>(),
+    upper: null,
+  };
+}
+
+function variable(identifier: unknown) {
+  return {
+    defs: [],
+    references: [
+      {
+        identifier,
+        isRead: () => true,
+        isWrite: () => false,
+      },
+    ],
+  };
+}
+
+function idNode(name: string) {
+  return { type: "Identifier", name, range: [1, 1 + name.length] };
+}
+
+function literalNode(value: unknown) {
+  return { type: "Literal", value, range: [1, 1] };
+}
+
+function memberNode(object: Record<string, unknown>, propertyName: string) {
+  const node = {
+    type: "MemberExpression",
+    computed: false,
+    object,
+    property: idNode(propertyName),
+  };
+  Object.assign(object, { parent: node });
+  Object.assign(node.property, { parent: node });
+  return node;
+}
+
+function callNode(callee: Record<string, unknown>, ...args: unknown[]) {
+  const node = {
+    type: "CallExpression",
+    callee,
+    arguments: args,
+  };
+  Object.assign(callee, { parent: node });
+  for (const arg of args) {
+    if (typeof arg === "object" && arg !== null) {
+      Object.assign(arg, { parent: node });
+    }
+  }
+  return node;
+}
+
+function importNamedDeclaration(source: string, imported: string, local: Record<string, unknown>) {
+  const specifier = {
+    type: "ImportSpecifier",
+    imported: idNode(imported),
+    local,
+  };
+  Object.assign(local, { parent: specifier });
+  Object.assign(specifier.imported, { parent: specifier });
+  const node = {
+    type: "ImportDeclaration",
+    source: literalNode(source),
+    specifiers: [specifier],
+  };
+  Object.assign(specifier, { parent: node });
+  Object.assign(node.source, { parent: node });
+  return node;
+}
+
+function summarizeReferences(references: Iterable<{
+  readonly info: unknown;
+  readonly node: { readonly type?: string };
+  readonly path: readonly string[];
+  readonly type: symbol;
+}>) {
+  return [...references].map((reference) => ({
+    info: reference.info,
+    nodeType: reference.node.type,
+    path: reference.path,
+    type: reference.type.description,
+  }));
 }

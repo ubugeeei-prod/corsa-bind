@@ -14,14 +14,36 @@ type SourceCodeLike = {
   getTokenBefore?: (node: unknown, predicate?: (token: TokenLike) => boolean) => TokenLike | null;
 };
 type ScopeLike = {
-  readonly block?: { readonly range?: readonly [number, number] };
+  readonly block?: AstNode & { readonly range?: readonly [number, number] };
   readonly childScopes?: readonly ScopeLike[];
-  readonly set?: ReadonlyMap<string, unknown>;
+  readonly set?: ReadonlyMap<string, VariableLike>;
   readonly upper?: ScopeLike | null;
 };
 type HasSideEffectOptions = {
   readonly considerGetters?: boolean;
   readonly considerImplicitTypeConversion?: boolean;
+};
+type ReferenceLike = {
+  readonly identifier?: AstNode;
+  isRead?: () => boolean;
+  isWrite?: () => boolean;
+};
+type VariableLike = {
+  readonly defs?: readonly unknown[];
+  readonly references?: readonly ReferenceLike[];
+};
+type TraceMap<T = unknown> = Record<PropertyKey, TraceMapElement<T> | T | true | undefined>;
+type TraceMapElement<T = unknown> = TraceMap<T> & {
+  [ReferenceTracker.READ]?: T;
+  [ReferenceTracker.CALL]?: T;
+  [ReferenceTracker.CONSTRUCT]?: T;
+  [ReferenceTracker.ESM]?: true;
+};
+type FoundReference<T = unknown> = {
+  info: T;
+  node: AstNode;
+  path: string[];
+  type: ReferenceTracker.ReferenceType;
 };
 
 export function isNodeOfType(type: string): Predicate<TypedValue>;
@@ -678,30 +700,354 @@ export class PatternMatcher {
 }
 
 export class ReferenceTracker {
-  static readonly READ = Symbol("read");
-  static readonly CALL = Symbol("call");
-  static readonly CONSTRUCT = Symbol("construct");
-  static readonly ESM = Symbol("esm");
+  static readonly READ: unique symbol = Symbol("read");
+  static readonly CALL: unique symbol = Symbol("call");
+  static readonly CONSTRUCT: unique symbol = Symbol("construct");
+  static readonly ESM: unique symbol = Symbol("esm");
 
-  constructor(..._args: unknown[]) {
-    throw unsupportedAstUtilsError("ReferenceTracker");
+  readonly #globalObjectNames: readonly string[];
+  readonly #globalScope: ScopeLike;
+  readonly #mode: "legacy" | "strict";
+  readonly #variableStack: VariableLike[] = [];
+
+  constructor(
+    globalScope: ScopeLike,
+    options: {
+      readonly globalObjectNames?: readonly string[];
+      readonly mode?: "legacy" | "strict";
+    } = {},
+  ) {
+    this.#globalScope = globalScope;
+    this.#globalObjectNames = options.globalObjectNames ?? ["global", "globalThis", "self", "window"];
+    this.#mode = options.mode ?? "strict";
   }
 
-  iterateGlobalReferences(..._args: unknown[]): never {
-    throw unsupportedAstUtilsError("ReferenceTracker.iterateGlobalReferences");
+  *iterateGlobalReferences<T>(traceMap: TraceMapElement<T>): IterableIterator<FoundReference<T>> {
+    for (const key of Object.keys(traceMap)) {
+      const nextTraceMap = traceElement(traceMap, key);
+      const variable = this.#globalScope.set?.get(key);
+      if (!nextTraceMap || isModifiedGlobal(variable)) {
+        continue;
+      }
+      yield* this.#iterateVariableReferences(variable, [key], nextTraceMap, true);
+    }
+
+    for (const key of this.#globalObjectNames) {
+      const variable = this.#globalScope.set?.get(key);
+      if (isModifiedGlobal(variable)) {
+        continue;
+      }
+      yield* this.#iterateVariableReferences(variable, [], traceMap, false);
+    }
   }
 
-  iterateCjsReferences(..._args: unknown[]): never {
-    throw unsupportedAstUtilsError("ReferenceTracker.iterateCjsReferences");
+  *iterateCjsReferences<T>(traceMap: TraceMapElement<T>): IterableIterator<FoundReference<T>> {
+    const requireCall = { require: { [ReferenceTracker.CALL]: true } };
+    for (const { node } of this.iterateGlobalReferences(requireCall)) {
+      const key = getStringIfConstant(arrayField<AstNode>(node, "arguments")[0]);
+      if (key == null || !hasOwn(traceMap, key)) {
+        continue;
+      }
+      const nextTraceMap = traceElement(traceMap, key);
+      if (!nextTraceMap) {
+        continue;
+      }
+      const path = [key];
+      if (hasOwn(nextTraceMap, ReferenceTracker.READ)) {
+        yield {
+          node,
+          path,
+          type: ReferenceTracker.READ,
+          info: nextTraceMap[ReferenceTracker.READ] as T,
+        };
+      }
+      yield* this.#iteratePropertyReferences(node, path, nextTraceMap);
+    }
   }
 
-  iterateEsmReferences(..._args: unknown[]): never {
-    throw unsupportedAstUtilsError("ReferenceTracker.iterateEsmReferences");
+  *iterateEsmReferences<T>(traceMap: TraceMapElement<T>): IterableIterator<FoundReference<T>> {
+    const program = this.#globalScope.block;
+    for (const node of arrayField<AstNode>(program ?? {}, "body")) {
+      const source = node.source;
+      if (!isRecord(source) || typeof source.value !== "string" || !hasOwn(traceMap, source.value)) {
+        continue;
+      }
+      const nextTraceMap = traceElement(traceMap, source.value);
+      if (!nextTraceMap) {
+        continue;
+      }
+      const path = [source.value];
+      if (hasOwn(nextTraceMap, ReferenceTracker.READ)) {
+        yield {
+          node,
+          path,
+          type: ReferenceTracker.READ,
+          info: nextTraceMap[ReferenceTracker.READ] as T,
+        };
+      }
+
+      if (node.type === "ExportAllDeclaration") {
+        for (const key of Object.keys(nextTraceMap)) {
+          const exportTraceMap = traceElement(nextTraceMap, key);
+          if (exportTraceMap && hasOwn(exportTraceMap, ReferenceTracker.READ)) {
+            yield {
+              node,
+              path: path.concat(key),
+              type: ReferenceTracker.READ,
+              info: exportTraceMap[ReferenceTracker.READ] as T,
+            };
+          }
+        }
+        continue;
+      }
+
+      for (const specifier of arrayField<AstNode>(node, "specifiers")) {
+        const esm = hasOwn(nextTraceMap, ReferenceTracker.ESM);
+        const importTraceMap = esm
+          ? nextTraceMap
+          : this.#mode === "legacy"
+            ? ({ default: nextTraceMap, ...nextTraceMap } as TraceMapElement<T>)
+            : ({ default: nextTraceMap } as TraceMapElement<T>);
+        const reports = this.#iterateImportReferences(specifier, path, importTraceMap);
+        if (esm) {
+          yield* reports;
+        } else {
+          for (const report of reports) {
+            report.path = report.path.filter((name, index) => !(index === 1 && name === "default"));
+            if (report.path.length >= 2 || report.type !== ReferenceTracker.READ) {
+              yield report;
+            }
+          }
+        }
+      }
+    }
   }
 
-  iteratePropertyReferences(..._args: unknown[]): never {
-    throw unsupportedAstUtilsError("ReferenceTracker.iteratePropertyReferences");
+  *iteratePropertyReferences<T>(
+    node: AstNode,
+    traceMap: TraceMapElement<T>,
+  ): IterableIterator<FoundReference<T>> {
+    yield* this.#iteratePropertyReferences(node, [], traceMap);
   }
+
+  *#iterateVariableReferences<T>(
+    variable: VariableLike,
+    path: string[],
+    traceMap: TraceMapElement<T>,
+    shouldReport: boolean,
+  ): IterableIterator<FoundReference<T>> {
+    if (this.#variableStack.includes(variable)) {
+      return;
+    }
+    this.#variableStack.push(variable);
+    try {
+      for (const reference of variable.references ?? []) {
+        if (reference.isRead?.() === false || !reference.identifier) {
+          continue;
+        }
+        const node = reference.identifier;
+        if (shouldReport && hasOwn(traceMap, ReferenceTracker.READ)) {
+          yield {
+            node,
+            path,
+            type: ReferenceTracker.READ,
+            info: traceMap[ReferenceTracker.READ] as T,
+          };
+        }
+        yield* this.#iteratePropertyReferences(node, path, traceMap);
+      }
+    } finally {
+      this.#variableStack.pop();
+    }
+  }
+
+  *#iteratePropertyReferences<T>(
+    rootNode: AstNode,
+    path: string[],
+    traceMap: TraceMapElement<T>,
+  ): IterableIterator<FoundReference<T>> {
+    let node = rootNode;
+    while (isPassThroughReferenceNode(node)) {
+      node = parentNodeOf(node) ?? node;
+    }
+
+    const parent = parentNodeOf(node);
+    if (!parent) {
+      return;
+    }
+    if (parent.type === "MemberExpression") {
+      if (parent.object === node) {
+        const key = getPropertyName(parent);
+        const nextTraceMap = key == null ? null : traceElement(traceMap, key);
+        if (!key || !nextTraceMap) {
+          return;
+        }
+        const nextPath = path.concat(key);
+        if (hasOwn(nextTraceMap, ReferenceTracker.READ)) {
+          yield {
+            node: parent,
+            path: nextPath,
+            type: ReferenceTracker.READ,
+            info: nextTraceMap[ReferenceTracker.READ] as T,
+          };
+        }
+        yield* this.#iteratePropertyReferences(parent, nextPath, nextTraceMap);
+      }
+      return;
+    }
+    if (parent.type === "CallExpression") {
+      if (parent.callee === node && hasOwn(traceMap, ReferenceTracker.CALL)) {
+        yield {
+          node: parent,
+          path,
+          type: ReferenceTracker.CALL,
+          info: traceMap[ReferenceTracker.CALL] as T,
+        };
+      }
+      return;
+    }
+    if (parent.type === "NewExpression") {
+      if (parent.callee === node && hasOwn(traceMap, ReferenceTracker.CONSTRUCT)) {
+        yield {
+          node: parent,
+          path,
+          type: ReferenceTracker.CONSTRUCT,
+          info: traceMap[ReferenceTracker.CONSTRUCT] as T,
+        };
+      }
+      return;
+    }
+    if (parent.type === "AssignmentExpression") {
+      if (parent.right === node) {
+        yield* this.#iterateLhsReferences(childNode(parent, "left"), path, traceMap);
+        yield* this.#iteratePropertyReferences(parent, path, traceMap);
+      }
+      return;
+    }
+    if (parent.type === "AssignmentPattern") {
+      if (parent.right === node) {
+        yield* this.#iterateLhsReferences(childNode(parent, "left"), path, traceMap);
+      }
+      return;
+    }
+    if (parent.type === "VariableDeclarator" && parent.init === node) {
+      yield* this.#iterateLhsReferences(childNode(parent, "id"), path, traceMap);
+    }
+  }
+
+  *#iterateLhsReferences<T>(
+    patternNode: AstNode | undefined,
+    path: string[],
+    traceMap: TraceMapElement<T>,
+  ): IterableIterator<FoundReference<T>> {
+    if (!patternNode) {
+      return;
+    }
+    if (patternNode.type === "Identifier") {
+      const variable = findVariable(this.#globalScope, patternNode) as VariableLike | null;
+      if (variable) {
+        yield* this.#iterateVariableReferences(variable, path, traceMap, false);
+      }
+      return;
+    }
+    if (patternNode.type === "ObjectPattern") {
+      for (const property of arrayField<AstNode>(patternNode, "properties")) {
+        const key = getPropertyName(property);
+        const nextTraceMap = key == null ? null : traceElement(traceMap, key);
+        if (!key || !nextTraceMap) {
+          continue;
+        }
+        const nextPath = path.concat(key);
+        if (hasOwn(nextTraceMap, ReferenceTracker.READ)) {
+          yield {
+            node: property,
+            path: nextPath,
+            type: ReferenceTracker.READ,
+            info: nextTraceMap[ReferenceTracker.READ] as T,
+          };
+        }
+        yield* this.#iterateLhsReferences(childNode(property, "value"), nextPath, nextTraceMap);
+      }
+      return;
+    }
+    if (patternNode.type === "AssignmentPattern") {
+      yield* this.#iterateLhsReferences(childNode(patternNode, "left"), path, traceMap);
+    }
+  }
+
+  *#iterateImportReferences<T>(
+    specifierNode: AstNode,
+    path: string[],
+    traceMap: TraceMapElement<T>,
+  ): IterableIterator<FoundReference<T>> {
+    if (specifierNode.type === "ImportSpecifier" || specifierNode.type === "ImportDefaultSpecifier") {
+      const key = specifierNode.type === "ImportDefaultSpecifier"
+        ? "default"
+        : importNameOf(childNode(specifierNode, "imported"));
+      const nextTraceMap = key == null ? null : traceElement(traceMap, key);
+      if (!key || !nextTraceMap) {
+        return;
+      }
+      const nextPath = path.concat(key);
+      if (hasOwn(nextTraceMap, ReferenceTracker.READ)) {
+        yield {
+          node: specifierNode,
+          path: nextPath,
+          type: ReferenceTracker.READ,
+          info: nextTraceMap[ReferenceTracker.READ] as T,
+        };
+      }
+      const variable = findVariable(this.#globalScope, childNode(specifierNode, "local") ?? {}) as
+        | VariableLike
+        | null;
+      if (variable) {
+        yield* this.#iterateVariableReferences(variable, nextPath, nextTraceMap, false);
+      }
+      return;
+    }
+
+    if (specifierNode.type === "ImportNamespaceSpecifier") {
+      const variable = findVariable(this.#globalScope, childNode(specifierNode, "local") ?? {}) as
+        | VariableLike
+        | null;
+      if (variable) {
+        yield* this.#iterateVariableReferences(variable, path, traceMap, false);
+      }
+      return;
+    }
+
+    if (specifierNode.type === "ExportSpecifier") {
+      const key = importNameOf(childNode(specifierNode, "local"));
+      const nextTraceMap = key == null ? null : traceElement(traceMap, key);
+      if (!key || !nextTraceMap) {
+        return;
+      }
+      const nextPath = path.concat(key);
+      if (hasOwn(nextTraceMap, ReferenceTracker.READ)) {
+        yield {
+          node: specifierNode,
+          path: nextPath,
+          type: ReferenceTracker.READ,
+          info: nextTraceMap[ReferenceTracker.READ] as T,
+        };
+      }
+    }
+  }
+}
+
+export namespace ReferenceTracker {
+  export type READ = typeof ReferenceTracker.READ;
+  export type CALL = typeof ReferenceTracker.CALL;
+  export type CONSTRUCT = typeof ReferenceTracker.CONSTRUCT;
+  export type ESM = typeof ReferenceTracker.ESM;
+  export type ReferenceType = READ | CALL | CONSTRUCT;
+  export type TraceMap<T = unknown> = TraceMapElement<T>;
+  export type FoundReference<T = unknown> = {
+    info: T;
+    node: AstNode;
+    path: readonly string[];
+    type: ReferenceType;
+  };
 }
 
 export const ASTUtils = Object.freeze({
@@ -774,6 +1120,68 @@ function matchesConditions(
   conditions: Readonly<Record<string, unknown>>,
 ): boolean {
   return Object.entries(conditions).every(([key, expected]) => value?.[key] === expected);
+}
+
+function isModifiedGlobal(variable: VariableLike | undefined): variable is undefined {
+  return (
+    variable == null ||
+    (variable.defs?.length ?? 0) !== 0 ||
+    (variable.references ?? []).some((reference) => reference.isWrite?.() === true)
+  );
+}
+
+function traceElement<T>(
+  traceMap: TraceMapElement<T>,
+  key: PropertyKey,
+): TraceMapElement<T> | null {
+  if (!hasOwn(traceMap, key)) {
+    return null;
+  }
+  const value = traceMap[key];
+  return isRecord(value) ? (value as TraceMapElement<T>) : null;
+}
+
+function hasOwn(value: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isPassThroughReferenceNode(node: AstNode): boolean {
+  const parent = parentNodeOf(node);
+  if (!parent) {
+    return false;
+  }
+  switch (parent.type) {
+    case "ConditionalExpression":
+      return parent.consequent === node || parent.alternate === node;
+    case "LogicalExpression":
+    case "ChainExpression":
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSTypeAssertion":
+    case "TSNonNullExpression":
+    case "TSInstantiationExpression":
+      return true;
+    case "SequenceExpression": {
+      const expressions = arrayField<AstNode>(parent, "expressions");
+      return expressions.at(-1) === node;
+    }
+    default:
+      return false;
+  }
+}
+
+function importNameOf(node: AstNode | undefined): string | null {
+  if (!node) {
+    return null;
+  }
+  if (node.type === "Identifier") {
+    return stringField(node, "name");
+  }
+  if (node.type === "Literal") {
+    const value = node.value;
+    return typeof value === "string" || typeof value === "number" ? String(value) : null;
+  }
+  return null;
 }
 
 function propertyNodeOf(node: AstNode | null | undefined): AstNode | undefined {
