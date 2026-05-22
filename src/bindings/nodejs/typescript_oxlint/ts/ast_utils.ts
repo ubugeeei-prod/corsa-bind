@@ -1,23 +1,57 @@
+type TypedValue = { readonly type?: string };
+type ValueToken = { readonly type?: string; readonly value?: string };
+type Predicate<T> = (value: T | null | undefined) => boolean;
+
+export function isNodeOfType(type: string): Predicate<TypedValue>;
+export function isNodeOfType(node: TypedValue | null | undefined, type: string): boolean;
 export function isNodeOfType(
-  node: { readonly type?: string } | null | undefined,
-  type: string,
-): boolean {
-  return node?.type === type;
+  nodeOrType: TypedValue | string | null | undefined,
+  maybeType?: string,
+): boolean | Predicate<TypedValue> {
+  if (typeof nodeOrType === "string" && maybeType === undefined) {
+    return (node) => node?.type === nodeOrType;
+  }
+  return (nodeOrType as TypedValue | null | undefined)?.type === maybeType;
 }
 
+export function isNodeOfTypes(types: readonly string[]): Predicate<TypedValue>;
 export function isNodeOfTypes(
-  node: { readonly type?: string } | null | undefined,
+  node: TypedValue | null | undefined,
   types: readonly string[],
-): boolean {
-  return node?.type !== undefined && types.includes(node.type);
+): boolean;
+export function isNodeOfTypes(
+  nodeOrTypes: TypedValue | readonly string[] | null | undefined,
+  maybeTypes?: readonly string[],
+): boolean | Predicate<TypedValue> {
+  if (Array.isArray(nodeOrTypes) && maybeTypes === undefined) {
+    return (node) => node?.type !== undefined && nodeOrTypes.includes(node.type);
+  }
+  const nodeType = (nodeOrTypes as TypedValue | null | undefined)?.type;
+  return nodeType !== undefined && maybeTypes?.includes(nodeType) === true;
 }
 
 export function isNodeOfTypeWithConditions(
-  node: { readonly type?: string } | null | undefined,
   type: string,
   conditions: Readonly<Record<string, unknown>>,
-): boolean {
-  return isNodeOfType(node, type) && matchesConditions(node, conditions);
+): Predicate<TypedValue>;
+export function isNodeOfTypeWithConditions(
+  node: TypedValue | null | undefined,
+  type: string,
+  conditions: Readonly<Record<string, unknown>>,
+): boolean;
+export function isNodeOfTypeWithConditions(
+  nodeOrType: TypedValue | string | null | undefined,
+  typeOrConditions: string | Readonly<Record<string, unknown>>,
+  maybeConditions?: Readonly<Record<string, unknown>>,
+): boolean | Predicate<TypedValue> {
+  if (typeof nodeOrType === "string") {
+    const type = nodeOrType;
+    const conditions = typeOrConditions as Readonly<Record<string, unknown>>;
+    return (node) => node?.type === type && matchesConditions(node, conditions);
+  }
+  return (
+    nodeOrType?.type === typeOrConditions && matchesConditions(nodeOrType, maybeConditions ?? {})
+  );
 }
 
 export function isIdentifier(
@@ -28,19 +62,52 @@ export function isIdentifier(
 }
 
 export function isTokenOfTypeWithConditions(
-  token: { readonly type?: string } | null | undefined,
   type: string,
   conditions: Readonly<Record<string, unknown>>,
-): boolean {
-  return isNodeOfType(token, type) && matchesConditions(token, conditions);
+): Predicate<ValueToken>;
+export function isTokenOfTypeWithConditions(
+  token: ValueToken | null | undefined,
+  type: string,
+  conditions: Readonly<Record<string, unknown>>,
+): boolean;
+export function isTokenOfTypeWithConditions(
+  tokenOrType: ValueToken | string | null | undefined,
+  typeOrConditions: string | Readonly<Record<string, unknown>>,
+  maybeConditions?: Readonly<Record<string, unknown>>,
+): boolean | Predicate<ValueToken> {
+  if (typeof tokenOrType === "string") {
+    const type = tokenOrType;
+    const conditions = typeOrConditions as Readonly<Record<string, unknown>>;
+    return (token) => token?.type === type && matchesConditions(token, conditions);
+  }
+  return (
+    tokenOrType?.type === typeOrConditions && matchesConditions(tokenOrType, maybeConditions ?? {})
+  );
 }
 
 export function isNotTokenOfTypeWithConditions(
-  token: { readonly type?: string } | null | undefined,
   type: string,
   conditions: Readonly<Record<string, unknown>>,
-): boolean {
-  return !isTokenOfTypeWithConditions(token, type, conditions);
+): Predicate<ValueToken>;
+export function isNotTokenOfTypeWithConditions(
+  token: ValueToken | null | undefined,
+  type: string,
+  conditions: Readonly<Record<string, unknown>>,
+): boolean;
+export function isNotTokenOfTypeWithConditions(
+  tokenOrType: ValueToken | string | null | undefined,
+  typeOrConditions: string | Readonly<Record<string, unknown>>,
+  maybeConditions?: Readonly<Record<string, unknown>>,
+): boolean | Predicate<ValueToken> {
+  if (typeof tokenOrType === "string") {
+    const predicate = isTokenOfTypeWithConditions(tokenOrType, typeOrConditions as never);
+    return (token) => !predicate(token);
+  }
+  return !isTokenOfTypeWithConditions(
+    tokenOrType,
+    typeOrConditions as string,
+    maybeConditions ?? {},
+  );
 }
 
 export function isFunction(node: { readonly type?: string } | null | undefined): boolean {
@@ -52,12 +119,7 @@ export function isFunction(node: { readonly type?: string } | null | undefined):
 }
 
 export function isFunctionType(node: { readonly type?: string } | null | undefined): boolean {
-  return isNodeOfTypes(node, [
-    "TSCallSignatureDeclaration",
-    "TSConstructSignatureDeclaration",
-    "TSConstructorType",
-    "TSFunctionType",
-  ]);
+  return isNodeOfTypes(node, functionTypeTypes);
 }
 
 export function isFunctionOrFunctionType(
@@ -96,6 +158,22 @@ export function isTypeAssertion(node: { readonly type?: string } | null | undefi
   return isNodeOfTypes(node, ["TSAsExpression", "TSTypeAssertion"]);
 }
 
+export function isClassOrTypeElement(node: { readonly type?: string } | null | undefined): boolean {
+  return isNodeOfTypes(node, [
+    "PropertyDefinition",
+    "FunctionExpression",
+    "MethodDefinition",
+    "TSAbstractPropertyDefinition",
+    "TSAbstractMethodDefinition",
+    "TSEmptyBodyFunctionExpression",
+    "TSIndexSignature",
+    "TSCallSignatureDeclaration",
+    "TSConstructSignatureDeclaration",
+    "TSMethodSignature",
+    "TSPropertySignature",
+  ]);
+}
+
 export function isOptionalCallExpression(
   node: { readonly type?: string; readonly optional?: boolean } | null | undefined,
 ): boolean {
@@ -111,17 +189,27 @@ export function isConstructor(
 export function isSetter(
   node: { readonly type?: string; readonly kind?: string } | null | undefined,
 ): boolean {
-  return node?.type === "MethodDefinition" && node.kind === "set";
+  return (node?.type === "MethodDefinition" || node?.type === "Property") && node.kind === "set";
 }
 
 export const LINEBREAK_MATCHER = /\r\n|[\r\n\u2028\u2029]/u;
 
+const IDENTIFIER = "Identifier";
 const PUNCTUATOR = "Punctuator";
 const KEYWORD = "Keyword";
+const functionTypeTypes = [
+  "TSCallSignatureDeclaration",
+  "TSConstructSignatureDeclaration",
+  "TSConstructorType",
+  "TSDeclareFunction",
+  "TSEmptyBodyFunctionExpression",
+  "TSFunctionType",
+  "TSMethodSignature",
+] as const;
 
 export const isArrowToken = tokenWithValue("=>");
 export const isNotArrowToken = not(isArrowToken);
-export const isAwaitKeyword = keywordWithValue("await");
+export const isAwaitKeyword = tokenWithValue("await", IDENTIFIER);
 export const isClosingBraceToken = tokenWithValue("}");
 export const isNotClosingBraceToken = not(isClosingBraceToken);
 export const isClosingBracketToken = tokenWithValue("]");
@@ -149,7 +237,7 @@ export const isOptionalChainPunctuator = tokenWithValue("?.");
 export const isNotOptionalChainPunctuator = not(isOptionalChainPunctuator);
 export const isSemicolonToken = tokenWithValue(";");
 export const isNotSemicolonToken = not(isSemicolonToken);
-export const isTypeKeyword = keywordWithValue("type");
+export const isTypeKeyword = tokenWithValue("type", IDENTIFIER);
 
 export function isTokenOnSameLine(
   left: { readonly loc?: { readonly end?: { readonly line?: number } } },
@@ -182,6 +270,7 @@ export const ASTUtils = Object.freeze({
   isClosingBraceToken,
   isClosingBracketToken,
   isClosingParenToken,
+  isClassOrTypeElement,
   isColonToken,
   isCommaToken,
   isCommentToken,
@@ -234,9 +323,9 @@ function matchesConditions(
   return Object.entries(conditions).every(([key, expected]) => value?.[key] === expected);
 }
 
-function tokenWithValue(expected: string) {
+function tokenWithValue(expected: string, type = PUNCTUATOR) {
   return (token: { readonly type?: string; readonly value?: string } | null | undefined): boolean =>
-    token?.type === PUNCTUATOR && token.value === expected;
+    token?.type === type && token.value === expected;
 }
 
 function keywordWithValue(expected: string) {
