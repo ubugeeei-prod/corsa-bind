@@ -8,6 +8,7 @@ import { noForInArrayRule } from "./no_for_in_array";
 import { noImpliedEvalRule } from "./no_implied_eval";
 import { noMixedEnumsRule } from "./no_mixed_enums";
 import { noUnsafeAssignmentRule } from "./no_unsafe_assignment";
+import { noUnsafeCallRule } from "./no_unsafe_call";
 import { noUnsafeReturnRule } from "./no_unsafe_return";
 import { noUnsafeUnaryMinusRule } from "./no_unsafe_unary_minus";
 import { onlyThrowErrorRule } from "./only_throw_error";
@@ -30,6 +31,7 @@ export const implementedNativeRuleNames = [
   "no-implied-eval",
   "no-mixed-enums",
   "no-unsafe-assignment",
+  "no-unsafe-call",
   "no-unsafe-return",
   "no-unsafe-unary-minus",
   "only-throw-error",
@@ -64,7 +66,6 @@ export const pendingNativeRuleNames = [
   "no-unnecessary-type-conversion",
   "no-unnecessary-type-parameters",
   "no-unsafe-argument",
-  "no-unsafe-call",
   "no-unsafe-enum-comparison",
   "no-unsafe-member-access",
   "no-unsafe-type-assertion",
@@ -95,6 +96,7 @@ export const typescriptOxlintRules = Object.freeze({
   "no-implied-eval": noImpliedEvalRule,
   "no-mixed-enums": noMixedEnumsRule,
   "no-unsafe-assignment": noUnsafeAssignmentRule,
+  "no-unsafe-call": noUnsafeCallRule,
   "no-unsafe-return": noUnsafeReturnRule,
   "no-unsafe-unary-minus": noUnsafeUnaryMinusRule,
   "only-throw-error": onlyThrowErrorRule,

@@ -107,6 +107,26 @@ describe("corsa-oxlint native rules", () => {
     );
   });
 
+  integrationCase("runs no-unsafe-call through RuleTester", () => {
+    createTester().run("no-unsafe-call", typescriptOxlintRules["no-unsafe-call"] as never, {
+      valid: [{ code: "declare const fn: () => void; fn();" }],
+      invalid: [
+        {
+          code: "declare const fn: unknown; (fn as any)();",
+          errors: [{ messageId: "unsafeCall" }],
+        },
+        {
+          code: "declare const Ctor: unknown; new (Ctor as any)();",
+          errors: [{ messageId: "unsafeNew" }],
+        },
+        {
+          code: "declare const tag: unknown; (tag as any)`value`;",
+          errors: [{ messageId: "unsafeTemplateTag" }],
+        },
+      ],
+    });
+  });
+
   integrationCase("runs no-unsafe-return through RuleTester", () => {
     createTester().run("no-unsafe-return", typescriptOxlintRules["no-unsafe-return"] as never, {
       valid: [{ code: "declare const value: any; function ok(): unknown { return value; }" }],

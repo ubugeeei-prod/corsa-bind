@@ -13,8 +13,8 @@ pub use registry::{LintRuleRegistry, run_default_type_aware_rule};
 pub use rules::{
     AwaitThenableRule, NoArrayDeleteRule, NoBaseToStringRule, NoFloatingPromisesRule,
     NoForInArrayRule, NoImpliedEvalRule, NoMixedEnumsRule, NoUnsafeAssignmentRule,
-    NoUnsafeReturnRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule,
-    PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferRegexpExecRule,
+    NoUnsafeCallRule, NoUnsafeReturnRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule,
+    PreferFindRule, PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferRegexpExecRule,
     PreferStringStartsEndsWithRule, RequireArraySortCompareRule, RestrictPlusOperandsRule,
     RestrictTemplateExpressionsRule, UseUnknownInCatchCallbackVariableRule,
 };

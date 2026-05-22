@@ -60,6 +60,10 @@ pub(super) fn is_any_like_node(node: &LintNode) -> bool {
     {
         return true;
     }
+    if current.kind == "TSAsExpression" && current.field_str("__typeAnnotationText") == Some("any")
+    {
+        return true;
+    }
     is_any_like_type_texts(&node.type_texts)
 }
 
@@ -69,6 +73,11 @@ pub(super) fn is_unknown_like_node(node: &LintNode) -> bool {
         && current
             .child("typeAnnotation")
             .is_some_and(|type_annotation| type_annotation.kind == "TSUnknownKeyword")
+    {
+        return true;
+    }
+    if current.kind == "TSAsExpression"
+        && current.field_str("__typeAnnotationText") == Some("unknown")
     {
         return true;
     }

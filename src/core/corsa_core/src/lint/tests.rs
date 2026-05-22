@@ -241,6 +241,66 @@ fn ignores_unsafe_assignment_to_unknown() {
 }
 
 #[test]
+fn reports_unsafe_call_from_any() {
+    let mut callee = node_with_field("Identifier", TextRange::new(0, 5), "name", json!("value"));
+    callee.type_texts = vec!["any".to_owned()];
+
+    let diagnostics = registry()
+        .run_rule("no-unsafe-call", &call_node(callee, Vec::new()))
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-unsafe-call");
+    assert_eq!(diagnostics[0].message_id, "unsafeCall");
+    assert_eq!(diagnostics[0].range, TextRange::new(0, 5));
+}
+
+#[test]
+fn reports_unsafe_new_and_template_tag_from_any() {
+    let mut callee = node_with_field("Identifier", TextRange::new(4, 9), "name", json!("Ctor"));
+    callee.type_texts = vec!["any".to_owned()];
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-call",
+            &node_with_children("NewExpression", TextRange::new(0, 11), [("callee", callee)]),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "unsafeNew");
+    assert_eq!(diagnostics[0].range, TextRange::new(0, 11));
+
+    let mut tag = node_with_field("Identifier", TextRange::new(0, 3), "name", json!("tag"));
+    tag.type_texts = vec!["Function".to_owned()];
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-call",
+            &node_with_children(
+                "TaggedTemplateExpression",
+                TextRange::new(0, 10),
+                [("tag", tag)],
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "unsafeTemplateTag");
+    assert_eq!(diagnostics[0].range, TextRange::new(0, 3));
+}
+
+#[test]
+fn ignores_dynamic_import_call() {
+    let mut callee = node("Import", TextRange::new(0, 6));
+    callee.type_texts = vec!["any".to_owned()];
+
+    let diagnostics = registry()
+        .run_rule("no-unsafe-call", &call_node(callee, Vec::new()))
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn reports_unsafe_return_from_any() {
     let mut argument = node("Identifier", TextRange::new(55, 60));
     argument.type_texts = vec!["any".to_owned()];
@@ -427,8 +487,10 @@ fn respects_restricted_template_expression_boolean_option() {
         TextRange::new(17, 21),
         "boolean",
     )]);
-    node.fields
-        .insert("__ruleOptions".to_owned(), json!([{ "allowBoolean": false }]));
+    node.fields.insert(
+        "__ruleOptions".to_owned(),
+        json!([{ "allowBoolean": false }]),
+    );
 
     let diagnostics = registry()
         .run_rule("restrict-template-expressions", &node)
@@ -469,6 +531,7 @@ fn lists_default_rule_meta() {
             "no-implied-eval",
             "no-mixed-enums",
             "no-unsafe-assignment",
+            "no-unsafe-call",
             "no-unsafe-return",
             "no-unsafe-unary-minus",
             "only-throw-error",
