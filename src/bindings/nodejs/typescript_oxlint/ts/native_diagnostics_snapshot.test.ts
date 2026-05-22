@@ -77,6 +77,18 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "require-array-sort-compare: numeric array sort without compare",
+          "diagnostics": [
+            "require-array-sort-compare/requireCompare@0..13: Require a compare argument for array sorting.",
+          ],
+        },
+        {
+          "caseName": "restrict-plus-operands: string plus number with option disabled",
+          "diagnostics": [
+            "restrict-plus-operands/mismatched@0..12: Operands of + operations must be of the same type.",
+          ],
+        },
+        {
           "caseName": "use-unknown-in-catch-callback-variable: catch parameter typed as Error",
           "diagnostics": [
             "use-unknown-in-catch-callback-variable/unexpected@23..35: Catch callback variables should be explicitly typed as unknown.",
@@ -184,6 +196,22 @@ const diagnosticCases = [
     node: call("match", [0, 15], [node("Literal", [11, 14], { fields: { regex: { flags: "" } } })]),
   },
   {
+    ruleName: "require-array-sort-compare",
+    scenario: "numeric array sort without compare",
+    node: memberCall(id("values", [0, 6], ["number[]"]), "sort", [0, 13]),
+  },
+  {
+    ruleName: "restrict-plus-operands",
+    scenario: "string plus number with option disabled",
+    node: node("BinaryExpression", [0, 12], {
+      fields: { operator: "+", __ruleOptions: [{ allowNumberAndString: false }] },
+      children: {
+        left: id("left", [0, 4], ["string"]),
+        right: id("right", [7, 12], ["number"]),
+      },
+    }),
+  },
+  {
     ruleName: "use-unknown-in-catch-callback-variable",
     scenario: "catch parameter typed as Error",
     node: call(
@@ -213,6 +241,25 @@ function call(name: string, range: [number, number], args: NativeLintNode[] = []
     children: {
       callee: node("MemberExpression", [0, name.length], {
         children: { property: id(name, [0, name.length]) },
+      }),
+    },
+    childLists: { arguments: args },
+  });
+}
+
+function memberCall(
+  object: NativeLintNode,
+  name: string,
+  range: [number, number],
+  args: NativeLintNode[] = [],
+): NativeLintNode {
+  return node("CallExpression", range, {
+    children: {
+      callee: node("MemberExpression", [object.range.start, object.range.end + name.length + 1], {
+        children: {
+          object,
+          property: id(name, [object.range.end + 1, object.range.end + name.length + 1]),
+        },
       }),
     },
     childLists: { arguments: args },

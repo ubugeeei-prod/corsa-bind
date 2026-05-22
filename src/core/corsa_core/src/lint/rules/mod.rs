@@ -10,6 +10,8 @@ mod only_throw_error;
 mod prefer_find;
 mod prefer_includes;
 mod prefer_regexp_exec;
+mod require_array_sort_compare;
+mod restrict_plus_operands;
 mod use_unknown_in_catch_callback_variable;
 
 pub use await_thenable::AwaitThenableRule;
@@ -24,4 +26,6 @@ pub use only_throw_error::OnlyThrowErrorRule;
 pub use prefer_find::PreferFindRule;
 pub use prefer_includes::PreferIncludesRule;
 pub use prefer_regexp_exec::PreferRegexpExecRule;
+pub use require_array_sort_compare::RequireArraySortCompareRule;
+pub use restrict_plus_operands::RestrictPlusOperandsRule;
 pub use use_unknown_in_catch_callback_variable::UseUnknownInCatchCallbackVariableRule;
