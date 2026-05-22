@@ -121,6 +121,7 @@ describe("CorsaApiClient", () => {
       "no-implied-eval",
       "no-mixed-enums",
       "no-unsafe-assignment",
+      "no-unsafe-call",
       "no-unsafe-return",
       "no-unsafe-unary-minus",
       "only-throw-error",

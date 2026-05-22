@@ -53,6 +53,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "no-unsafe-call: calling an any-typed callee",
+          "diagnostics": [
+            "no-unsafe-call/unsafeCall@0..4: Unsafe call of a(n) \`any\` typed value.",
+          ],
+        },
+        {
           "caseName": "no-unsafe-unary-minus: unary minus on string union",
           "diagnostics": [
             "no-unsafe-unary-minus/unaryMinus@0..6: Argument of unary negation should be assignable to number | bigint.",
@@ -187,6 +193,14 @@ const diagnosticCases = [
           }),
         ],
       },
+    }),
+  },
+  {
+    ruleName: "no-unsafe-call",
+    scenario: "calling an any-typed callee",
+    node: node("CallExpression", [0, 7], {
+      children: { callee: id("call", [0, 4], ["any"]) },
+      childLists: { arguments: [] },
     }),
   },
   {
