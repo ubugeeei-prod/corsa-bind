@@ -100,6 +100,11 @@ export function toNativeNode(
     }
   }
 
+  const typeAnnotationText = sourceTypeAnnotationText(context, node);
+  if (typeAnnotationText) {
+    fields.__typeAnnotationText = typeAnnotationText;
+  }
+
   const nativeNode: NativeLintNode = {
     kind: node.type,
     range: nativeRange(node.range),
@@ -201,6 +206,18 @@ function shouldIncludeTypeTexts(
     return options.includeTypeTexts(node);
   }
   return options.includeTypeTexts ?? meta.requiresTypeTexts;
+}
+
+function sourceTypeAnnotationText(
+  context: ContextWithParserOptions,
+  node: RangedNode,
+): string | undefined {
+  const annotation = (node as any).typeAnnotation?.typeAnnotation ?? (node as any).typeAnnotation;
+  if (!annotation) {
+    return undefined;
+  }
+  const text = (context as any).sourceCode?.getText(annotation);
+  return typeof text === "string" && text.length > 0 ? text : undefined;
 }
 
 function nativeRange(range: readonly [number, number]): NativeLintRange {

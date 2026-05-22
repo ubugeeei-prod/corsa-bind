@@ -141,6 +141,32 @@ fn reports_unsafe_assignment_from_any() {
 }
 
 #[test]
+fn reports_unsafe_assignment_from_annotation_text() {
+    let mut init = node("Identifier", TextRange::new(29, 34));
+    init.type_texts = vec!["any".to_owned()];
+    let mut id = node("Identifier", TextRange::new(6, 12));
+    id.fields
+        .insert("__typeAnnotationText".to_owned(), json!("string"));
+    id.children.insert(
+        "typeAnnotation".to_owned(),
+        node("TSTypeAnnotation", TextRange::new(12, 20)),
+    );
+    let diagnostics = registry()
+        .run_rule(
+            "no-unsafe-assignment",
+            &node_with_children(
+                "VariableDeclarator",
+                TextRange::new(6, 34),
+                [("id", id), ("init", init)],
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "unsafe");
+}
+
+#[test]
 fn ignores_unsafe_assignment_to_unknown() {
     let mut init = node("Identifier", TextRange::new(30, 35));
     init.type_texts = vec!["any".to_owned()];

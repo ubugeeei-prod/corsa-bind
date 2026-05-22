@@ -49,7 +49,7 @@ impl RustLintRule for NoUnsafeAssignmentRule {
                     return;
                 };
                 let target_type_texts = annotated_target_type_texts(node);
-                report_if_unsafe(ctx, source, target_type_texts, node);
+                report_if_unsafe(ctx, source, &target_type_texts, node);
             }
             "VariableDeclarator" => {
                 let Some(source) = node.child("init") else {
@@ -57,9 +57,9 @@ impl RustLintRule for NoUnsafeAssignmentRule {
                 };
                 let target_type_texts = node
                     .child("id")
-                    .and_then(|id| has_type_annotation(id).then_some(id.type_texts.as_slice()))
-                    .unwrap_or(&[]);
-                report_if_unsafe(ctx, source, target_type_texts, node);
+                    .map(annotated_target_type_texts)
+                    .unwrap_or_default();
+                report_if_unsafe(ctx, source, &target_type_texts, node);
             }
             _ => {}
         }
@@ -77,12 +77,16 @@ fn report_if_unsafe(
     }
 }
 
-fn annotated_target_type_texts(node: &LintNode) -> &[String] {
-    if has_type_annotation(node) {
-        node.type_texts.as_slice()
-    } else {
-        &[]
+fn annotated_target_type_texts(node: &LintNode) -> Vec<String> {
+    if !has_type_annotation(node) {
+        return Vec::new();
     }
+    if let Some(text) = node.field_str("__typeAnnotationText") {
+        if !text.is_empty() {
+            return vec![text.to_owned()];
+        }
+    }
+    node.type_texts.clone()
 }
 
 fn has_type_annotation(node: &LintNode) -> bool {
