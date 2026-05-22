@@ -12,6 +12,7 @@ use std::io::{BufRead, Write};
 const HEADER_END: &[u8] = b"\r\n\r\n";
 const CONTENT_LENGTH: &[u8] = b"content-length";
 const MAX_HEADER_BYTES: usize = 16 * 1024;
+const MAX_BODY_BYTES: usize = 512 * 1024 * 1024;
 
 /// Reads a single stdio JSON-RPC frame.
 ///
@@ -41,7 +42,22 @@ where
     R: BufRead,
 {
     let content_length = read_content_length(reader)?;
-    let mut payload = vec![0_u8; content_length];
+    if content_length > MAX_BODY_BYTES {
+        return Err(TsgoError::Protocol(
+            format!(
+                "jsonrpc body is too large: {content_length} bytes exceeds {MAX_BODY_BYTES} byte safety limit"
+            )
+            .into(),
+        ));
+    }
+    let mut payload = Vec::new();
+    payload.try_reserve_exact(content_length).map_err(|err| {
+        TsgoError::Protocol(
+            format!("failed to reserve jsonrpc body buffer for {content_length} bytes: {err}")
+                .into(),
+        )
+    })?;
+    payload.resize(content_length, 0);
     reader.read_exact(&mut payload)?;
     Ok(payload)
 }

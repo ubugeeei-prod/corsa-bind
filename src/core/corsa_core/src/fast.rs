@@ -50,6 +50,6 @@ pub type FastSet<T> = FxHashSet<T>;
 /// ```
 pub fn compact_format(args: fmt::Arguments<'_>) -> CompactString {
     let mut value = CompactString::default();
-    value.write_fmt(args).expect("writing into CompactString");
+    let _ = value.write_fmt(args);
     value
 }
