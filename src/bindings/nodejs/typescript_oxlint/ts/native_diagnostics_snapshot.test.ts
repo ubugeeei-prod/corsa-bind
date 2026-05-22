@@ -47,6 +47,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "no-meaningless-void-operator: void around void-like call",
+          "diagnostics": [
+            "no-meaningless-void-operator/meaninglessVoidOperator@0..13: void operator should only be used to ignore a non-void return value. | suggestions removeVoid@0..5=><empty>: Remove 'void'.",
+          ],
+        },
+        {
           "caseName": "no-mixed-enums: numeric enum member mixed with string-typed initializer",
           "diagnostics": [
             "no-mixed-enums/mixed@24..31: Mixing number and string enums can be confusing.",
@@ -184,6 +190,16 @@ const diagnosticCases = [
     ruleName: "no-implied-eval",
     scenario: "setTimeout with a string-like callback",
     node: call("setTimeout", [0, 23], [id("code", [11, 15], ["string"])]),
+  },
+  {
+    ruleName: "no-meaningless-void-operator",
+    scenario: "void around void-like call",
+    node: node("UnaryExpression", [0, 13], {
+      fields: { operator: "void" },
+      children: {
+        argument: node("CallExpression", [5, 13], { typeTexts: ["void"] }),
+      },
+    }),
   },
   {
     ruleName: "no-mixed-enums",

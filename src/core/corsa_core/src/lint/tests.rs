@@ -346,6 +346,58 @@ fn respects_unsafe_member_optional_chain_option() {
 }
 
 #[test]
+fn reports_meaningless_void_operator() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-meaningless-void-operator",
+            &void_operator_node(typed_node("CallExpression", TextRange::new(5, 13), "void")),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-meaningless-void-operator");
+    assert_eq!(diagnostics[0].message_id, "meaninglessVoidOperator");
+    assert_eq!(diagnostics[0].suggestions.len(), 1);
+    assert_eq!(diagnostics[0].suggestions[0].message_id, "removeVoid");
+    assert_eq!(
+        diagnostics[0].suggestions[0].fixes[0].range,
+        TextRange::new(0, 5)
+    );
+}
+
+#[test]
+fn ignores_meaningless_void_operator_on_non_void_type() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-meaningless-void-operator",
+            &void_operator_node(typed_node("Identifier", TextRange::new(5, 10), "number")),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn respects_meaningless_void_operator_check_never_option() {
+    let mut node = void_operator_node(typed_node("Identifier", TextRange::new(5, 10), "never"));
+    assert!(
+        registry()
+            .run_rule("no-meaningless-void-operator", &node)
+            .unwrap()
+            .is_empty()
+    );
+
+    node.fields
+        .insert("__ruleOptions".to_owned(), json!([{ "checkNever": true }]));
+    let diagnostics = registry()
+        .run_rule("no-meaningless-void-operator", &node)
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "meaninglessVoidOperator");
+}
+
+#[test]
 fn ignores_dynamic_import_call() {
     let mut callee = node("Import", TextRange::new(0, 6));
     callee.type_texts = vec!["any".to_owned()];
@@ -586,6 +638,7 @@ fn lists_default_rule_meta() {
             "no-floating-promises",
             "await-thenable",
             "no-implied-eval",
+            "no-meaningless-void-operator",
             "no-mixed-enums",
             "no-unsafe-assignment",
             "no-unsafe-call",
@@ -797,6 +850,16 @@ fn member_expression_node(object: LintNode, property: LintNode, computed: bool) 
     );
     node.fields.insert("computed".to_owned(), json!(computed));
     node.fields.insert("optional".to_owned(), json!(false));
+    node
+}
+
+fn void_operator_node(argument: LintNode) -> LintNode {
+    let mut node = node_with_children(
+        "UnaryExpression",
+        TextRange::new(0, argument.range.end),
+        [("argument", argument)],
+    );
+    node.fields.insert("operator".to_owned(), json!("void"));
     node
 }
 

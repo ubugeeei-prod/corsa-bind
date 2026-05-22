@@ -119,6 +119,7 @@ describe("CorsaApiClient", () => {
       "no-floating-promises",
       "await-thenable",
       "no-implied-eval",
+      "no-meaningless-void-operator",
       "no-mixed-enums",
       "no-unsafe-assignment",
       "no-unsafe-call",

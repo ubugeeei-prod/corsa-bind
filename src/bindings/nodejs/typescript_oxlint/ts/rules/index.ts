@@ -6,6 +6,7 @@ import { noBaseToStringRule } from "./no_base_to_string";
 import { noFloatingPromisesRule } from "./no_floating_promises";
 import { noForInArrayRule } from "./no_for_in_array";
 import { noImpliedEvalRule } from "./no_implied_eval";
+import { noMeaninglessVoidOperatorRule } from "./no_meaningless_void_operator";
 import { noMixedEnumsRule } from "./no_mixed_enums";
 import { noUnsafeAssignmentRule } from "./no_unsafe_assignment";
 import { noUnsafeCallRule } from "./no_unsafe_call";
@@ -30,6 +31,7 @@ export const implementedNativeRuleNames = [
   "no-floating-promises",
   "no-for-in-array",
   "no-implied-eval",
+  "no-meaningless-void-operator",
   "no-mixed-enums",
   "no-unsafe-assignment",
   "no-unsafe-call",
@@ -55,7 +57,6 @@ export const pendingNativeRuleNames = [
   "no-confusing-void-expression",
   "no-deprecated",
   "no-duplicate-type-constituents",
-  "no-meaningless-void-operator",
   "no-misused-promises",
   "no-misused-spread",
   "no-redundant-type-constituents",
@@ -95,6 +96,7 @@ export const typescriptOxlintRules = Object.freeze({
   "no-floating-promises": noFloatingPromisesRule,
   "no-for-in-array": noForInArrayRule,
   "no-implied-eval": noImpliedEvalRule,
+  "no-meaningless-void-operator": noMeaninglessVoidOperatorRule,
   "no-mixed-enums": noMixedEnumsRule,
   "no-unsafe-assignment": noUnsafeAssignmentRule,
   "no-unsafe-call": noUnsafeCallRule,
