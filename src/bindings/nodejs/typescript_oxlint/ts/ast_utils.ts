@@ -1,6 +1,8 @@
 type TypedValue = { readonly type?: string };
 type ValueToken = { readonly type?: string; readonly value?: string };
 type Predicate<T> = (value: T | null | undefined) => boolean;
+type AstNode = Record<string, unknown> & { readonly type?: string };
+type StaticValue = { readonly value: unknown } | null;
 
 export function isNodeOfType(type: string): Predicate<TypedValue>;
 export function isNodeOfType(node: TypedValue | null | undefined, type: string): boolean;
@@ -265,10 +267,88 @@ export const findVariable = unsupportedAstUtilsFunction("findVariable");
 export const getFunctionHeadLocation = unsupportedAstUtilsFunction("getFunctionHeadLocation");
 export const getFunctionNameWithKind = unsupportedAstUtilsFunction("getFunctionNameWithKind");
 export const getInnermostScope = unsupportedAstUtilsFunction("getInnermostScope");
-export const getPropertyName = unsupportedAstUtilsFunction("getPropertyName");
-export const getStaticValue = unsupportedAstUtilsFunction("getStaticValue");
-export const getStringIfConstant = unsupportedAstUtilsFunction("getStringIfConstant");
-export const hasSideEffect = unsupportedAstUtilsFunction("hasSideEffect");
+
+export function getPropertyName(node: AstNode | null | undefined): string | null {
+  const property = propertyNodeOf(node);
+  if (!property) {
+    return null;
+  }
+  if (!isComputedProperty(node) && property.type === "Identifier") {
+    return stringField(property, "name");
+  }
+  if (!isComputedProperty(node) && property.type === "PrivateIdentifier") {
+    const name = stringField(property, "name");
+    return name == null ? null : `#${name}`;
+  }
+  const staticValue = getStaticValue(property);
+  return staticValue == null ? null : String(staticValue.value);
+}
+
+export function getStaticValue(node: AstNode | null | undefined): StaticValue {
+  if (!node) {
+    return null;
+  }
+  switch (node.type) {
+    case "Literal":
+      return { value: (node as { readonly value?: unknown }).value };
+    case "TemplateLiteral":
+      return staticTemplateValue(node);
+    case "UnaryExpression":
+      return staticUnaryValue(node);
+    case "BinaryExpression":
+      return staticBinaryValue(node);
+    case "LogicalExpression":
+      return staticLogicalValue(node);
+    case "ConditionalExpression":
+      return staticConditionalValue(node);
+    case "ArrayExpression":
+      return staticArrayValue(node);
+    case "ObjectExpression":
+      return staticObjectValue(node);
+    default:
+      return null;
+  }
+}
+
+export function getStringIfConstant(node: AstNode | null | undefined): string | null {
+  const staticValue = getStaticValue(node);
+  return staticValue == null ? null : String(staticValue.value);
+}
+
+export function hasSideEffect(node: AstNode | null | undefined): boolean {
+  return hasSideEffectNode(node, new WeakSet<object>());
+}
+
+function hasSideEffectNode(
+  node: AstNode | null | undefined,
+  seen: WeakSet<object>,
+): boolean {
+  if (!node) {
+    return false;
+  }
+  if (seen.has(node)) {
+    return false;
+  }
+  seen.add(node);
+  if (isSideEffectNode(node)) {
+    return true;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "parent") {
+      continue;
+    }
+    if (isAstNode(value) && hasSideEffectNode(value, seen)) {
+      return true;
+    }
+    if (
+      Array.isArray(value) &&
+      value.some((item) => isAstNode(item) && hasSideEffectNode(item, seen))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export class PatternMatcher {
   constructor(..._args: unknown[]) {
@@ -381,6 +461,208 @@ function matchesConditions(
   conditions: Readonly<Record<string, unknown>>,
 ): boolean {
   return Object.entries(conditions).every(([key, expected]) => value?.[key] === expected);
+}
+
+function propertyNodeOf(node: AstNode | null | undefined): AstNode | undefined {
+  if (!node) {
+    return undefined;
+  }
+  const property = node.property ?? node.key;
+  return isAstNode(property) ? property : undefined;
+}
+
+function isComputedProperty(node: AstNode | null | undefined): boolean {
+  return (node as { readonly computed?: boolean } | null | undefined)?.computed === true;
+}
+
+function staticTemplateValue(node: AstNode): StaticValue {
+  const quasis = arrayField<AstNode>(node, "quasis");
+  const expressions = arrayField<AstNode>(node, "expressions");
+  let value = "";
+  for (let index = 0; index < quasis.length; index += 1) {
+    value += cookedTemplateText(quasis[index]);
+    if (index < expressions.length) {
+      const expression = getStaticValue(expressions[index]);
+      if (expression == null) {
+        return null;
+      }
+      value += String(expression.value);
+    }
+  }
+  return { value };
+}
+
+function staticUnaryValue(node: AstNode): StaticValue {
+  const argument = getStaticValue(childNode(node, "argument"));
+  if (argument == null) {
+    return null;
+  }
+  switch (stringField(node, "operator")) {
+    case "-":
+      return { value: -(argument.value as number) };
+    case "+":
+      return { value: +(argument.value as number) };
+    case "!":
+      return { value: !argument.value };
+    case "~":
+      return { value: ~(argument.value as number) };
+    case "typeof":
+      return { value: typeof argument.value };
+    case "void":
+      return { value: undefined };
+    default:
+      return null;
+  }
+}
+
+function staticBinaryValue(node: AstNode): StaticValue {
+  const left = getStaticValue(childNode(node, "left"));
+  const right = getStaticValue(childNode(node, "right"));
+  if (left == null || right == null) {
+    return null;
+  }
+  switch (stringField(node, "operator")) {
+    case "==":
+      return { value: left.value == right.value };
+    case "!=":
+      return { value: left.value != right.value };
+    case "===":
+      return { value: left.value === right.value };
+    case "!==":
+      return { value: left.value !== right.value };
+    case "<":
+      return { value: (left.value as number) < (right.value as number) };
+    case "<=":
+      return { value: (left.value as number) <= (right.value as number) };
+    case ">":
+      return { value: (left.value as number) > (right.value as number) };
+    case ">=":
+      return { value: (left.value as number) >= (right.value as number) };
+    case "+":
+      return { value: (left.value as any) + (right.value as any) };
+    case "-":
+      return { value: (left.value as number) - (right.value as number) };
+    case "*":
+      return { value: (left.value as number) * (right.value as number) };
+    case "/":
+      return { value: (left.value as number) / (right.value as number) };
+    case "%":
+      return { value: (left.value as number) % (right.value as number) };
+    case "**":
+      return { value: (left.value as number) ** (right.value as number) };
+    case "|":
+      return { value: (left.value as number) | (right.value as number) };
+    case "&":
+      return { value: (left.value as number) & (right.value as number) };
+    case "^":
+      return { value: (left.value as number) ^ (right.value as number) };
+    default:
+      return null;
+  }
+}
+
+function staticLogicalValue(node: AstNode): StaticValue {
+  const left = getStaticValue(childNode(node, "left"));
+  if (left == null) {
+    return null;
+  }
+  const operator = stringField(node, "operator");
+  if (operator === "&&" && !left.value) {
+    return left;
+  }
+  if (operator === "||" && left.value) {
+    return left;
+  }
+  if (operator === "??" && left.value != null) {
+    return left;
+  }
+  return getStaticValue(childNode(node, "right"));
+}
+
+function staticConditionalValue(node: AstNode): StaticValue {
+  const test = getStaticValue(childNode(node, "test"));
+  if (test == null) {
+    return null;
+  }
+  return getStaticValue(childNode(node, test.value ? "consequent" : "alternate"));
+}
+
+function staticArrayValue(node: AstNode): StaticValue {
+  const values = [];
+  for (const element of arrayField<AstNode | null>(node, "elements")) {
+    if (element == null) {
+      values.push(undefined);
+      continue;
+    }
+    if (element.type === "SpreadElement") {
+      return null;
+    }
+    const item = getStaticValue(element);
+    if (item == null) {
+      return null;
+    }
+    values.push(item.value);
+  }
+  return { value: values };
+}
+
+function staticObjectValue(node: AstNode): StaticValue {
+  const value: Record<string, unknown> = {};
+  for (const property of arrayField<AstNode>(node, "properties")) {
+    if (property.type === "SpreadElement") {
+      return null;
+    }
+    const name = getPropertyName(property);
+    const propertyValue = getStaticValue(childNode(property, "value"));
+    if (name == null || propertyValue == null) {
+      return null;
+    }
+    value[name] = propertyValue.value;
+  }
+  return { value };
+}
+
+function cookedTemplateText(node: AstNode | undefined): string {
+  const value = node?.value;
+  if (isRecord(value) && typeof value.cooked === "string") {
+    return value.cooked;
+  }
+  return "";
+}
+
+function childNode(node: AstNode, key: string): AstNode | undefined {
+  const value = node[key];
+  return isAstNode(value) ? value : undefined;
+}
+
+function arrayField<T>(node: AstNode, key: string): T[] {
+  const value = node[key];
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function stringField(node: AstNode, key: string): string | null {
+  const value = node[key];
+  return typeof value === "string" ? value : null;
+}
+
+function isAstNode(value: unknown): value is AstNode {
+  return isRecord(value) && typeof value.type === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isSideEffectNode(node: AstNode): boolean {
+  return [
+    "AssignmentExpression",
+    "AwaitExpression",
+    "CallExpression",
+    "NewExpression",
+    "TaggedTemplateExpression",
+    "UpdateExpression",
+    "YieldExpression",
+  ].includes(node.type ?? "");
 }
 
 function tokenWithValue(expected: string, type = PUNCTUATOR) {
