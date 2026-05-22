@@ -261,8 +261,68 @@ export function isParenthesized(
   );
 }
 
+export const findVariable = unsupportedAstUtilsFunction("findVariable");
+export const getFunctionHeadLocation = unsupportedAstUtilsFunction("getFunctionHeadLocation");
+export const getFunctionNameWithKind = unsupportedAstUtilsFunction("getFunctionNameWithKind");
+export const getInnermostScope = unsupportedAstUtilsFunction("getInnermostScope");
+export const getPropertyName = unsupportedAstUtilsFunction("getPropertyName");
+export const getStaticValue = unsupportedAstUtilsFunction("getStaticValue");
+export const getStringIfConstant = unsupportedAstUtilsFunction("getStringIfConstant");
+export const hasSideEffect = unsupportedAstUtilsFunction("hasSideEffect");
+
+export class PatternMatcher {
+  constructor(..._args: unknown[]) {
+    throw unsupportedAstUtilsError("PatternMatcher");
+  }
+
+  execAll(..._args: unknown[]): never {
+    throw unsupportedAstUtilsError("PatternMatcher.execAll");
+  }
+
+  test(..._args: unknown[]): never {
+    throw unsupportedAstUtilsError("PatternMatcher.test");
+  }
+}
+
+export class ReferenceTracker {
+  static readonly READ = Symbol("read");
+  static readonly CALL = Symbol("call");
+  static readonly CONSTRUCT = Symbol("construct");
+  static readonly ESM = Symbol("esm");
+
+  constructor(..._args: unknown[]) {
+    throw unsupportedAstUtilsError("ReferenceTracker");
+  }
+
+  iterateGlobalReferences(..._args: unknown[]): never {
+    throw unsupportedAstUtilsError("ReferenceTracker.iterateGlobalReferences");
+  }
+
+  iterateCjsReferences(..._args: unknown[]): never {
+    throw unsupportedAstUtilsError("ReferenceTracker.iterateCjsReferences");
+  }
+
+  iterateEsmReferences(..._args: unknown[]): never {
+    throw unsupportedAstUtilsError("ReferenceTracker.iterateEsmReferences");
+  }
+
+  iteratePropertyReferences(..._args: unknown[]): never {
+    throw unsupportedAstUtilsError("ReferenceTracker.iteratePropertyReferences");
+  }
+}
+
 export const ASTUtils = Object.freeze({
   LINEBREAK_MATCHER,
+  PatternMatcher,
+  ReferenceTracker,
+  findVariable,
+  getFunctionHeadLocation,
+  getFunctionNameWithKind,
+  getInnermostScope,
+  getPropertyName,
+  getStaticValue,
+  getStringIfConstant,
+  hasSideEffect,
   isIdentifier,
   isArrowToken,
   isAwaitExpression,
@@ -335,4 +395,16 @@ function keywordWithValue(expected: string) {
 
 function not<T extends readonly unknown[]>(predicate: (...args: T) => boolean) {
   return (...args: T): boolean => !predicate(...args);
+}
+
+function unsupportedAstUtilsFunction(name: string): (...args: unknown[]) => never {
+  return (..._args: unknown[]): never => {
+    throw unsupportedAstUtilsError(name);
+  };
+}
+
+function unsupportedAstUtilsError(name: string): Error {
+  return new Error(
+    `ASTUtils.${name} is not supported by corsa-oxlint because it depends on ESLint SourceCode or scope internals.`,
+  );
 }
