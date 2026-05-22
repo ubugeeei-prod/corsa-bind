@@ -15,10 +15,19 @@ type RangedNode = {
   readonly range: readonly [number, number];
 };
 
+type NativeRuleBridgeOptions = {
+  readonly shouldRun?: (node: RangedNode) => boolean;
+  readonly includeTypeTexts?: boolean | ((node: RangedNode) => boolean);
+};
+
 const MAX_NATIVE_NODE_DEPTH = 4;
 const nativeRuleMetasByName = new Map(nativeLintRuleMetas().map((meta) => [meta.name, meta]));
 
-export function createRustNativeRule(ruleName: string) {
+export function createRustNativeRule(
+  ruleName: string,
+  metaOverrides: Record<string, unknown> = {},
+  bridgeOptions: NativeRuleBridgeOptions = {},
+) {
   const meta = nativeRuleMeta(ruleName);
   return createNativeRule(
     ruleName,
@@ -28,16 +37,23 @@ export function createRustNativeRule(ruleName: string) {
       },
       hasSuggestions: meta.hasSuggestions,
       messages: meta.messages,
+      ...metaOverrides,
     },
     (context) =>
       Object.fromEntries(
         meta.listeners.map((listener) => [
           listener,
           (node: RangedNode) => {
+            if (bridgeOptions.shouldRun?.(node) === false) {
+              return;
+            }
             reportNativeDiagnostics(
               context,
               node,
-              runNativeLintRule(ruleName, toNativeNode(context, node, meta.requiresTypeTexts)),
+              runNativeLintRule(
+                ruleName,
+                toNativeNode(context, node, shouldIncludeTypeTexts(bridgeOptions, node, meta)),
+              ),
             );
           },
         ]),
@@ -82,6 +98,11 @@ export function toNativeNode(
     if (isJsonPrimitive(value)) {
       fields[key] = value;
     }
+  }
+
+  const typeAnnotationText = sourceTypeAnnotationText(context, node);
+  if (typeAnnotationText) {
+    fields.__typeAnnotationText = typeAnnotationText;
   }
 
   const nativeNode: NativeLintNode = {
@@ -174,6 +195,29 @@ function nativeRuleMeta(ruleName: string): NativeLintRuleMeta {
     throw new Error(`corsa-oxlint native Rust rule is not registered: ${ruleName}`);
   }
   return meta;
+}
+
+function shouldIncludeTypeTexts(
+  options: NativeRuleBridgeOptions,
+  node: RangedNode,
+  meta: NativeLintRuleMeta,
+): boolean {
+  if (typeof options.includeTypeTexts === "function") {
+    return options.includeTypeTexts(node);
+  }
+  return options.includeTypeTexts ?? meta.requiresTypeTexts;
+}
+
+function sourceTypeAnnotationText(
+  context: ContextWithParserOptions,
+  node: RangedNode,
+): string | undefined {
+  const annotation = (node as any).typeAnnotation?.typeAnnotation ?? (node as any).typeAnnotation;
+  if (!annotation) {
+    return undefined;
+  }
+  const text = (context as any).sourceCode?.getText(annotation);
+  return typeof text === "string" && text.length > 0 ? text : undefined;
 }
 
 function nativeRange(range: readonly [number, number]): NativeLintRange {

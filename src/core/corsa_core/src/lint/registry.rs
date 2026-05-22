@@ -1,7 +1,8 @@
 use super::{
-    AwaitThenableRule, LintDiagnostic, LintNode, NoArrayDeleteRule, NoForInArrayRule,
-    NoImpliedEvalRule, NoMixedEnumsRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule,
-    PreferFindRule, PreferIncludesRule, PreferRegexpExecRule, RuleContext, RuleMeta, RustLintRule,
+    AwaitThenableRule, LintDiagnostic, LintNode, NoArrayDeleteRule, NoBaseToStringRule,
+    NoForInArrayRule, NoImpliedEvalRule, NoMixedEnumsRule, NoUnsafeAssignmentRule,
+    NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule, PreferIncludesRule,
+    PreferRegexpExecRule, RuleContext, RuleMeta, RustLintRule,
     UseUnknownInCatchCallbackVariableRule,
 };
 
@@ -28,9 +29,11 @@ impl LintRuleRegistry {
         Self::new()
             .with_rule(NoArrayDeleteRule)
             .with_rule(NoForInArrayRule)
+            .with_rule(NoBaseToStringRule)
             .with_rule(AwaitThenableRule)
             .with_rule(NoImpliedEvalRule)
             .with_rule(NoMixedEnumsRule)
+            .with_rule(NoUnsafeAssignmentRule)
             .with_rule(NoUnsafeUnaryMinusRule)
             .with_rule(OnlyThrowErrorRule)
             .with_rule(PreferFindRule)

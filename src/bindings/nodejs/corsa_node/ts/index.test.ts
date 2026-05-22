@@ -115,9 +115,11 @@ describe("CorsaApiClient", () => {
     expect(nativeLintRuleMetas().map((meta) => meta.name)).toEqual([
       "no-array-delete",
       "no-for-in-array",
+      "no-base-to-string",
       "await-thenable",
       "no-implied-eval",
       "no-mixed-enums",
+      "no-unsafe-assignment",
       "no-unsafe-unary-minus",
       "only-throw-error",
       "prefer-find",
