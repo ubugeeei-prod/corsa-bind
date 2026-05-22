@@ -9,6 +9,7 @@ import { noImpliedEvalRule } from "./no_implied_eval";
 import { noMixedEnumsRule } from "./no_mixed_enums";
 import { noUnsafeAssignmentRule } from "./no_unsafe_assignment";
 import { noUnsafeCallRule } from "./no_unsafe_call";
+import { noUnsafeMemberAccessRule } from "./no_unsafe_member_access";
 import { noUnsafeReturnRule } from "./no_unsafe_return";
 import { noUnsafeUnaryMinusRule } from "./no_unsafe_unary_minus";
 import { onlyThrowErrorRule } from "./only_throw_error";
@@ -32,6 +33,7 @@ export const implementedNativeRuleNames = [
   "no-mixed-enums",
   "no-unsafe-assignment",
   "no-unsafe-call",
+  "no-unsafe-member-access",
   "no-unsafe-return",
   "no-unsafe-unary-minus",
   "only-throw-error",
@@ -67,7 +69,6 @@ export const pendingNativeRuleNames = [
   "no-unnecessary-type-parameters",
   "no-unsafe-argument",
   "no-unsafe-enum-comparison",
-  "no-unsafe-member-access",
   "no-unsafe-type-assertion",
   "no-useless-default-assignment",
   "non-nullable-type-assertion-style",
@@ -97,6 +98,7 @@ export const typescriptOxlintRules = Object.freeze({
   "no-mixed-enums": noMixedEnumsRule,
   "no-unsafe-assignment": noUnsafeAssignmentRule,
   "no-unsafe-call": noUnsafeCallRule,
+  "no-unsafe-member-access": noUnsafeMemberAccessRule,
   "no-unsafe-return": noUnsafeReturnRule,
   "no-unsafe-unary-minus": noUnsafeUnaryMinusRule,
   "only-throw-error": onlyThrowErrorRule,
