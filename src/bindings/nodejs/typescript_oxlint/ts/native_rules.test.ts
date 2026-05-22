@@ -89,6 +89,22 @@ describe("corsa-oxlint native rules", () => {
     });
   });
 
+  integrationCase("runs no-meaningless-void-operator through RuleTester", () => {
+    createTester().run(
+      "no-meaningless-void-operator",
+      typescriptOxlintRules["no-meaningless-void-operator"] as never,
+      {
+        valid: [],
+        invalid: [
+          {
+            code: "void (undefined as void);",
+            errors: [{ messageId: "meaninglessVoidOperator" }],
+          },
+        ],
+      },
+    );
+  });
+
   integrationCase("runs no-mixed-enums through RuleTester", () => {
     createTester().run("no-mixed-enums", typescriptOxlintRules["no-mixed-enums"] as never, {
       valid: [{ code: "enum Numeric { A, B = 2, C = 3 }" }],
