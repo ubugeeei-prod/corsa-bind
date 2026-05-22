@@ -16,9 +16,13 @@ type RangedNode = {
 };
 
 type NativeRuleBridgeOptions = {
-  readonly shouldRun?: (node: RangedNode) => boolean;
-  readonly includeTypeTexts?: boolean | ((node: RangedNode) => boolean);
+  readonly shouldRun?: (node: RangedNode, context: ContextWithParserOptions) => boolean;
+  readonly includeTypeTexts?: NodeMetadataOption;
+  readonly includePropertyNames?: NodeMetadataOption;
+  readonly maxDepth?: number;
 };
+
+type NodeMetadataOption = boolean | ((node: RangedNode, depth: number) => boolean);
 
 const MAX_NATIVE_NODE_DEPTH = 4;
 const nativeRuleMetasByName = new Map(nativeLintRuleMetas().map((meta) => [meta.name, meta]));
@@ -44,15 +48,23 @@ export function createRustNativeRule(
         meta.listeners.map((listener) => [
           listener,
           (node: RangedNode) => {
-            if (bridgeOptions.shouldRun?.(node) === false) {
+            if (bridgeOptions.shouldRun?.(node, context) === false) {
               return;
             }
+            const includeTypeTexts = includeTypeTextsOption(bridgeOptions, meta);
             reportNativeDiagnostics(
               context,
               node,
               runNativeLintRule(
                 ruleName,
-                toNativeNode(context, node, shouldIncludeTypeTexts(bridgeOptions, node, meta)),
+                toNativeNode(
+                  context,
+                  node,
+                  includeTypeTexts,
+                  bridgeOptions.maxDepth ?? MAX_NATIVE_NODE_DEPTH,
+                  true,
+                  includePropertyNamesOption(bridgeOptions, includeTypeTexts),
+                ),
               ),
             );
           },
@@ -64,9 +76,11 @@ export function createRustNativeRule(
 export function toNativeNode(
   context: ContextWithParserOptions,
   node: RangedNode,
-  includeTypeTexts = true,
+  includeTypeTexts: NodeMetadataOption = true,
   maxDepth = MAX_NATIVE_NODE_DEPTH,
   includeRuleOptions = true,
+  includePropertyNames: NodeMetadataOption = includeTypeTexts,
+  depth = 0,
 ): NativeLintNode {
   const fields: Record<string, unknown> = {};
   const children: Record<string, NativeLintNode> = {};
@@ -78,14 +92,30 @@ export function toNativeNode(
     }
     if (isNativeChildNode(value)) {
       if (maxDepth > 0) {
-        children[key] = toNativeNode(context, value, includeTypeTexts, maxDepth - 1, false);
+        children[key] = toNativeNode(
+          context,
+          value,
+          includeTypeTexts,
+          maxDepth - 1,
+          false,
+          includePropertyNames,
+          depth + 1,
+        );
       }
       continue;
     }
     if (Array.isArray(value)) {
       if (maxDepth > 0 && value.every(isNativeChildNode)) {
         childLists[key] = value.map((child) =>
-          toNativeNode(context, child, includeTypeTexts, maxDepth - 1, false),
+          toNativeNode(
+            context,
+            child,
+            includeTypeTexts,
+            maxDepth - 1,
+            false,
+            includePropertyNames,
+            depth + 1,
+          ),
         );
       } else if (value.every(isJsonPrimitive)) {
         fields[key] = value;
@@ -118,8 +148,10 @@ export function toNativeNode(
     kind: node.type,
     range: nativeRange(node.range),
   };
-  if (includeTypeTexts) {
+  if (includeMetadataForNode(includeTypeTexts, node, depth)) {
     nativeNode.typeTexts = typeTextsAtNode(context, node);
+  }
+  if (includeMetadataForNode(includePropertyNames, node, depth)) {
     nativeNode.propertyNames = propertyNamesOfNode(context, node);
   }
   if (Object.keys(fields).length > 0) {
@@ -206,15 +238,26 @@ function nativeRuleMeta(ruleName: string): NativeLintRuleMeta {
   return meta;
 }
 
-function shouldIncludeTypeTexts(
+function includeTypeTextsOption(
   options: NativeRuleBridgeOptions,
-  node: RangedNode,
   meta: NativeLintRuleMeta,
-): boolean {
-  if (typeof options.includeTypeTexts === "function") {
-    return options.includeTypeTexts(node);
-  }
+): NodeMetadataOption {
   return options.includeTypeTexts ?? meta.requiresTypeTexts;
+}
+
+function includePropertyNamesOption(
+  options: NativeRuleBridgeOptions,
+  includeTypeTexts: NodeMetadataOption,
+): NodeMetadataOption {
+  return options.includePropertyNames ?? includeTypeTexts;
+}
+
+function includeMetadataForNode(
+  option: NodeMetadataOption,
+  node: RangedNode,
+  depth: number,
+): boolean {
+  return typeof option === "function" ? option(node, depth) : option;
 }
 
 function sourceTypeAnnotationText(
