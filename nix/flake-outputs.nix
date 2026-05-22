@@ -18,7 +18,7 @@ in
           version = "latest";
           src = pkgs.fetchzip {
             url = "https://cli.moonbitlang.com/binaries/latest/moonbit-darwin-aarch64.tar.gz";
-            sha256 = "sha256-6Xqco29NFzQ0s4vNzq6yj1rBeLETfajZowLwiHvhqfY=";
+            sha256 = "sha256-iYuvOpa4DK08AZQ5H3FM10W+SQWD6tb9S8UbQqd0ciY=";
             stripRoot = false;
           };
           dontBuild = true;
@@ -35,7 +35,7 @@ in
         src = vitePlusRuntimeSrc;
         pnpm = pnpmForVp;
         fetcherVersion = 3;
-        hash = "sha256-vE+ceyHw7Sju/lo2cay0osRWOg4LaIn2TGdK8KBZWkw=";
+        hash = "sha256-Ov4jbNVpNL1FH6wo4XDEJwdUQeo/pPn4BQaW77nRIRQ=";
       };
       vitePlusRuntime = pkgs.stdenvNoCC.mkDerivation {
         pname = "vite-plus-runtime";
@@ -149,6 +149,7 @@ in
           ${vitePlus}/bin/vp env use --unset >/dev/null 2>&1 || true
           ${vitePlus}/bin/vp env install >/dev/null
           eval "$(${vitePlus}/bin/vp env print | ${pkgs.gnugrep}/bin/grep '^export PATH=')"
+          export PATH="${toolchainPath}:$PATH"
           corepack enable >/dev/null 2>&1 || true
           corepack prepare pnpm@10.0.0 --activate >/dev/null 2>&1 || true
 
