@@ -104,6 +104,9 @@ in
       dotnetPkg = pkgs.dotnet-sdk_9;
       tnixCli = tnix.packages.${system}.tnix;
       tnixLsp = tnix.packages.${system}.tnix-lsp;
+      libraryPath = lib.makeLibraryPath [
+        pkgs.libiconv
+      ];
       toolchainPath = lib.makeBinPath [
         pkgs.cargo
         pkgs.clang
@@ -133,6 +136,7 @@ in
           pkgs.git
           pkgs.go_1_26
           pkgs.gnugrep
+          pkgs.libiconv
           moonPkg
           pkgs.pkg-config
           pkgs.rustc
@@ -150,6 +154,8 @@ in
           ${vitePlus}/bin/vp env install >/dev/null
           eval "$(${vitePlus}/bin/vp env print | ${pkgs.gnugrep}/bin/grep '^export PATH=')"
           export PATH="${toolchainPath}:$PATH"
+          export LIBRARY_PATH="${libraryPath}:''${LIBRARY_PATH:-}"
+          export NIX_LDFLAGS="-L${libraryPath} ''${NIX_LDFLAGS:-}"
           corepack enable >/dev/null 2>&1 || true
           corepack prepare pnpm@10.0.0 --activate >/dev/null 2>&1 || true
 
