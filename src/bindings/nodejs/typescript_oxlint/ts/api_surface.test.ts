@@ -91,6 +91,48 @@ describe("api surface", () => {
     expect(astUtilsEntry.isClassOrTypeElement({ type: "TSPropertySignature" })).toBe(true);
   });
 
+  it("supports scope-free ASTUtils static evaluation helpers", async () => {
+    const upstream =
+      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+    const member = {
+      type: "MemberExpression",
+      computed: false,
+      property: { type: "Identifier", name: "value" },
+    };
+    const computedMember = {
+      type: "MemberExpression",
+      computed: true,
+      property: { type: "Literal", value: "value" },
+    };
+    const template = {
+      type: "TemplateLiteral",
+      expressions: [{ type: "Literal", value: 1 }],
+      quasis: [
+        { type: "TemplateElement", value: { cooked: "left", raw: "left" } },
+        { type: "TemplateElement", value: { cooked: "right", raw: "right" } },
+      ],
+    };
+    const binary = {
+      type: "BinaryExpression",
+      operator: "+",
+      left: { type: "Literal", value: "v" },
+      right: { type: "Literal", value: 1 },
+    };
+
+    expect(astUtilsEntry.getPropertyName(member)).toBe(upstream.ASTUtils.getPropertyName(member));
+    expect(astUtilsEntry.getPropertyName(computedMember)).toBe(
+      upstream.ASTUtils.getPropertyName(computedMember),
+    );
+    expect(astUtilsEntry.getStringIfConstant(template)).toBe(
+      upstream.ASTUtils.getStringIfConstant(template),
+    );
+    expect(astUtilsEntry.getStaticValue(binary)).toEqual(
+      upstream.ASTUtils.getStaticValue(binary),
+    );
+    expect(astUtilsEntry.hasSideEffect({ type: "CallExpression" })).toBe(true);
+    expect(astUtilsEntry.hasSideEffect({ type: "Literal", value: 1 })).toBe(false);
+  });
+
   it("re-exports the native rules surface from both entrypoints", () => {
     expect(typeof main.rules.typescriptOxlintPlugin).toBe("object");
     expect(rules.implementedNativeRuleNames).toContain("restrict-plus-operands");
