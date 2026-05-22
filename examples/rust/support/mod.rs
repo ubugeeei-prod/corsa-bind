@@ -19,17 +19,24 @@ pub fn workspace_root() -> PathBuf {
         if dir.join("pnpm-workspace.yaml").exists() {
             return dir;
         }
-        assert!(
-            dir.pop(),
-            "failed to locate workspace root from {}",
-            env!("CARGO_MANIFEST_DIR")
-        );
+        if !dir.pop() {
+            eprintln!(
+                "failed to locate workspace root from {}; falling back to the crate manifest directory",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            return PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        }
     }
 }
 
 pub fn example_cwd(name: &str) -> PathBuf {
     let cwd = workspace_root().join("target/examples").join(name);
-    std::fs::create_dir_all(&cwd).unwrap();
+    if let Err(error) = std::fs::create_dir_all(&cwd) {
+        eprintln!(
+            "failed to create example working directory at {}: {error}",
+            cwd.display()
+        );
+    }
     cwd
 }
 
@@ -134,5 +141,8 @@ pub fn normalize_path(workspace_root: &Path, value: &str) -> String {
 }
 
 pub fn print_json(value: Value) {
-    println!("{}", serde_json::to_string_pretty(&value).unwrap());
+    match serde_json::to_string_pretty(&value) {
+        Ok(body) => println!("{body}"),
+        Err(error) => eprintln!("failed to render example JSON output: {error}"),
+    }
 }
