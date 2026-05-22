@@ -14,10 +14,11 @@ pub use rules::{
     AwaitThenableRule, NoArrayDeleteRule, NoBaseToStringRule, NoFloatingPromisesRule,
     NoForInArrayRule, NoImpliedEvalRule, NoMeaninglessVoidOperatorRule, NoMixedEnumsRule,
     NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeMemberAccessRule, NoUnsafeReturnRule,
-    NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule, PreferIncludesRule,
-    PreferPromiseRejectErrorsRule, PreferReduceTypeParameterRule, PreferRegexpExecRule,
-    PreferStringStartsEndsWithRule, RequireArraySortCompareRule, RestrictPlusOperandsRule,
-    RestrictTemplateExpressionsRule, UseUnknownInCatchCallbackVariableRule,
+    NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule,
+    PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferReduceTypeParameterRule,
+    PreferRegexpExecRule, PreferStringStartsEndsWithRule, RequireArraySortCompareRule,
+    RestrictPlusOperandsRule, RestrictTemplateExpressionsRule,
+    UseUnknownInCatchCallbackVariableRule,
 };
 pub use types::{
     LintDiagnostic, LintFix, LintNode, LintSuggestion, RuleMessage, RuleMeta, TextRange,

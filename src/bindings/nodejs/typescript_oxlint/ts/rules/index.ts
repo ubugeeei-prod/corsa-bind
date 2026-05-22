@@ -12,6 +12,7 @@ import { noUnsafeAssignmentRule } from "./no_unsafe_assignment";
 import { noUnsafeCallRule } from "./no_unsafe_call";
 import { noUnsafeMemberAccessRule } from "./no_unsafe_member_access";
 import { noUnsafeReturnRule } from "./no_unsafe_return";
+import { noUnsafeTypeAssertionRule } from "./no_unsafe_type_assertion";
 import { noUnsafeUnaryMinusRule } from "./no_unsafe_unary_minus";
 import { onlyThrowErrorRule } from "./only_throw_error";
 import { preferFindRule } from "./prefer_find";
@@ -38,6 +39,7 @@ export const implementedNativeRuleNames = [
   "no-unsafe-call",
   "no-unsafe-member-access",
   "no-unsafe-return",
+  "no-unsafe-type-assertion",
   "no-unsafe-unary-minus",
   "only-throw-error",
   "prefer-find",
@@ -72,7 +74,6 @@ export const pendingNativeRuleNames = [
   "no-unnecessary-type-parameters",
   "no-unsafe-argument",
   "no-unsafe-enum-comparison",
-  "no-unsafe-type-assertion",
   "no-useless-default-assignment",
   "non-nullable-type-assertion-style",
   "prefer-nullish-coalescing",
@@ -103,6 +104,7 @@ export const typescriptOxlintRules = Object.freeze({
   "no-unsafe-call": noUnsafeCallRule,
   "no-unsafe-member-access": noUnsafeMemberAccessRule,
   "no-unsafe-return": noUnsafeReturnRule,
+  "no-unsafe-type-assertion": noUnsafeTypeAssertionRule,
   "no-unsafe-unary-minus": noUnsafeUnaryMinusRule,
   "only-throw-error": onlyThrowErrorRule,
   "prefer-find": preferFindRule,
