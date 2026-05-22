@@ -29,6 +29,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "no-floating-promises: unhandled Promise.resolve expression",
+          "diagnostics": [
+            "no-floating-promises/unexpected@0..19: Promises must be awaited, returned, or explicitly ignored with void. | suggestions floatingVoid@0..0=>void : Prefix the expression with void. | floatingAwait@0..0=>await : Await the promise.",
+          ],
+        },
+        {
           "caseName": "no-for-in-array: for-in over readonly array",
           "diagnostics": [
             "no-for-in-array/unexpected@0..42: Do not iterate over an array with a for-in loop.",
@@ -68,6 +74,12 @@ describe("native diagnostic snapshots", () => {
           "caseName": "prefer-includes: indexOf compared with -1",
           "diagnostics": [
             "prefer-includes/unexpected@0..27: Use .includes() instead of comparing an index result.",
+          ],
+        },
+        {
+          "caseName": "prefer-promise-reject-errors: rejecting with a string",
+          "diagnostics": [
+            "prefer-promise-reject-errors/rejectAnError@0..23: Expected the Promise rejection reason to be an Error.",
           ],
         },
         {
@@ -121,6 +133,14 @@ const diagnosticCases = [
           },
         }),
       },
+    }),
+  },
+  {
+    ruleName: "no-floating-promises",
+    scenario: "unhandled Promise.resolve expression",
+    node: node("ExpressionStatement", [0, 19], {
+      fields: { __nearestFunctionAsync: true },
+      children: { expression: promiseCall("resolve", [0, 18]) },
     }),
   },
   {
@@ -189,6 +209,15 @@ const diagnosticCases = [
         }),
       },
     }),
+  },
+  {
+    ruleName: "prefer-promise-reject-errors",
+    scenario: "rejecting with a string",
+    node: promiseCall(
+      "reject",
+      [0, 23],
+      [node("Literal", [15, 21], { fields: { value: "boom" } })],
+    ),
   },
   {
     ruleName: "prefer-regexp-exec",
@@ -264,6 +293,14 @@ function memberCall(
     },
     childLists: { arguments: args },
   });
+}
+
+function promiseCall(
+  name: string,
+  range: [number, number],
+  args: NativeLintNode[] = [],
+): NativeLintNode {
+  return memberCall(id("Promise", [0, 7]), name, range, args);
 }
 
 function id(
