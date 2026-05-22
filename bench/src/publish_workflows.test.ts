@@ -47,4 +47,13 @@ describe("publish workflows", () => {
     expect(workflow).toContain('cross_arg="--use-napi-cross"');
     expect(workflow).toContain('cross_arg="--cross-compile"');
   });
+
+  it("benchmarks PR base and head against TypeScript 6 and 7", () => {
+    const workflow = readWorkflow(".github/workflows/pr-performance.yml");
+    expect(workflow).toContain('BENCH_ITERATIONS: "5"');
+    expect(workflow).toContain("ref-role:");
+    expect(workflow).toContain("typescript-major:");
+    expect(workflow).toContain("typescript@^${{ matrix.typescript-major }}");
+    expect(workflow).toContain("node --strip-types ./scripts/pr_benchmark_report.ts comment");
+  });
 });
