@@ -29,7 +29,7 @@ It means several layers agree on:
 
 The workflow lives in [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
-It currently has three CI jobs in the main workflow:
+It currently has these jobs in the main workflow:
 
 - `js-format`
 - `js-lint-types`
@@ -41,6 +41,18 @@ It currently has three CI jobs in the main workflow:
 - `quality`
 - `real-tsgo-smoke`
 - `bench-tsgo-ref`
+
+The PR performance workflow lives in
+[`../.github/workflows/pr-performance.yml`](../.github/workflows/pr-performance.yml).
+On PR open, reopen, ready-for-review, and synchronize events it benchmarks:
+
+- PR base branch versus PR head branch
+- TypeScript `6` versus the npm `next` TypeScript channel
+- five measured samples per row, reported by mean milliseconds
+
+The workflow uploads the four benchmark reports as artifacts, then updates one
+sticky PR comment with faster, slower, and stable rows. Rows within 3% are marked
+stable to avoid treating benchmark noise as a regression.
 
 ## `quality`
 
