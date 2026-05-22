@@ -36,7 +36,7 @@ pub(super) async fn spawn_jsonrpc_stdio(
     let stdin = child.stdin.take().ok_or(TsgoError::Closed("api stdin"))?;
     let stdout = child.stdout.take().ok_or(TsgoError::Closed("api stdout"))?;
     let handlers = filesystem.map(jsonrpc_handlers).unwrap_or_default();
-    let rpc = JsonRpcConnection::spawn_with_options(
+    let rpc = JsonRpcConnection::try_spawn_with_options(
         BufReader::new(stdout),
         BufWriter::new(stdin),
         handlers,
@@ -44,7 +44,7 @@ pub(super) async fn spawn_jsonrpc_stdio(
             .with_request_timeout(request_timeout)
             .with_outbound_capacity(outbound_capacity)
             .with_observer_if_some(observer),
-    );
+    )?;
     Ok(ClientDriver::JsonRpc {
         rpc,
         process: Some(Arc::new(AsyncChildGuard::new(child))),

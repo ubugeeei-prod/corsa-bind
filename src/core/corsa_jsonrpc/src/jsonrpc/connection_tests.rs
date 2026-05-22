@@ -21,16 +21,18 @@ impl TsgoObserver for EventCollector {
 #[test]
 fn routes_request_and_response() {
     let (client_socket, server_socket) = UnixStream::pair().unwrap();
-    let client = JsonRpcConnection::spawn(
+    let client = JsonRpcConnection::try_spawn(
         BufReader::new(client_socket.try_clone().unwrap()),
         client_socket,
         RpcHandlerMap::default(),
-    );
-    let server = JsonRpcConnection::spawn(
+    )
+    .unwrap();
+    let server = JsonRpcConnection::try_spawn(
         BufReader::new(server_socket.try_clone().unwrap()),
         server_socket,
         RpcHandlerMap::default(),
-    );
+    )
+    .unwrap();
     let events = server.subscribe();
     let waiter = thread::spawn(move || match events.recv().unwrap() {
         InboundEvent::Request { id, method, params } => {
@@ -50,14 +52,15 @@ fn routes_request_and_response() {
 fn request_times_out_when_no_response_arrives() {
     let (client_socket, _server_socket) = UnixStream::pair().unwrap();
     let observer = Arc::new(EventCollector::default());
-    let client = JsonRpcConnection::spawn_with_options(
+    let client = JsonRpcConnection::try_spawn_with_options(
         BufReader::new(client_socket.try_clone().unwrap()),
         client_socket,
         RpcHandlerMap::default(),
         JsonRpcConnectionOptions::new()
             .with_request_timeout(Some(Duration::from_millis(10)))
             .with_observer(observer.clone()),
-    );
+    )
+    .unwrap();
     let error =
         corsa_runtime::block_on(client.request_value("ping", json!({"value": 1}))).unwrap_err();
     assert!(matches!(
@@ -76,11 +79,12 @@ fn request_times_out_when_no_response_arrives() {
 #[test]
 fn close_joins_reader_after_peer_closes() {
     let (client_socket, server_socket) = UnixStream::pair().unwrap();
-    let client = JsonRpcConnection::spawn(
+    let client = JsonRpcConnection::try_spawn(
         BufReader::new(client_socket.try_clone().unwrap()),
         client_socket,
         RpcHandlerMap::default(),
-    );
+    )
+    .unwrap();
     drop(server_socket);
 
     corsa_runtime::block_on(client.close()).unwrap();
@@ -89,11 +93,12 @@ fn close_joins_reader_after_peer_closes() {
 #[test]
 fn close_uses_bounded_reader_join_when_peer_stays_open() {
     let (client_socket, _server_socket) = UnixStream::pair().unwrap();
-    let client = JsonRpcConnection::spawn(
+    let client = JsonRpcConnection::try_spawn(
         BufReader::new(client_socket.try_clone().unwrap()),
         client_socket,
         RpcHandlerMap::default(),
-    );
+    )
+    .unwrap();
     let started = std::time::Instant::now();
 
     corsa_runtime::block_on(client.close()).unwrap();

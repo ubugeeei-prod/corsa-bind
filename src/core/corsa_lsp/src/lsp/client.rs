@@ -138,7 +138,7 @@ impl LspClient {
         let stdin = child.stdin.take().ok_or(TsgoError::Closed("lsp stdin"))?;
         let stdout = child.stdout.take().ok_or(TsgoError::Closed("lsp stdout"))?;
         Ok(Self {
-            rpc: JsonRpcConnection::spawn_with_options(
+            rpc: JsonRpcConnection::try_spawn_with_options(
                 BufReader::new(stdout),
                 stdin,
                 Default::default(),
@@ -146,7 +146,7 @@ impl LspClient {
                     .with_request_timeout(config.request_timeout)
                     .with_outbound_capacity(config.outbound_capacity)
                     .with_observer_if_some(config.observer.clone()),
-            ),
+            )?,
             process: Arc::new(AsyncChildGuard::new(child)),
             shutdown_timeout: config.shutdown_timeout,
         })

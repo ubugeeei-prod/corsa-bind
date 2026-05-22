@@ -156,7 +156,21 @@ impl JsonRpcConnection {
         R: BufRead + Send + 'static,
         W: Write + Send + 'static,
     {
-        Self::spawn_with_options(
+        Self::try_spawn(reader, writer, handlers)
+            .expect("failed to spawn jsonrpc connection threads")
+    }
+
+    /// Tries to spawn a connection around a buffered reader and writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if an operating-system thread cannot be created.
+    pub fn try_spawn<R, W>(reader: R, writer: W, handlers: RpcHandlerMap) -> Result<Self>
+    where
+        R: BufRead + Send + 'static,
+        W: Write + Send + 'static,
+    {
+        Self::try_spawn_with_options(
             reader,
             writer,
             handlers,
@@ -171,6 +185,25 @@ impl JsonRpcConnection {
         handlers: RpcHandlerMap,
         options: JsonRpcConnectionOptions,
     ) -> Self
+    where
+        R: BufRead + Send + 'static,
+        W: Write + Send + 'static,
+    {
+        Self::try_spawn_with_options(reader, writer, handlers, options)
+            .expect("failed to spawn jsonrpc connection threads")
+    }
+
+    /// Tries to spawn a connection around a buffered reader and writer with runtime options.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if an operating-system thread cannot be created.
+    pub fn try_spawn_with_options<R, W>(
+        reader: R,
+        writer: W,
+        handlers: RpcHandlerMap,
+        options: JsonRpcConnectionOptions,
+    ) -> Result<Self>
     where
         R: BufRead + Send + 'static,
         W: Write + Send + 'static,
@@ -191,16 +224,34 @@ impl JsonRpcConnection {
             read_done: Mutex::new(Some(read_done_rx)),
             write_task: Mutex::new(None),
         });
-        let read_inner = Arc::clone(&inner);
         let write_inner = Arc::clone(&inner);
-        *inner.read_task.lock() = Some(thread::spawn(move || {
-            let result = catch_unwind(AssertUnwindSafe(|| read_inner.read_loop(reader)));
-            let _ = read_done_tx.send(result);
-        }));
-        *inner.write_task.lock() = Some(thread::spawn(move || {
-            write_inner.write_loop(writer, outbound_rx);
-        }));
-        Self { inner }
+        let write_task = thread::Builder::new()
+            .name("corsa-jsonrpc-writer".into())
+            .spawn(move || {
+                write_inner.write_loop(writer, outbound_rx);
+            })
+            .map_err(TsgoError::Io)?;
+        *inner.write_task.lock() = Some(write_task);
+
+        let read_inner = Arc::clone(&inner);
+        let read_task = match thread::Builder::new()
+            .name("corsa-jsonrpc-reader".into())
+            .spawn(move || {
+                let result = catch_unwind(AssertUnwindSafe(|| read_inner.read_loop(reader)));
+                let _ = read_done_tx.send(result);
+            }) {
+            Ok(task) => task,
+            Err(error) => {
+                inner.closed.store(true, Ordering::SeqCst);
+                inner.outbound.lock().take();
+                if let Some(task) = inner.write_task.lock().take() {
+                    let _ = task.join();
+                }
+                return Err(TsgoError::Io(error));
+            }
+        };
+        *inner.read_task.lock() = Some(read_task);
+        Ok(Self { inner })
     }
 
     /// Subscribes to inbound events that are not matched by local handlers.

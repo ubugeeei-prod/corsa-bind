@@ -75,36 +75,37 @@ impl MsgpackWorker {
         let process = Arc::new(std::sync::Mutex::new(Some(child)));
         let worker_process = process.clone();
         let (tx, rx) = mpsc::sync_channel::<WorkerCommand>(queue_capacity.max(1));
-        let join = thread::spawn(move || {
-            let mut writer = BufWriter::new(stdin);
-            let mut reader = BufReader::new(stdout);
-            while let Ok(command) = rx.recv() {
-                match command {
-                    WorkerCommand::Request {
-                        method,
-                        payload,
-                        reply,
-                    } => {
-                        let result = write_tuple(&mut writer, MSG_REQUEST, &method, &payload)
-                            .and_then(|_| {
-                                read_response(
-                                    &mut reader,
-                                    &mut writer,
-                                    &method,
-                                    filesystem.as_deref(),
-                                )
-                            });
-                        let _ = reply.send(result.map(|bytes| WorkerResponse { bytes }));
+        let join = thread::Builder::new()
+            .name("corsa-msgpack-worker".into())
+            .spawn(move || {
+                let mut writer = BufWriter::new(stdin);
+                let mut reader = BufReader::new(stdout);
+                while let Ok(command) = rx.recv() {
+                    match command {
+                        WorkerCommand::Request {
+                            method,
+                            payload,
+                            reply,
+                        } => {
+                            let result = write_tuple(&mut writer, MSG_REQUEST, &method, &payload)
+                                .and_then(|_| {
+                                    read_response(
+                                        &mut reader,
+                                        &mut writer,
+                                        &method,
+                                        filesystem.as_deref(),
+                                    )
+                                });
+                            let _ = reply.send(result.map(|bytes| WorkerResponse { bytes }));
+                        }
+                        WorkerCommand::Shutdown => break,
                     }
-                    WorkerCommand::Shutdown => break,
                 }
-            }
-            if let Ok(mut child) = worker_process.lock()
-                && let Some(mut child) = child.take()
-            {
-                let _ = terminate_child_process(&mut child);
-            }
-        });
+                if let Some(mut child) = lock_unpoisoned(&worker_process).take() {
+                    let _ = terminate_child_process(&mut child);
+                }
+            })
+            .map_err(TsgoError::Io)?;
         Ok(Self {
             tx: Mutex::new(Some(tx)),
             join: Mutex::new(Some(join)),
@@ -179,9 +180,7 @@ impl MsgpackWorker {
     }
 
     fn terminate_process(&self, reason: &str) {
-        if let Ok(mut child) = self.process.lock()
-            && let Some(mut child) = child.take()
-        {
+        if let Some(mut child) = lock_unpoisoned(&self.process).take() {
             let _ = terminate_child_process(&mut child);
             observe(
                 self.observer.as_ref(),
@@ -191,6 +190,12 @@ impl MsgpackWorker {
             );
         }
     }
+}
+
+fn lock_unpoisoned<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Reads tuples until the matching response for `method` arrives.
@@ -263,5 +268,25 @@ fn handle_callback(
             method.as_bytes(),
             error.to_string().as_bytes(),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lock_unpoisoned;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn process_lock_recovers_after_poisoning() {
+        let lock = Arc::new(Mutex::new(1_u8));
+        let poisoned = Arc::clone(&lock);
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoned.lock().unwrap();
+            panic!("poison msgpack process lock");
+        })
+        .join();
+
+        *lock_unpoisoned(&lock) = 2;
+        assert_eq!(*lock_unpoisoned(&lock), 2);
     }
 }
