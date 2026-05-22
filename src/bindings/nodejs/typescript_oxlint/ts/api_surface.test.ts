@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import * as astUtilsEntry from "./ast_utils";
 import * as main from "./index";
 import * as eslintUtilsEntry from "./oxlint_utils";
 import * as compatEntry from "./oxlint_compat";
@@ -31,12 +32,44 @@ describe("api surface", () => {
     expect(main.ESLintUtils.NullThrowsReasons.MissingToken("token", "node")).toBe(
       "Expected to find a token for the node.",
     );
+    expect(main.ESLintUtils.applyDefault([{ nested: { enabled: true }, value: 1 }], [{}])).toEqual([
+      { nested: { enabled: true }, value: 1 },
+    ]);
+    expect(
+      main.ESLintUtils.applyDefault(
+        [{ nested: { enabled: true }, value: 1 }],
+        [{ nested: { enabled: false } }],
+      ),
+    ).toEqual([{ nested: { enabled: false }, value: 1 }]);
+    expect(typeof main.RuleCreator.withoutDocs).toBe("function");
     expect(main.TSUtils.isArray([])).toBe(true);
     expect(tsUtilsEntry.TSUtils.isArray({})).toBe(false);
     expect(main.TSESLint.RuleTester).toBe(main.RuleTester);
     expect(tsEslintEntry.TSESLint.RuleTester).toBe(main.RuleTester);
     expect(tsEslintEntry.RuleTester).toBe(main.RuleTester);
     expect(eslintUtilsEntry.ESLintUtils.getParserServices).toBe(main.getParserServices);
+  });
+
+  it("supports typescript-eslint-style ASTUtils predicate factories", () => {
+    const identifier = { type: "Identifier", name: "value" };
+    const optionalCall = { type: "CallExpression", optional: true };
+    const awaitToken = { type: "Identifier", value: "await" };
+    const colonToken = { type: "Punctuator", value: ":" };
+
+    expect(astUtilsEntry.isNodeOfType("Identifier")(identifier)).toBe(true);
+    expect(astUtilsEntry.isNodeOfType(identifier, "Identifier")).toBe(true);
+    expect(astUtilsEntry.isNodeOfTypes(["Identifier"])(identifier)).toBe(true);
+    expect(
+      astUtilsEntry.isNodeOfTypeWithConditions("CallExpression", { optional: true })(optionalCall),
+    ).toBe(true);
+    expect(
+      astUtilsEntry.isTokenOfTypeWithConditions("Punctuator", { value: ":" })(colonToken),
+    ).toBe(true);
+    expect(
+      astUtilsEntry.isNotTokenOfTypeWithConditions("Punctuator", { value: ":" })(awaitToken),
+    ).toBe(true);
+    expect(astUtilsEntry.isAwaitKeyword(awaitToken)).toBe(true);
+    expect(astUtilsEntry.isClassOrTypeElement({ type: "TSPropertySignature" })).toBe(true);
   });
 
   it("re-exports the native rules surface from both entrypoints", () => {
