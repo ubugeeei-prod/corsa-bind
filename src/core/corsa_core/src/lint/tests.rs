@@ -191,6 +191,72 @@ fn ignores_unsafe_assignment_to_unknown() {
 }
 
 #[test]
+fn reports_array_sort_without_compare() {
+    let diagnostics = registry()
+        .run_rule(
+            "require-array-sort-compare",
+            &sort_call_node("number[]", Vec::new()),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "require-array-sort-compare");
+    assert_eq!(diagnostics[0].message_id, "requireCompare");
+}
+
+#[test]
+fn respects_array_sort_string_option() {
+    let default_diagnostics = registry()
+        .run_rule(
+            "require-array-sort-compare",
+            &sort_call_node("string[]", Vec::new()),
+        )
+        .unwrap();
+    assert!(default_diagnostics.is_empty());
+
+    let mut node = sort_call_node("string[]", Vec::new());
+    node.fields.insert(
+        "__ruleOptions".to_owned(),
+        json!([{ "ignoreStringArrays": false }]),
+    );
+
+    let diagnostics = registry()
+        .run_rule("require-array-sort-compare", &node)
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+}
+
+#[test]
+fn reports_restricted_plus_operands_option_mismatch() {
+    let mut node = binary_plus_node("string", "number");
+    node.fields.insert(
+        "__ruleOptions".to_owned(),
+        json!([{ "allowNumberAndString": false }]),
+    );
+
+    let diagnostics = registry()
+        .run_rule("restrict-plus-operands", &node)
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "restrict-plus-operands");
+    assert_eq!(diagnostics[0].message_id, "mismatched");
+}
+
+#[test]
+fn allows_default_string_number_plus() {
+    let diagnostics = registry()
+        .run_rule(
+            "restrict-plus-operands",
+            &binary_plus_node("string", "number"),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn lists_default_rule_meta() {
     let registry = registry();
     assert_eq!(
@@ -208,6 +274,8 @@ fn lists_default_rule_meta() {
             "prefer-find",
             "prefer-includes",
             "prefer-regexp-exec",
+            "require-array-sort-compare",
+            "restrict-plus-operands",
             "use-unknown-in-catch-callback-variable"
         ]
     );
@@ -276,6 +344,40 @@ fn call_node(callee: LintNode, arguments: Vec<LintNode>) -> LintNode {
         [("callee", callee)],
     );
     node.child_lists.insert("arguments".to_owned(), arguments);
+    node
+}
+
+fn sort_call_node(object_type_text: &str, arguments: Vec<LintNode>) -> LintNode {
+    let mut object = node_with_field("Identifier", TextRange::new(0, 6), "name", json!("values"));
+    object.text = Some("values".to_owned());
+    object.type_texts = vec![object_type_text.to_owned()];
+    call_node(
+        node_with_children(
+            "MemberExpression",
+            TextRange::new(0, 11),
+            [
+                ("object", object),
+                (
+                    "property",
+                    node_with_field("Identifier", TextRange::new(7, 11), "name", json!("sort")),
+                ),
+            ],
+        ),
+        arguments,
+    )
+}
+
+fn binary_plus_node(left_type_text: &str, right_type_text: &str) -> LintNode {
+    let mut left = node_with_field("Identifier", TextRange::new(0, 4), "name", json!("left"));
+    left.type_texts = vec![left_type_text.to_owned()];
+    let mut right = node_with_field("Identifier", TextRange::new(7, 12), "name", json!("right"));
+    right.type_texts = vec![right_type_text.to_owned()];
+    let mut node = node_with_children(
+        "BinaryExpression",
+        TextRange::new(0, 12),
+        [("left", left), ("right", right)],
+    );
+    node.fields.insert("operator".to_owned(), json!("+"));
     node
 }
 

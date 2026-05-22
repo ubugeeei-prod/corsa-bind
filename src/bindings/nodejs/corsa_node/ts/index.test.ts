@@ -125,6 +125,8 @@ describe("CorsaApiClient", () => {
       "prefer-find",
       "prefer-includes",
       "prefer-regexp-exec",
+      "require-array-sort-compare",
+      "restrict-plus-operands",
       "use-unknown-in-catch-callback-variable",
     ]);
     expect(diagnostics).toHaveLength(1);

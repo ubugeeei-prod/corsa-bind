@@ -140,6 +140,15 @@ pub(super) fn child_list<'a>(node: &'a LintNode, key: &str) -> &'a [LintNode] {
     node.child_list(key).unwrap_or(&[])
 }
 
+pub(super) fn rule_option_bool(node: &LintNode, key: &str) -> Option<bool> {
+    node.fields
+        .get("__ruleOptions")?
+        .as_array()?
+        .first()?
+        .get(key)?
+        .as_bool()
+}
+
 pub(super) fn regex_flags(node: &LintNode) -> Option<&str> {
     node.fields
         .get("regex")

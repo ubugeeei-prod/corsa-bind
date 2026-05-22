@@ -66,6 +66,7 @@ export function toNativeNode(
   node: RangedNode,
   includeTypeTexts = true,
   maxDepth = MAX_NATIVE_NODE_DEPTH,
+  includeRuleOptions = true,
 ): NativeLintNode {
   const fields: Record<string, unknown> = {};
   const children: Record<string, NativeLintNode> = {};
@@ -77,14 +78,14 @@ export function toNativeNode(
     }
     if (isNativeChildNode(value)) {
       if (maxDepth > 0) {
-        children[key] = toNativeNode(context, value, includeTypeTexts, maxDepth - 1);
+        children[key] = toNativeNode(context, value, includeTypeTexts, maxDepth - 1, false);
       }
       continue;
     }
     if (Array.isArray(value)) {
       if (maxDepth > 0 && value.every(isNativeChildNode)) {
         childLists[key] = value.map((child) =>
-          toNativeNode(context, child, includeTypeTexts, maxDepth - 1),
+          toNativeNode(context, child, includeTypeTexts, maxDepth - 1, false),
         );
       } else if (value.every(isJsonPrimitive)) {
         fields[key] = value;
@@ -103,6 +104,11 @@ export function toNativeNode(
   const typeAnnotationText = sourceTypeAnnotationText(context, node);
   if (typeAnnotationText) {
     fields.__typeAnnotationText = typeAnnotationText;
+  }
+
+  const options = (context as { options?: unknown }).options;
+  if (includeRuleOptions && Array.isArray(options) && options.length > 0 && isJsonValue(options)) {
+    fields.__ruleOptions = options;
   }
 
   const nativeNode: NativeLintNode = {
@@ -252,6 +258,16 @@ function isRange(value: unknown): value is readonly [number, number] {
 
 function isJsonPrimitive(value: unknown): value is string | number | boolean | null {
   return value === null || ["boolean", "number", "string"].includes(typeof value);
+}
+
+function isJsonValue(value: unknown): boolean {
+  if (isJsonPrimitive(value)) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+  return typeof value === "object" && value !== null && Object.values(value).every(isJsonValue);
 }
 
 function isPrimitiveRecord(
