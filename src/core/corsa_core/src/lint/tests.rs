@@ -241,6 +241,26 @@ fn ignores_unsafe_assignment_to_unknown() {
 }
 
 #[test]
+fn reports_unsafe_return_from_any() {
+    let mut argument = node("Identifier", TextRange::new(55, 60));
+    argument.type_texts = vec!["any".to_owned()];
+    let mut node = node_with_children(
+        "ReturnStatement",
+        TextRange::new(48, 61),
+        [("argument", argument)],
+    );
+    node.fields
+        .insert("__returnTypeTexts".to_owned(), json!(["string"]));
+
+    let diagnostics = registry().run_rule("no-unsafe-return", &node).unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-unsafe-return");
+    assert_eq!(diagnostics[0].message_id, "unsafe");
+    assert_eq!(diagnostics[0].range, TextRange::new(55, 60));
+}
+
+#[test]
 fn reports_promise_reject_string_reason() {
     let diagnostics = registry()
         .run_rule(
@@ -327,6 +347,17 @@ fn respects_array_sort_string_option() {
 }
 
 #[test]
+fn reports_manual_string_starts_with_check() {
+    let diagnostics = registry()
+        .run_rule("prefer-string-starts-ends-with", &starts_with_binary_node())
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "prefer-string-starts-ends-with");
+    assert_eq!(diagnostics[0].message_id, "startsWith");
+}
+
+#[test]
 fn reports_restricted_plus_operands_option_mismatch() {
     let mut node = binary_plus_node("string", "number");
     node.fields.insert(
@@ -369,12 +400,14 @@ fn lists_default_rule_meta() {
             "no-implied-eval",
             "no-mixed-enums",
             "no-unsafe-assignment",
+            "no-unsafe-return",
             "no-unsafe-unary-minus",
             "only-throw-error",
             "prefer-find",
             "prefer-includes",
             "prefer-promise-reject-errors",
             "prefer-regexp-exec",
+            "prefer-string-starts-ends-with",
             "require-array-sort-compare",
             "restrict-plus-operands",
             "use-unknown-in-catch-callback-variable"
@@ -491,6 +524,49 @@ fn promise_member_call_node(method_name: &str, arguments: Vec<LintNode>) -> Lint
         ),
         arguments,
     )
+}
+
+fn starts_with_binary_node() -> LintNode {
+    let left = call_node(
+        node_with_children(
+            "MemberExpression",
+            TextRange::new(0, 12),
+            [
+                (
+                    "object",
+                    node_with_field("Identifier", TextRange::new(0, 4), "name", json!("text")),
+                ),
+                (
+                    "property",
+                    node_with_field(
+                        "Identifier",
+                        TextRange::new(5, 12),
+                        "name",
+                        json!("indexOf"),
+                    ),
+                ),
+            ],
+        ),
+        vec![node_with_field(
+            "Identifier",
+            TextRange::new(13, 19),
+            "name",
+            json!("prefix"),
+        )],
+    );
+    let mut node = node_with_children(
+        "BinaryExpression",
+        TextRange::new(0, 26),
+        [
+            ("left", left),
+            (
+                "right",
+                node_with_field("Literal", TextRange::new(25, 26), "value", json!(0)),
+            ),
+        ],
+    );
+    node.fields.insert("operator".to_owned(), json!("==="));
+    node
 }
 
 fn binary_plus_node(left_type_text: &str, right_type_text: &str) -> LintNode {

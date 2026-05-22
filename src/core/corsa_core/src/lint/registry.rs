@@ -1,10 +1,10 @@
 use super::{
     AwaitThenableRule, LintDiagnostic, LintNode, NoArrayDeleteRule, NoBaseToStringRule,
     NoFloatingPromisesRule, NoForInArrayRule, NoImpliedEvalRule, NoMixedEnumsRule,
-    NoUnsafeAssignmentRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule,
-    PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferRegexpExecRule,
-    RequireArraySortCompareRule, RestrictPlusOperandsRule, RuleContext, RuleMeta, RustLintRule,
-    UseUnknownInCatchCallbackVariableRule,
+    NoUnsafeAssignmentRule, NoUnsafeReturnRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule,
+    PreferFindRule, PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferRegexpExecRule,
+    PreferStringStartsEndsWithRule, RequireArraySortCompareRule, RestrictPlusOperandsRule,
+    RuleContext, RuleMeta, RustLintRule, UseUnknownInCatchCallbackVariableRule,
 };
 
 /// Collection of Rust-authored lint rules addressable by stable rule name.
@@ -36,12 +36,14 @@ impl LintRuleRegistry {
             .with_rule(NoImpliedEvalRule)
             .with_rule(NoMixedEnumsRule)
             .with_rule(NoUnsafeAssignmentRule)
+            .with_rule(NoUnsafeReturnRule)
             .with_rule(NoUnsafeUnaryMinusRule)
             .with_rule(OnlyThrowErrorRule)
             .with_rule(PreferFindRule)
             .with_rule(PreferIncludesRule)
             .with_rule(PreferPromiseRejectErrorsRule)
             .with_rule(PreferRegexpExecRule)
+            .with_rule(PreferStringStartsEndsWithRule)
             .with_rule(RequireArraySortCompareRule)
             .with_rule(RestrictPlusOperandsRule)
             .with_rule(UseUnknownInCatchCallbackVariableRule)

@@ -7,7 +7,7 @@ import type {
 } from "@corsa-bind/napi";
 
 import { createNativeRule } from "./rule_creator";
-import { propertyNamesOfNode, typeTextsAtNode } from "./type_utils";
+import { checkerFor, propertyNamesOfNode, typeAtNode, typeTextsAtNode } from "./type_utils";
 import type { ContextWithParserOptions } from "../types";
 
 type RangedNode = {
@@ -253,6 +253,18 @@ function addHostFacts(
   if (current.type === "CallExpression" && isPromiseExecutorRejectCall(context, current)) {
     fields.__promiseExecutorRejectCall = true;
   }
+  if (current.type === "ReturnStatement") {
+    const returnTypeTexts = returnTypeTextsOfNearestFunction(context, current);
+    if (returnTypeTexts.length > 0) {
+      fields.__returnTypeTexts = returnTypeTexts;
+    }
+  }
+  if (current.type === "ArrowFunctionExpression" && current.body?.type !== "BlockStatement") {
+    const returnTypeTexts = returnTypeTextsOfFunction(context, current);
+    if (returnTypeTexts.length > 0) {
+      fields.__returnTypeTexts = returnTypeTexts;
+    }
+  }
 }
 
 function isPromiseExecutorRejectCall(context: ContextWithParserOptions, node: any): boolean {
@@ -277,6 +289,53 @@ function isPromiseExecutorRejectCall(context: ContextWithParserOptions, node: an
 function nearestFunctionAncestor(context: ContextWithParserOptions, node: any): any {
   const ancestors = (context.sourceCode as any)?.getAncestors?.(node) ?? [];
   return [...ancestors].reverse().find((ancestor: any) => ancestor.type?.includes("Function"));
+}
+
+function returnTypeTextsOfNearestFunction(
+  context: ContextWithParserOptions,
+  node: any,
+): readonly string[] {
+  const owner = nearestFunctionAncestor(context, node);
+  return owner ? returnTypeTextsOfFunction(context, owner) : [];
+}
+
+function returnTypeTextsOfFunction(
+  context: ContextWithParserOptions,
+  node: any,
+): readonly string[] {
+  const explicitAnnotation = node.returnType?.typeAnnotation ?? node.returnType;
+  if (explicitAnnotation) {
+    const text = context.sourceCode.getText(explicitAnnotation);
+    if (text) {
+      return [text];
+    }
+  }
+
+  const checker = checkerFor(context);
+  const type = typeAtNode(context, node);
+  if (!type) {
+    return [];
+  }
+
+  const texts = new Set<string>();
+  for (const signature of checker.getSignaturesOfType(type, 0)) {
+    const returnType = checker.getReturnTypeOfSignature(signature);
+    if (!returnType) {
+      continue;
+    }
+    for (const text of [...(returnType.texts ?? []), checker.typeToString(returnType)]) {
+      if (text) {
+        texts.add(text);
+      }
+    }
+  }
+
+  const resolved = [...texts];
+  return resolved.every(isPermissiveTypeText) ? [] : resolved;
+}
+
+function isPermissiveTypeText(text: string): boolean {
+  return text === "any" || text === "unknown" || text === "never";
 }
 
 function stripChainExpression(node: any): any {

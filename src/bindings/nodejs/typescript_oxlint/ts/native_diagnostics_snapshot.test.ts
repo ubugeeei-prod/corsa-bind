@@ -59,6 +59,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "no-unsafe-return: returning any to string",
+          "diagnostics": [
+            "no-unsafe-return/unsafe@18..23: Unsafe return of an any-typed value.",
+          ],
+        },
+        {
           "caseName": "only-throw-error: throwing a string",
           "diagnostics": [
             "only-throw-error/unexpected@0..13: Only Error-like values should be thrown.",
@@ -86,6 +92,12 @@ describe("native diagnostic snapshots", () => {
           "caseName": "prefer-regexp-exec: string match with non-global regexp",
           "diagnostics": [
             "prefer-regexp-exec/unexpected@0..15: Use a RegExp exec() call instead of String match().",
+          ],
+        },
+        {
+          "caseName": "prefer-string-starts-ends-with: indexOf compared with zero",
+          "diagnostics": [
+            "prefer-string-starts-ends-with/startsWith@0..26: Use startsWith() instead of comparing a prefix manually.",
           ],
         },
         {
@@ -180,6 +192,14 @@ const diagnosticCases = [
     }),
   },
   {
+    ruleName: "no-unsafe-return",
+    scenario: "returning any to string",
+    node: node("ReturnStatement", [11, 24], {
+      fields: { __returnTypeTexts: ["string"] },
+      children: { argument: id("value", [18, 23], ["any"]) },
+    }),
+  },
+  {
     ruleName: "only-throw-error",
     scenario: "throwing a string",
     node: node("ThrowStatement", [0, 13], {
@@ -223,6 +243,17 @@ const diagnosticCases = [
     ruleName: "prefer-regexp-exec",
     scenario: "string match with non-global regexp",
     node: call("match", [0, 15], [node("Literal", [11, 14], { fields: { regex: { flags: "" } } })]),
+  },
+  {
+    ruleName: "prefer-string-starts-ends-with",
+    scenario: "indexOf compared with zero",
+    node: node("BinaryExpression", [0, 26], {
+      fields: { operator: "===" },
+      children: {
+        left: memberCall(id("text", [0, 4]), "indexOf", [0, 20], [id("prefix", [13, 19])]),
+        right: node("Literal", [25, 26], { fields: { value: 0 } }),
+      },
+    }),
   },
   {
     ruleName: "require-array-sort-compare",
