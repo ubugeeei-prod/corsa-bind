@@ -145,7 +145,7 @@ export default defineConfig({
       },
       test: {
         command: noopCommand,
-        dependsOn: ["test_rust", "test_rust_experimental", "test_ts", "examples_smoke"],
+        dependsOn: ["test_rust", "test_rust_experimental", "test_ts", "examples_smoke_ci"],
       },
       test_rust: {
         command: "cargo test --workspace",
@@ -227,6 +227,11 @@ export default defineConfig({
         cwd: "examples",
         dependsOn: ["build"],
       },
+      examples_node_smoke_ci: {
+        command: "pnpm run smoke",
+        cwd: "examples",
+        dependsOn: ["build_ci"],
+      },
       examples_node_real: {
         command: "pnpm run real",
         cwd: "examples",
@@ -247,6 +252,10 @@ export default defineConfig({
       examples_smoke: {
         command: noopCommand,
         dependsOn: ["examples_node_smoke", "examples_rust_smoke"],
+      },
+      examples_smoke_ci: {
+        command: noopCommand,
+        dependsOn: ["examples_node_smoke_ci", "examples_rust_smoke"],
       },
       examples_real: {
         command: noopCommand,
