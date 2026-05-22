@@ -3,6 +3,26 @@ type ValueToken = { readonly type?: string; readonly value?: string };
 type Predicate<T> = (value: T | null | undefined) => boolean;
 type AstNode = Record<string, unknown> & { readonly type?: string };
 type StaticValue = { readonly value: unknown } | null;
+type Position = { readonly line: number; readonly column: number };
+type SourceLocation = { readonly start: Position; readonly end: Position };
+type TokenLike = { readonly type?: string; readonly value?: string; readonly loc?: SourceLocation };
+type SourceCodeLike = {
+  readonly visitorKeys?: Readonly<Record<string, readonly string[]>>;
+  getFirstToken?: (node: unknown, predicate?: (token: TokenLike) => boolean) => TokenLike | null;
+  getText?: (node: unknown) => string;
+  getTokenAfter?: (node: unknown, predicate?: (token: TokenLike) => boolean) => TokenLike | null;
+  getTokenBefore?: (node: unknown, predicate?: (token: TokenLike) => boolean) => TokenLike | null;
+};
+type ScopeLike = {
+  readonly block?: { readonly range?: readonly [number, number] };
+  readonly childScopes?: readonly ScopeLike[];
+  readonly set?: ReadonlyMap<string, unknown>;
+  readonly upper?: ScopeLike | null;
+};
+type HasSideEffectOptions = {
+  readonly considerGetters?: boolean;
+  readonly considerImplicitTypeConversion?: boolean;
+};
 
 export function isNodeOfType(type: string): Predicate<TypedValue>;
 export function isNodeOfType(node: TypedValue | null | undefined, type: string): boolean;
@@ -223,7 +243,7 @@ export const isNotColonToken = not(isColonToken);
 export const isCommaToken = tokenWithValue(",");
 export const isNotCommaToken = not(isCommaToken);
 export const isCommentToken = (token: { readonly type?: string } | null | undefined): boolean =>
-  token?.type === "Block" || token?.type === "Line";
+  token?.type === "Block" || token?.type === "Line" || token?.type === "Shebang";
 export const isNotCommentToken = not(isCommentToken);
 export const isImportKeyword = keywordWithValue("import");
 export const isLogicalOrOperator = tokenWithValue("||");
@@ -263,65 +283,318 @@ export function isParenthesized(
   );
 }
 
-export const findVariable = unsupportedAstUtilsFunction("findVariable");
-export const getFunctionHeadLocation = unsupportedAstUtilsFunction("getFunctionHeadLocation");
-export const getFunctionNameWithKind = unsupportedAstUtilsFunction("getFunctionNameWithKind");
-export const getInnermostScope = unsupportedAstUtilsFunction("getInnermostScope");
-
-export function getPropertyName(node: AstNode | null | undefined): string | null {
-  const property = propertyNodeOf(node);
-  if (!property) {
+export function getInnermostScope(
+  initialScope: ScopeLike | null | undefined,
+  node: { readonly range?: readonly [number, number] } | null | undefined,
+): ScopeLike | null {
+  if (!initialScope) {
     return null;
   }
-  if (!isComputedProperty(node) && property.type === "Identifier") {
-    return stringField(property, "name");
+  if (!node?.range) {
+    return initialScope;
   }
-  if (!isComputedProperty(node) && property.type === "PrivateIdentifier") {
-    const name = stringField(property, "name");
-    return name == null ? null : `#${name}`;
+
+  const location = node.range[0];
+  let scope = initialScope;
+  let found = false;
+  do {
+    found = false;
+    for (const childScope of scope.childScopes ?? []) {
+      const range = childScope.block?.range;
+      if (range && range[0] <= location && location < range[1]) {
+        scope = childScope;
+        found = true;
+        break;
+      }
+    }
+  } while (found);
+
+  return scope;
+}
+
+export function findVariable(
+  initialScope: ScopeLike | null | undefined,
+  nameOrNode: string | ({ readonly name?: string } & { readonly range?: readonly [number, number] }),
+): unknown | null {
+  if (!initialScope) {
+    return null;
   }
-  const staticValue = getStaticValue(property);
-  return staticValue == null ? null : String(staticValue.value);
+
+  const name = typeof nameOrNode === "string" ? nameOrNode : nameOrNode.name;
+  if (!name) {
+    return null;
+  }
+
+  let scope: ScopeLike | null = typeof nameOrNode === "string"
+    ? initialScope
+    : getInnermostScope(initialScope, nameOrNode);
+  while (scope) {
+    const variable = scope.set?.get(name);
+    if (variable != null) {
+      return variable;
+    }
+    scope = scope.upper ?? null;
+  }
+
+  return null;
+}
+
+export function getFunctionHeadLocation(
+  node: AstNode | null | undefined,
+  sourceCode?: SourceCodeLike,
+): SourceLocation | null {
+  if (!node || !sourceCode) {
+    return null;
+  }
+
+  const parent = parentNodeOf(node);
+  let start: Position | undefined;
+  let end: Position | undefined;
+
+  if (node.type === "ArrowFunctionExpression") {
+    const body = childNode(node, "body");
+    const arrowToken = body ? sourceCode.getTokenBefore?.(body, isArrowToken) : null;
+    start = arrowToken?.loc?.start;
+    end = arrowToken?.loc?.end;
+  } else if (
+    parent &&
+    (parent.type === "Property" ||
+      parent.type === "MethodDefinition" ||
+      parent.type === "PropertyDefinition")
+  ) {
+    start = locationOf(parent)?.start;
+    end = getOpeningParenOfParams(node, sourceCode)?.loc?.start;
+  } else {
+    start = locationOf(node)?.start;
+    end = getOpeningParenOfParams(node, sourceCode)?.loc?.start;
+  }
+
+  return start && end ? { start: { ...start }, end: { ...end } } : null;
+}
+
+export function getFunctionNameWithKind(
+  node: AstNode | null | undefined,
+  sourceCode?: SourceCodeLike,
+): string {
+  const parent = node ? parentNodeOf(node) : undefined;
+  if (!node || !parent) {
+    return "";
+  }
+
+  const tokens: string[] = [];
+  const isObjectMethod = parent.type === "Property" && parent.value === node;
+  const isClassMethod = parent.type === "MethodDefinition" && parent.value === node;
+  const isClassFieldMethod = parent.type === "PropertyDefinition" && parent.value === node;
+  const key = childNode(parent, "key");
+
+  if (isClassMethod || isClassFieldMethod) {
+    if (parent.static === true) {
+      tokens.push("static");
+    }
+    if (key?.type === "PrivateIdentifier") {
+      tokens.push("private");
+    }
+  }
+  if (node.async === true) {
+    tokens.push("async");
+  }
+  if (node.generator === true) {
+    tokens.push("generator");
+  }
+
+  if (isObjectMethod || isClassMethod) {
+    if (parent.kind === "constructor") {
+      return "constructor";
+    }
+    if (parent.kind === "get") {
+      tokens.push("getter");
+    } else if (parent.kind === "set") {
+      tokens.push("setter");
+    } else {
+      tokens.push("method");
+    }
+  } else if (isClassFieldMethod) {
+    tokens.push("method");
+  } else {
+    if (node.type === "ArrowFunctionExpression") {
+      tokens.push("arrow");
+    }
+    tokens.push("function");
+  }
+
+  if (isObjectMethod || isClassMethod || isClassFieldMethod) {
+    if (key?.type === "PrivateIdentifier") {
+      const name = stringField(key, "name");
+      if (name) {
+        tokens.push(`#${name}`);
+      }
+    } else {
+      const name = getPropertyName(parent);
+      if (name) {
+        tokens.push(`'${name}'`);
+      } else if (sourceCode && key) {
+        const keyText = sourceCode.getText?.(key);
+        if (keyText && !keyText.includes("\n")) {
+          tokens.push(`[${keyText}]`);
+        }
+      }
+    }
+  } else {
+    const id = childNode(node, "id");
+    const variableId = childNode(parent, "id");
+    const assignmentLeft = childNode(parent, "left");
+    if (id) {
+      const name = stringField(id, "name");
+      if (name) {
+        tokens.push(`'${name}'`);
+      }
+    } else if (parent.type === "VariableDeclarator" && variableId?.type === "Identifier") {
+      const name = stringField(variableId, "name");
+      if (name) {
+        tokens.push(`'${name}'`);
+      }
+    } else if (
+      (parent.type === "AssignmentExpression" || parent.type === "AssignmentPattern") &&
+      assignmentLeft?.type === "Identifier"
+    ) {
+      const name = stringField(assignmentLeft, "name");
+      if (name) {
+        tokens.push(`'${name}'`);
+      }
+    } else if (parent.type === "ExportDefaultDeclaration" && parent.declaration === node) {
+      tokens.push("'default'");
+    }
+  }
+
+  return tokens.join(" ");
+}
+
+export function getPropertyName(node: AstNode | null | undefined): string | null {
+  if (!node) {
+    return null;
+  }
+
+  switch (node.type) {
+    case "MemberExpression": {
+      const property = childNode(node, "property");
+      if (!property) {
+        return null;
+      }
+      if (isComputedProperty(node)) {
+        return getStringIfConstant(property);
+      }
+      return property.type === "PrivateIdentifier" ? null : stringField(property, "name");
+    }
+    case "MethodDefinition":
+    case "Property":
+    case "PropertyDefinition": {
+      const key = childNode(node, "key");
+      if (!key) {
+        return null;
+      }
+      if (isComputedProperty(node)) {
+        return getStringIfConstant(key);
+      }
+      if (key.type === "Literal") {
+        return String((key as { readonly value?: unknown }).value);
+      }
+      return key.type === "PrivateIdentifier" ? null : stringField(key, "name");
+    }
+    default: {
+      const property = propertyNodeOf(node);
+      if (!property) {
+        return null;
+      }
+      if (!isComputedProperty(node) && property.type === "Identifier") {
+        return stringField(property, "name");
+      }
+      if (!isComputedProperty(node) && property.type === "PrivateIdentifier") {
+        return null;
+      }
+      const staticValue = getStaticValue(property);
+      return staticValue == null ? null : String(staticValue.value);
+    }
+  }
 }
 
 export function getStaticValue(node: AstNode | null | undefined): StaticValue {
   if (!node) {
     return null;
   }
-  switch (node.type) {
-    case "Literal":
-      return { value: (node as { readonly value?: unknown }).value };
-    case "TemplateLiteral":
-      return staticTemplateValue(node);
-    case "UnaryExpression":
-      return staticUnaryValue(node);
-    case "BinaryExpression":
-      return staticBinaryValue(node);
-    case "LogicalExpression":
-      return staticLogicalValue(node);
-    case "ConditionalExpression":
-      return staticConditionalValue(node);
-    case "ArrayExpression":
-      return staticArrayValue(node);
-    case "ObjectExpression":
-      return staticObjectValue(node);
-    default:
-      return null;
+  try {
+    switch (node.type) {
+      case "ArrayExpression":
+        return staticArrayValue(node);
+      case "BinaryExpression":
+        return staticBinaryValue(node);
+      case "ChainExpression":
+      case "TSAsExpression":
+      case "TSNonNullExpression":
+      case "TSTypeAssertion":
+        return getStaticValue(childNode(node, "expression"));
+      case "ConditionalExpression":
+        return staticConditionalValue(node);
+      case "Identifier":
+        return staticIdentifierValue(node);
+      case "Literal":
+        return { value: (node as { readonly value?: unknown }).value };
+      case "LogicalExpression":
+        return staticLogicalValue(node);
+      case "ObjectExpression":
+        return staticObjectValue(node);
+      case "SequenceExpression":
+        return staticSequenceValue(node);
+      case "TemplateLiteral":
+        return staticTemplateValue(node);
+      case "UnaryExpression":
+        return staticUnaryValue(node);
+      default:
+        return null;
+    }
+  } catch {
+    return null;
   }
 }
 
 export function getStringIfConstant(node: AstNode | null | undefined): string | null {
+  if (node?.type === "Literal" && (node as { readonly value?: unknown }).value === null) {
+    const regex = (node as { readonly regex?: { readonly pattern?: string; readonly flags?: string } })
+      .regex;
+    if (regex?.pattern != null && regex.flags != null) {
+      return `/${regex.pattern}/${regex.flags}`;
+    }
+    const bigint = (node as { readonly bigint?: unknown }).bigint;
+    if (typeof bigint === "string") {
+      return bigint;
+    }
+  }
   const staticValue = getStaticValue(node);
-  return staticValue == null ? null : String(staticValue.value);
+  if (staticValue == null) {
+    return null;
+  }
+  try {
+    return String(staticValue.value);
+  } catch {
+    return null;
+  }
 }
 
-export function hasSideEffect(node: AstNode | null | undefined): boolean {
-  return hasSideEffectNode(node, new WeakSet<object>());
+export function hasSideEffect(
+  node: AstNode | null | undefined,
+  sourceCode?: SourceCodeLike,
+  options: HasSideEffectOptions = {},
+): boolean {
+  return hasSideEffectNode(node, new WeakSet<object>(), sourceCode?.visitorKeys, {
+    considerGetters: options.considerGetters === true,
+    considerImplicitTypeConversion: options.considerImplicitTypeConversion === true,
+  });
 }
 
 function hasSideEffectNode(
   node: AstNode | null | undefined,
   seen: WeakSet<object>,
+  visitorKeys: Readonly<Record<string, readonly string[]>> | undefined,
+  options: Required<HasSideEffectOptions>,
 ): boolean {
   if (!node) {
     return false;
@@ -333,16 +606,23 @@ function hasSideEffectNode(
   if (isSideEffectNode(node)) {
     return true;
   }
-  for (const [key, value] of Object.entries(node)) {
-    if (key === "parent") {
-      continue;
-    }
-    if (isAstNode(value) && hasSideEffectNode(value, seen)) {
+  if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
+    return false;
+  }
+  if (isImplicitTypeConversionSideEffectNode(node, options)) {
+    return true;
+  }
+  if (options.considerGetters && node.type === "MemberExpression") {
+    return true;
+  }
+  for (const key of astChildKeys(node, visitorKeys)) {
+    const value = node[key];
+    if (isAstNode(value) && hasSideEffectNode(value, seen, visitorKeys, options)) {
       return true;
     }
     if (
       Array.isArray(value) &&
-      value.some((item) => isAstNode(item) && hasSideEffectNode(item, seen))
+      value.some((item) => isAstNode(item) && hasSideEffectNode(item, seen, visitorKeys, options))
     ) {
       return true;
     }
@@ -351,16 +631,49 @@ function hasSideEffectNode(
 }
 
 export class PatternMatcher {
-  constructor(..._args: unknown[]) {
-    throw unsupportedAstUtilsError("PatternMatcher");
+  constructor(pattern: RegExp, options: { readonly escaped?: boolean } = {}) {
+    if (!(pattern instanceof RegExp)) {
+      throw new TypeError("'pattern' should be a RegExp instance.");
+    }
+    if (!pattern.flags.includes("g")) {
+      throw new Error("'pattern' should contains 'g' flag.");
+    }
+
+    patternMatcherInternal.set(this, {
+      escaped: options.escaped === true,
+      pattern: new RegExp(pattern.source, pattern.flags),
+    });
   }
 
-  execAll(..._args: unknown[]): never {
-    throw unsupportedAstUtilsError("PatternMatcher.execAll");
+  *execAll(str: string): IterableIterator<RegExpExecArray> {
+    const state = patternMatcherInternal.get(this);
+    if (!state) {
+      return;
+    }
+
+    let match: RegExpExecArray | null = null;
+    let lastIndex = 0;
+    state.pattern.lastIndex = 0;
+    while ((match = state.pattern.exec(str)) != null) {
+      if (state.escaped || !isEscaped(str, match.index)) {
+        lastIndex = state.pattern.lastIndex;
+        yield match;
+        state.pattern.lastIndex = lastIndex;
+      }
+    }
   }
 
-  test(..._args: unknown[]): never {
-    throw unsupportedAstUtilsError("PatternMatcher.test");
+  test(str: string): boolean {
+    return this.execAll(str).next().done !== true;
+  }
+
+  [Symbol.replace](
+    str: string,
+    replacer: string | ((substring: string, ...args: unknown[]) => string),
+  ): string {
+    return typeof replacer === "function"
+      ? replacePatternWithFunction(this, String(str), replacer)
+      : replacePatternWithString(this, String(str), String(replacer));
   }
 }
 
@@ -475,6 +788,39 @@ function isComputedProperty(node: AstNode | null | undefined): boolean {
   return (node as { readonly computed?: boolean } | null | undefined)?.computed === true;
 }
 
+function parentNodeOf(node: AstNode): AstNode | undefined {
+  const parent = node.parent;
+  return isAstNode(parent) ? parent : undefined;
+}
+
+function locationOf(node: AstNode): SourceLocation | undefined {
+  const loc = node.loc;
+  return isSourceLocation(loc) ? loc : undefined;
+}
+
+function isSourceLocation(value: unknown): value is SourceLocation {
+  return (
+    isRecord(value) &&
+    isPosition(value.start) &&
+    isPosition(value.end)
+  );
+}
+
+function isPosition(value: unknown): value is Position {
+  return (
+    isRecord(value) &&
+    typeof value.line === "number" &&
+    typeof value.column === "number"
+  );
+}
+
+function getOpeningParenOfParams(node: AstNode, sourceCode: SourceCodeLike): TokenLike | null {
+  const id = childNode(node, "id");
+  return id
+    ? sourceCode.getTokenAfter?.(id, isOpeningParenToken) ?? null
+    : sourceCode.getFirstToken?.(node, isOpeningParenToken) ?? null;
+}
+
 function staticTemplateValue(node: AstNode): StaticValue {
   const quasis = arrayField<AstNode>(node, "quasis");
   const expressions = arrayField<AstNode>(node, "expressions");
@@ -538,6 +884,12 @@ function staticBinaryValue(node: AstNode): StaticValue {
       return { value: (left.value as number) > (right.value as number) };
     case ">=":
       return { value: (left.value as number) >= (right.value as number) };
+    case "<<":
+      return { value: (left.value as number) << (right.value as number) };
+    case ">>":
+      return { value: (left.value as number) >> (right.value as number) };
+    case ">>>":
+      return { value: (left.value as number) >>> (right.value as number) };
     case "+":
       return { value: (left.value as any) + (right.value as any) };
     case "-":
@@ -610,6 +962,14 @@ function staticObjectValue(node: AstNode): StaticValue {
   const value: Record<string, unknown> = {};
   for (const property of arrayField<AstNode>(node, "properties")) {
     if (property.type === "SpreadElement") {
+      const argument = getStaticValue(childNode(property, "argument"));
+      if (argument == null || !isRecord(argument.value)) {
+        return null;
+      }
+      Object.assign(value, argument.value);
+      continue;
+    }
+    if (property.kind != null && property.kind !== "init") {
       return null;
     }
     const name = getPropertyName(property);
@@ -620,6 +980,25 @@ function staticObjectValue(node: AstNode): StaticValue {
     value[name] = propertyValue.value;
   }
   return { value };
+}
+
+function staticSequenceValue(node: AstNode): StaticValue {
+  const expressions = arrayField<AstNode>(node, "expressions");
+  const last = expressions.at(-1);
+  return last ? getStaticValue(last) : null;
+}
+
+function staticIdentifierValue(node: AstNode): StaticValue {
+  switch (stringField(node, "name")) {
+    case "Infinity":
+      return { value: Infinity };
+    case "NaN":
+      return { value: NaN };
+    case "undefined":
+      return { value: undefined };
+    default:
+      return null;
+  }
 }
 
 function cookedTemplateText(node: AstNode | undefined): string {
@@ -654,15 +1033,162 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isSideEffectNode(node: AstNode): boolean {
-  return [
-    "AssignmentExpression",
-    "AwaitExpression",
-    "CallExpression",
-    "NewExpression",
-    "TaggedTemplateExpression",
-    "UpdateExpression",
-    "YieldExpression",
-  ].includes(node.type ?? "");
+  if (
+    node.type === "AssignmentExpression" ||
+    node.type === "AwaitExpression" ||
+    node.type === "CallExpression" ||
+    node.type === "ImportExpression" ||
+    node.type === "NewExpression" ||
+    node.type === "UpdateExpression" ||
+    node.type === "YieldExpression"
+  ) {
+    return true;
+  }
+  return node.type === "UnaryExpression" && stringField(node, "operator") === "delete";
+}
+
+const typeConversionBinaryOps = new Set([
+  "==",
+  "!=",
+  "<",
+  "<=",
+  ">",
+  ">=",
+  "<<",
+  ">>",
+  ">>>",
+  "+",
+  "-",
+  "*",
+  "/",
+  "%",
+  "|",
+  "^",
+  "&",
+  "in",
+]);
+const typeConversionUnaryOps = new Set(["-", "+", "!", "~"]);
+const skippedAstChildKeys = new Set([
+  "comments",
+  "loc",
+  "parent",
+  "range",
+  "tokens",
+]);
+
+function isImplicitTypeConversionSideEffectNode(
+  node: AstNode,
+  options: Required<HasSideEffectOptions>,
+): boolean {
+  if (!options.considerImplicitTypeConversion) {
+    return false;
+  }
+
+  if (
+    node.type === "BinaryExpression" &&
+    typeConversionBinaryOps.has(stringField(node, "operator") ?? "")
+  ) {
+    return childNode(node, "left")?.type !== "Literal" || childNode(node, "right")?.type !== "Literal";
+  }
+
+  if (
+    (node.type === "MemberExpression" ||
+      node.type === "MethodDefinition" ||
+      node.type === "Property" ||
+      node.type === "PropertyDefinition") &&
+    isComputedProperty(node)
+  ) {
+    return childNode(node, node.type === "MemberExpression" ? "property" : "key")?.type !== "Literal";
+  }
+
+  return (
+    node.type === "UnaryExpression" &&
+    typeConversionUnaryOps.has(stringField(node, "operator") ?? "") &&
+    childNode(node, "argument")?.type !== "Literal"
+  );
+}
+
+function astChildKeys(
+  node: AstNode,
+  visitorKeys: Readonly<Record<string, readonly string[]>> | undefined,
+): readonly string[] {
+  const configured = node.type ? visitorKeys?.[node.type] : undefined;
+  if (configured) {
+    return configured;
+  }
+  return Object.keys(node).filter((key) => !skippedAstChildKeys.has(key));
+}
+
+const patternMatcherInternal = new WeakMap<
+  PatternMatcher,
+  { readonly escaped: boolean; readonly pattern: RegExp }
+>();
+const replacementPlaceholder = /\$(?:[$&`']|[1-9][0-9]?)/gu;
+
+function isEscaped(str: string, index: number): boolean {
+  let escaped = false;
+  for (let cursor = index - 1; cursor >= 0 && str.charCodeAt(cursor) === 0x5c; cursor -= 1) {
+    escaped = !escaped;
+  }
+  return escaped;
+}
+
+function replacePatternWithString(
+  matcher: PatternMatcher,
+  str: string,
+  replacement: string,
+): string {
+  const chunks: string[] = [];
+  let index = 0;
+
+  for (const match of matcher.execAll(str)) {
+    chunks.push(str.slice(index, match.index));
+    chunks.push(
+      replacement.replace(replacementPlaceholder, (key) =>
+        replacementForPlaceholder(key, str, match),
+      ),
+    );
+    index = match.index + match[0].length;
+  }
+  chunks.push(str.slice(index));
+
+  return chunks.join("");
+}
+
+function replacementForPlaceholder(key: string, str: string, match: RegExpExecArray): string {
+  switch (key) {
+    case "$$":
+      return "$";
+    case "$&":
+      return match[0];
+    case "$`":
+      return str.slice(0, match.index);
+    case "$'":
+      return str.slice(match.index + match[0].length);
+    default: {
+      const index = Number(key.slice(1));
+      const capture = Number.isNaN(index) ? undefined : match[index];
+      return capture ?? key;
+    }
+  }
+}
+
+function replacePatternWithFunction(
+  matcher: PatternMatcher,
+  str: string,
+  replace: (substring: string, ...args: unknown[]) => string,
+): string {
+  const chunks: string[] = [];
+  let index = 0;
+
+  for (const match of matcher.execAll(str)) {
+    chunks.push(str.slice(index, match.index));
+    chunks.push(String(replace(...match, match.index, match.input)));
+    index = match.index + match[0].length;
+  }
+  chunks.push(str.slice(index));
+
+  return chunks.join("");
 }
 
 function tokenWithValue(expected: string, type = PUNCTUATOR) {

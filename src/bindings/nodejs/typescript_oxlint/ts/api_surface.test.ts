@@ -64,7 +64,6 @@ describe("api surface", () => {
   });
 
   it("marks ESLint-only utility exports as unsupported", () => {
-    expect(() => astUtilsEntry.findVariable()).toThrow(/ASTUtils\.findVariable/);
     expect(() => new astUtilsEntry.ReferenceTracker()).toThrow(/ASTUtils\.ReferenceTracker/);
     expect(() => new main.TSESLint.Linter()).toThrow(/TSESLint\.Linter/);
   });
@@ -129,8 +128,142 @@ describe("api surface", () => {
     expect(astUtilsEntry.getStaticValue(binary)).toEqual(
       upstream.ASTUtils.getStaticValue(binary),
     );
-    expect(astUtilsEntry.hasSideEffect({ type: "CallExpression" })).toBe(true);
-    expect(astUtilsEntry.hasSideEffect({ type: "Literal", value: 1 })).toBe(false);
+    expect(
+      astUtilsEntry.getStringIfConstant({
+        type: "Literal",
+        value: null,
+        regex: { pattern: "a+", flags: "u" },
+      }),
+    ).toBe(upstream.ASTUtils.getStringIfConstant({
+      type: "Literal",
+      value: null,
+      regex: { pattern: "a+", flags: "u" },
+    }));
+    expect(
+      astUtilsEntry.getPropertyName({
+        type: "PropertyDefinition",
+        computed: false,
+        key: { type: "PrivateIdentifier", name: "value" },
+      }),
+    ).toBe(upstream.ASTUtils.getPropertyName({
+      type: "PropertyDefinition",
+      computed: false,
+      key: { type: "PrivateIdentifier", name: "value" },
+    }));
+  });
+
+  it("matches scope and function ASTUtils helpers for lightweight inputs", async () => {
+    const upstream =
+      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+    const innerVariable = { name: "value" };
+    const outerScope = {
+      block: { range: [0, 100] },
+      childScopes: [] as unknown[],
+      set: new Map<string, unknown>([["outer", { name: "outer" }]]),
+      upper: null,
+    };
+    const innerScope = {
+      block: { range: [5, 20] },
+      childScopes: [],
+      set: new Map<string, unknown>([["value", innerVariable]]),
+      upper: outerScope,
+    };
+    outerScope.childScopes = [innerScope];
+    const identifier = { type: "Identifier", name: "value", range: [10, 15] };
+
+    expect(astUtilsEntry.getInnermostScope(outerScope, identifier)).toBe(
+      upstream.ASTUtils.getInnermostScope(outerScope, identifier),
+    );
+    expect(astUtilsEntry.findVariable(outerScope, identifier)).toBe(
+      upstream.ASTUtils.findVariable(outerScope, identifier),
+    );
+
+    const functionNode = {
+      type: "ArrowFunctionExpression",
+      async: true,
+      generator: false,
+      body: { type: "Identifier" },
+    };
+    const functionParent = {
+      type: "VariableDeclarator",
+      id: { type: "Identifier", name: "task" },
+      init: functionNode,
+    };
+    Object.assign(functionNode, { parent: functionParent });
+    const arrowToken = {
+      type: "Punctuator",
+      value: "=>",
+      loc: { start: { line: 1, column: 10 }, end: { line: 1, column: 12 } },
+    };
+    const sourceCode = {
+      getTokenBefore: () => arrowToken,
+    };
+
+    expect(astUtilsEntry.getFunctionNameWithKind(functionNode)).toBe(
+      upstream.ASTUtils.getFunctionNameWithKind(functionNode),
+    );
+    expect(astUtilsEntry.getFunctionHeadLocation(functionNode, sourceCode)).toEqual(
+      upstream.ASTUtils.getFunctionHeadLocation(functionNode, sourceCode),
+    );
+  });
+
+  it("matches PatternMatcher and side-effect helper behavior", async () => {
+    const upstream =
+      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+    const input = "foo \\foo foo";
+    const localMatcher = new astUtilsEntry.PatternMatcher(/foo/g);
+    const upstreamMatcher = new upstream.ASTUtils.PatternMatcher(/foo/g);
+
+    expect([...localMatcher.execAll(input)].map((match) => match.index)).toEqual(
+      [...upstreamMatcher.execAll(input)].map((match) => match.index),
+    );
+    expect(localMatcher.test("\\foo")).toBe(upstreamMatcher.test("\\foo"));
+    expect(input.replace(localMatcher, "bar")).toBe(input.replace(upstreamMatcher, "bar"));
+
+    const sourceCode = { visitorKeys: {} };
+    expect(astUtilsEntry.hasSideEffect({ type: "CallExpression" }, sourceCode)).toBe(
+      upstream.ASTUtils.hasSideEffect({ type: "CallExpression" }, sourceCode),
+    );
+    expect(
+      astUtilsEntry.hasSideEffect(
+        {
+          type: "MemberExpression",
+          computed: false,
+          object: { type: "Identifier", name: "item" },
+          property: { type: "Identifier", name: "value" },
+        },
+        sourceCode,
+        { considerGetters: true },
+      ),
+    ).toBe(
+      upstream.ASTUtils.hasSideEffect(
+        {
+          type: "MemberExpression",
+          computed: false,
+          object: { type: "Identifier", name: "item" },
+          property: { type: "Identifier", name: "value" },
+        },
+        sourceCode,
+        { considerGetters: true },
+      ),
+    );
+    expect(
+      astUtilsEntry.hasSideEffect(
+        {
+          type: "ArrowFunctionExpression",
+          body: { type: "CallExpression" },
+        },
+        sourceCode,
+      ),
+    ).toBe(
+      upstream.ASTUtils.hasSideEffect(
+        {
+          type: "ArrowFunctionExpression",
+          body: { type: "CallExpression" },
+        },
+        sourceCode,
+      ),
+    );
   });
 
   it("re-exports the native rules surface from both entrypoints", () => {
