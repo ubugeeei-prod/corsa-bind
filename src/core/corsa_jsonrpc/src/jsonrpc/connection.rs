@@ -247,7 +247,13 @@ impl JsonRpcConnection {
         let read_task = match thread::Builder::new()
             .name("corsa-jsonrpc-reader".into())
             .spawn(move || {
+                let panic_inner = Arc::clone(&read_inner);
                 let result = catch_unwind(AssertUnwindSafe(|| read_inner.read_loop(reader)));
+                if result.is_err() {
+                    panic_inner.fail_pending(TsgoError::Join(CompactString::from(
+                        "jsonrpc reader thread panicked",
+                    )));
+                }
                 let _ = read_done_tx.send(result);
             }) {
             Ok(task) => task,
