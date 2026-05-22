@@ -3,9 +3,9 @@ use super::{
     NoFloatingPromisesRule, NoForInArrayRule, NoImpliedEvalRule, NoMeaninglessVoidOperatorRule,
     NoMixedEnumsRule, NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeMemberAccessRule,
     NoUnsafeReturnRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule,
-    PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferRegexpExecRule,
-    PreferStringStartsEndsWithRule, RequireArraySortCompareRule, RestrictPlusOperandsRule,
-    RestrictTemplateExpressionsRule, RuleContext, RuleMeta, RustLintRule,
+    PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferReduceTypeParameterRule,
+    PreferRegexpExecRule, PreferStringStartsEndsWithRule, RequireArraySortCompareRule,
+    RestrictPlusOperandsRule, RestrictTemplateExpressionsRule, RuleContext, RuleMeta, RustLintRule,
     UseUnknownInCatchCallbackVariableRule,
 };
 
@@ -47,6 +47,7 @@ impl LintRuleRegistry {
             .with_rule(PreferFindRule)
             .with_rule(PreferIncludesRule)
             .with_rule(PreferPromiseRejectErrorsRule)
+            .with_rule(PreferReduceTypeParameterRule)
             .with_rule(PreferRegexpExecRule)
             .with_rule(PreferStringStartsEndsWithRule)
             .with_rule(RequireArraySortCompareRule)

@@ -107,6 +107,12 @@ describe("native diagnostic snapshots", () => {
           ],
         },
         {
+          "caseName": "prefer-reduce-type-parameter: reduce initial value asserted as array",
+          "diagnostics": [
+            "prefer-reduce-type-parameter/preferTypeParameter@42..56: Unnecessary assertion: Array#reduce accepts a type parameter for the default value. | suggestions moveTypeParameter@44..56=><empty>,13..13=><number[]>: Move the assertion type to the Array#reduce type parameter.",
+          ],
+        },
+        {
           "caseName": "prefer-regexp-exec: string match with non-global regexp",
           "diagnostics": [
             "prefer-regexp-exec/unexpected@0..15: Use a RegExp exec() call instead of String match().",
@@ -291,6 +297,17 @@ const diagnosticCases = [
       [0, 23],
       [node("Literal", [15, 21], { fields: { value: "boom" } })],
     ),
+  },
+  {
+    ruleName: "prefer-reduce-type-parameter",
+    scenario: "reduce initial value asserted as array",
+    node: memberCall(id("values", [0, 6], ["number[]"]), "reduce", [0, 57], [
+      node("ArrowFunctionExpression", [14, 38]),
+      node("TSAsExpression", [42, 56], {
+        fields: { __typeAnnotationText: "number[]" },
+        children: { expression: node("ArrayExpression", [42, 44]) },
+      }),
+    ]),
   },
   {
     ruleName: "prefer-regexp-exec",
