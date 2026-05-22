@@ -205,6 +205,17 @@ describe("corsa-oxlint native rules", () => {
     );
   });
 
+  integrationCase("runs restrict-template-expressions through RuleTester", () => {
+    createTester().run(
+      "restrict-template-expressions",
+      typescriptOxlintRules["restrict-template-expressions"] as never,
+      {
+        valid: [{ code: "const label = `${1}-${true}`;" }],
+        invalid: [{ code: "const label = `${{ value: 1 }}`;", errors: 1 }],
+      },
+    );
+  });
+
   integrationCase("runs use-unknown-in-catch-callback-variable through RuleTester", () => {
     createTester().run(
       "use-unknown-in-catch-callback-variable",

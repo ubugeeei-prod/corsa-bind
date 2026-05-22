@@ -18,6 +18,7 @@ import { preferRegexpExecRule } from "./prefer_regexp_exec";
 import { preferStringStartsEndsWithRule } from "./prefer_string_starts_ends_with";
 import { requireArraySortCompareRule } from "./require_array_sort_compare";
 import { restrictPlusOperandsRule } from "./restrict_plus_operands";
+import { restrictTemplateExpressionsRule } from "./restrict_template_expressions";
 import { useUnknownInCatchCallbackVariableRule } from "./use_unknown_in_catch_callback_variable";
 
 export const implementedNativeRuleNames = [
@@ -39,6 +40,7 @@ export const implementedNativeRuleNames = [
   "prefer-string-starts-ends-with",
   "require-array-sort-compare",
   "restrict-plus-operands",
+  "restrict-template-expressions",
   "use-unknown-in-catch-callback-variable",
 ] as const;
 
@@ -77,7 +79,6 @@ export const pendingNativeRuleNames = [
   "promise-function-async",
   "related-getter-setter-pairs",
   "require-await",
-  "restrict-template-expressions",
   "return-await",
   "strict-boolean-expressions",
   "strict-void-return",
@@ -104,6 +105,7 @@ export const typescriptOxlintRules = Object.freeze({
   "prefer-string-starts-ends-with": preferStringStartsEndsWithRule,
   "require-array-sort-compare": requireArraySortCompareRule,
   "restrict-plus-operands": restrictPlusOperandsRule,
+  "restrict-template-expressions": restrictTemplateExpressionsRule,
   "use-unknown-in-catch-callback-variable": useUnknownInCatchCallbackVariableRule,
 });
 
