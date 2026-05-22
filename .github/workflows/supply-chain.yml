@@ -1,7 +1,6 @@
 name: Supply Chain
 
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -14,7 +13,7 @@ permissions:
 
 concurrency:
   group: supply-chain-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   cargo-deny:
