@@ -50,6 +50,25 @@ describe("api surface", () => {
     expect(eslintUtilsEntry.ESLintUtils.getParserServices).toBe(main.getParserServices);
   });
 
+  it("tracks the pinned typescript-eslint utility namespace keys", async () => {
+    const upstream =
+      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+
+    expectMissingKeys("root", main, upstream, ["__esModule", "default", "module.exports"]);
+    expectMissingKeys("AST_NODE_TYPES", main.AST_NODE_TYPES, upstream.AST_NODE_TYPES);
+    expectMissingKeys("AST_TOKEN_TYPES", main.AST_TOKEN_TYPES, upstream.AST_TOKEN_TYPES);
+    expectMissingKeys("ASTUtils", astUtilsEntry, upstream.ASTUtils);
+    expectMissingKeys("ESLintUtils", eslintUtilsEntry.ESLintUtils, upstream.ESLintUtils);
+    expectMissingKeys("TSESLint", tsEslintEntry.TSESLint, upstream.TSESLint);
+    expectMissingKeys("TSUtils", tsUtilsEntry.TSUtils, upstream.TSUtils);
+  });
+
+  it("marks ESLint-only utility exports as unsupported", () => {
+    expect(() => astUtilsEntry.findVariable()).toThrow(/ASTUtils\.findVariable/);
+    expect(() => new astUtilsEntry.ReferenceTracker()).toThrow(/ASTUtils\.ReferenceTracker/);
+    expect(() => new main.TSESLint.Linter()).toThrow(/TSESLint\.Linter/);
+  });
+
   it("supports typescript-eslint-style ASTUtils predicate factories", () => {
     const identifier = { type: "Identifier", name: "value" };
     const optionalCall = { type: "CallExpression", optional: true };
@@ -87,3 +106,17 @@ describe("api surface", () => {
     ]);
   });
 });
+
+function expectMissingKeys(
+  label: string,
+  local: Record<string, unknown>,
+  upstream: Record<string, unknown>,
+  ignored: readonly string[] = [],
+): void {
+  const localKeys = new Set(Object.keys(local));
+  const ignoredKeys = new Set(ignored);
+  const missing = Object.keys(upstream)
+    .filter((key) => !ignoredKeys.has(key))
+    .filter((key) => !localKeys.has(key));
+  expect(missing, `${label} missing keys`).toEqual([]);
+}
