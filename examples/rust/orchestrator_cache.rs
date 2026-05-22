@@ -4,6 +4,7 @@ use std::{sync::Arc, time::Duration};
 
 use corsa::{
     api::{ApiMode, ApiProfile, UpdateSnapshotParams},
+    fast::compact_format,
     orchestrator::ApiOrchestrator,
     runtime::block_on,
 };
@@ -53,7 +54,17 @@ fn main() -> Result<(), corsa::TsgoError> {
                 let echoed = client
                     .raw_json_request("echo", json!({ "value": value }))
                     .await?;
-                Ok::<_, corsa::TsgoError>(echoed["value"].as_u64().unwrap() as u32)
+                let Some(echoed_value) = echoed.get("value").and_then(Value::as_u64) else {
+                    return Err(corsa::TsgoError::Protocol(compact_format(format_args!(
+                        "echo response did not contain a numeric `value`: {echoed}"
+                    ))));
+                };
+                let echoed_value = u32::try_from(echoed_value).map_err(|_| {
+                    corsa::TsgoError::Protocol(compact_format(format_args!(
+                        "echo response value is outside u32 range: {echoed_value}"
+                    )))
+                })?;
+                Ok::<_, corsa::TsgoError>(echoed_value)
             })
             .await?;
         let stats = orchestrator.stats();

@@ -18,6 +18,18 @@ impl Stats {
     pub fn from_samples(mut samples: SmallVec<[Duration; 32]>) -> Self {
         samples.sort_unstable();
         let sample_count = samples.len();
+        if sample_count == 0 {
+            return Self {
+                sample_count,
+                min: Duration::ZERO,
+                max: Duration::ZERO,
+                mean: Duration::ZERO,
+                median: Duration::ZERO,
+                p95: Duration::ZERO,
+                p99: Duration::ZERO,
+                stddev: Duration::ZERO,
+            };
+        }
         let min = samples[0];
         let max = samples[samples.len() - 1];
         let median = samples[samples.len() / 2];
@@ -124,5 +136,13 @@ mod tests {
         assert_eq!(stats.max_ms(), 9.0);
         assert!(stats.stddev_ms() > 0.0);
         assert!(stats.cv_percent() > 0.0);
+    }
+
+    #[test]
+    fn stats_handle_empty_samples() {
+        let stats = Stats::from_samples(SmallVec::<[Duration; 32]>::new());
+        assert_eq!(stats.sample_count(), 0);
+        assert_eq!(stats.median_ms(), 0.0);
+        assert_eq!(stats.p95_ms(), 0.0);
     }
 }
