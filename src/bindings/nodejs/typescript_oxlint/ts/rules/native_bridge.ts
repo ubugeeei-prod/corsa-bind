@@ -110,6 +110,9 @@ export function toNativeNode(
   if (includeRuleOptions && Array.isArray(options) && options.length > 0 && isJsonValue(options)) {
     fields.__ruleOptions = options;
   }
+  if (includeRuleOptions) {
+    addHostFacts(context, node, fields);
+  }
 
   const nativeNode: NativeLintNode = {
     kind: node.type,
@@ -236,6 +239,57 @@ function oxlintRange(range: NativeLintRange): [number, number] {
 
 function sameRange(range: readonly [number, number], expected: NativeLintRange): boolean {
   return range[0] === expected.start && range[1] === expected.end;
+}
+
+function addHostFacts(
+  context: ContextWithParserOptions,
+  node: RangedNode,
+  fields: Record<string, unknown>,
+): void {
+  const current = node as any;
+  if (current.type === "ExpressionStatement") {
+    fields.__nearestFunctionAsync = nearestFunctionAncestor(context, current)?.async === true;
+  }
+  if (current.type === "CallExpression" && isPromiseExecutorRejectCall(context, current)) {
+    fields.__promiseExecutorRejectCall = true;
+  }
+}
+
+function isPromiseExecutorRejectCall(context: ContextWithParserOptions, node: any): boolean {
+  const callee = stripChainExpression(node.callee);
+  if (callee?.type !== "Identifier") {
+    return false;
+  }
+  const nearestFunction = nearestFunctionAncestor(context, node);
+  const rejectParam = nearestFunction?.params?.[1];
+  if (!rejectParam || rejectParam.type !== "Identifier" || rejectParam.name !== callee.name) {
+    return false;
+  }
+  const promiseConstructor = stripChainExpression(nearestFunction.parent?.parent);
+  return (
+    (nearestFunction.parent?.type === "NewExpression" &&
+      isIdentifierNamed(nearestFunction.parent.callee, "Promise")) ||
+    (promiseConstructor?.type === "NewExpression" &&
+      isIdentifierNamed(promiseConstructor.callee, "Promise"))
+  );
+}
+
+function nearestFunctionAncestor(context: ContextWithParserOptions, node: any): any {
+  const ancestors = (context.sourceCode as any)?.getAncestors?.(node) ?? [];
+  return [...ancestors].reverse().find((ancestor: any) => ancestor.type?.includes("Function"));
+}
+
+function stripChainExpression(node: any): any {
+  let current = node;
+  while (current?.type === "ChainExpression") {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isIdentifierNamed(node: any, name: string): boolean {
+  const current = stripChainExpression(node);
+  return current?.type === "Identifier" && current.name === name;
 }
 
 function isNativeChildNode(value: unknown): value is RangedNode {

@@ -2,8 +2,9 @@ use serde_json::Value;
 
 use super::LintNode;
 use crate::utils::{
-    TypeTextKind, classify_type_text, is_error_like_type_texts, is_number_like_type_texts,
-    is_promise_like_type_texts, is_string_like_type_texts, split_type_text,
+    TypeTextKind, classify_type_text, is_any_like_type_texts, is_error_like_type_texts,
+    is_number_like_type_texts, is_promise_like_type_texts, is_string_like_type_texts,
+    is_unknown_like_type_texts, split_type_text,
 };
 
 pub(super) fn strip_chain_expression(mut node: &LintNode) -> &LintNode {
@@ -48,6 +49,30 @@ pub(super) fn is_error_like_node(node: &LintNode) -> bool {
         return true;
     }
     is_error_like_type_texts(&node.type_texts, &node.property_names)
+}
+
+pub(super) fn is_any_like_node(node: &LintNode) -> bool {
+    let current = strip_chain_expression(node);
+    if current.kind == "TSAsExpression"
+        && current
+            .child("typeAnnotation")
+            .is_some_and(|type_annotation| type_annotation.kind == "TSAnyKeyword")
+    {
+        return true;
+    }
+    is_any_like_type_texts(&node.type_texts)
+}
+
+pub(super) fn is_unknown_like_node(node: &LintNode) -> bool {
+    let current = strip_chain_expression(node);
+    if current.kind == "TSAsExpression"
+        && current
+            .child("typeAnnotation")
+            .is_some_and(|type_annotation| type_annotation.kind == "TSUnknownKeyword")
+    {
+        return true;
+    }
+    is_unknown_like_type_texts(&node.type_texts)
 }
 
 pub(super) fn member_property_name(node: &LintNode) -> Option<String> {

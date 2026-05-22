@@ -115,6 +115,56 @@ fn ignores_base_to_string_known_safe_type() {
 }
 
 #[test]
+fn reports_floating_promise_with_suggestions() {
+    let mut node = node_with_children(
+        "ExpressionStatement",
+        TextRange::new(0, 19),
+        [(
+            "expression",
+            promise_member_call_node("resolve", Vec::new()),
+        )],
+    );
+    node.fields
+        .insert("__nearestFunctionAsync".to_owned(), json!(true));
+
+    let diagnostics = registry().run_rule("no-floating-promises", &node).unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-floating-promises");
+    assert_eq!(diagnostics[0].message_id, "unexpected");
+    assert_eq!(diagnostics[0].suggestions.len(), 2);
+    assert_eq!(diagnostics[0].suggestions[0].message_id, "floatingVoid");
+    assert_eq!(diagnostics[0].suggestions[1].message_id, "floatingAwait");
+}
+
+#[test]
+fn ignores_handled_promise_chain() {
+    let catch_call = call_node(
+        node_with_children(
+            "MemberExpression",
+            TextRange::new(0, 25),
+            [
+                ("object", promise_member_call_node("resolve", Vec::new())),
+                (
+                    "property",
+                    node_with_field("Identifier", TextRange::new(24, 29), "name", json!("catch")),
+                ),
+            ],
+        ),
+        vec![node("ArrowFunctionExpression", TextRange::new(30, 38))],
+    );
+    let node = node_with_children(
+        "ExpressionStatement",
+        TextRange::new(0, 39),
+        [("expression", catch_call)],
+    );
+
+    let diagnostics = registry().run_rule("no-floating-promises", &node).unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
 fn reports_unsafe_assignment_from_any() {
     let mut init = node("Identifier", TextRange::new(30, 35));
     init.type_texts = vec!["Set<any>".to_owned()];
@@ -183,6 +233,55 @@ fn ignores_unsafe_assignment_to_unknown() {
                 "VariableDeclarator",
                 TextRange::new(6, 35),
                 [("id", id), ("init", init)],
+            ),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn reports_promise_reject_string_reason() {
+    let diagnostics = registry()
+        .run_rule(
+            "prefer-promise-reject-errors",
+            &promise_member_call_node(
+                "reject",
+                vec![node_with_field(
+                    "Literal",
+                    TextRange::new(15, 21),
+                    "value",
+                    json!("boom"),
+                )],
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "prefer-promise-reject-errors");
+    assert_eq!(diagnostics[0].message_id, "rejectAnError");
+}
+
+#[test]
+fn allows_error_like_promise_reject_reason() {
+    let diagnostics = registry()
+        .run_rule(
+            "prefer-promise-reject-errors",
+            &promise_member_call_node(
+                "reject",
+                vec![node_with_children(
+                    "NewExpression",
+                    TextRange::new(15, 32),
+                    [(
+                        "callee",
+                        node_with_field(
+                            "Identifier",
+                            TextRange::new(19, 24),
+                            "name",
+                            json!("Error"),
+                        ),
+                    )],
+                )],
             ),
         )
         .unwrap();
@@ -265,6 +364,7 @@ fn lists_default_rule_meta() {
             "no-array-delete",
             "no-for-in-array",
             "no-base-to-string",
+            "no-floating-promises",
             "await-thenable",
             "no-implied-eval",
             "no-mixed-enums",
@@ -273,6 +373,7 @@ fn lists_default_rule_meta() {
             "only-throw-error",
             "prefer-find",
             "prefer-includes",
+            "prefer-promise-reject-errors",
             "prefer-regexp-exec",
             "require-array-sort-compare",
             "restrict-plus-operands",
@@ -360,6 +461,31 @@ fn sort_call_node(object_type_text: &str, arguments: Vec<LintNode>) -> LintNode 
                 (
                     "property",
                     node_with_field("Identifier", TextRange::new(7, 11), "name", json!("sort")),
+                ),
+            ],
+        ),
+        arguments,
+    )
+}
+
+fn promise_member_call_node(method_name: &str, arguments: Vec<LintNode>) -> LintNode {
+    call_node(
+        node_with_children(
+            "MemberExpression",
+            TextRange::new(0, 8 + method_name.len() as u32),
+            [
+                (
+                    "object",
+                    node_with_field("Identifier", TextRange::new(0, 7), "name", json!("Promise")),
+                ),
+                (
+                    "property",
+                    node_with_field(
+                        "Identifier",
+                        TextRange::new(8, 8 + method_name.len() as u32),
+                        "name",
+                        json!(method_name),
+                    ),
                 ),
             ],
         ),

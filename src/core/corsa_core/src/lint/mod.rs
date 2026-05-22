@@ -11,9 +11,10 @@ mod types;
 pub use context::{RuleContext, RustLintRule};
 pub use registry::{LintRuleRegistry, run_default_type_aware_rule};
 pub use rules::{
-    AwaitThenableRule, NoArrayDeleteRule, NoBaseToStringRule, NoForInArrayRule, NoImpliedEvalRule,
-    NoMixedEnumsRule, NoUnsafeAssignmentRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule,
-    PreferFindRule, PreferIncludesRule, PreferRegexpExecRule, RequireArraySortCompareRule,
+    AwaitThenableRule, NoArrayDeleteRule, NoBaseToStringRule, NoFloatingPromisesRule,
+    NoForInArrayRule, NoImpliedEvalRule, NoMixedEnumsRule, NoUnsafeAssignmentRule,
+    NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule, PreferIncludesRule,
+    PreferPromiseRejectErrorsRule, PreferRegexpExecRule, RequireArraySortCompareRule,
     RestrictPlusOperandsRule, UseUnknownInCatchCallbackVariableRule,
 };
 pub use types::{
