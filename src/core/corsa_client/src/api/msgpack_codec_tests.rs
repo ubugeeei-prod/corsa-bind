@@ -1,4 +1,4 @@
-use super::{MSG_CALL, MSG_RESPONSE, TsgoError, read_tuple, write_tuple};
+use super::{MAX_BIN_BYTES, MSG_CALL, MSG_RESPONSE, TsgoError, read_tuple, write_tuple};
 use std::io::Cursor;
 
 #[test]
@@ -54,6 +54,14 @@ fn rejects_invalid_bin_marker() {
     let bytes = [0x93_u8, MSG_CALL, 0xa1, b'x', 0xc4, 0];
     let err = read_tuple(&mut Cursor::new(bytes)).unwrap_err();
     assert!(matches!(err, TsgoError::Protocol(message) if message.contains("expected bin marker")));
+}
+
+#[test]
+fn rejects_oversized_bin_length_before_allocation() {
+    let len = ((MAX_BIN_BYTES as u32) + 1).to_be_bytes();
+    let bytes = [&[0x93_u8, MSG_CALL, 0xc4, 0, 0xc6][..], &len, &[][..]].concat();
+    let err = read_tuple(&mut Cursor::new(bytes)).unwrap_err();
+    assert!(matches!(err, TsgoError::Protocol(message) if message.contains("too large")));
 }
 
 #[test]

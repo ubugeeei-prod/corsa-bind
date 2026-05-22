@@ -10,6 +10,7 @@ use std::{
 const MSG_REQUEST: u8 = 1;
 const MSG_CALL_RESPONSE: u8 = 2;
 const MSG_RESPONSE: u8 = 4;
+const MAX_BIN_BYTES: usize = 512 * 1024 * 1024;
 
 pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
     let stdin = std::io::stdin();
@@ -174,7 +175,17 @@ fn read_bin<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
         0xc6 => read_len(reader, 4)?,
         _ => return Err("invalid bin tag".into()),
     };
-    let mut payload = vec![0_u8; len];
+    if len > MAX_BIN_BYTES {
+        return Err(format!(
+            "msgpack bin is too large: {len} bytes exceeds {MAX_BIN_BYTES} byte safety limit"
+        )
+        .into());
+    }
+    let mut payload = Vec::new();
+    payload.try_reserve_exact(len).map_err(|error| {
+        format!("failed to reserve msgpack bin buffer for {len} bytes: {error}")
+    })?;
+    payload.resize(len, 0);
     reader.read_exact(&mut payload)?;
     Ok(payload)
 }
@@ -208,6 +219,13 @@ fn write_tuple<W: Write>(writer: &mut W, kind: u8, method: &[u8], payload: &[u8]
 }
 
 fn write_bin<W: Write>(writer: &mut W, payload: &[u8]) -> Result<()> {
+    if payload.len() > MAX_BIN_BYTES {
+        return Err(format!(
+            "msgpack bin is too large: {} bytes exceeds {MAX_BIN_BYTES} byte safety limit",
+            payload.len()
+        )
+        .into());
+    }
     match payload.len() {
         0..=255 => writer.write_all(&[0xc4, payload.len() as u8])?,
         256..=65535 => {
