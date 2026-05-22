@@ -579,7 +579,7 @@ async fn connect_pipe_socket(path: PathBuf) -> Result<ApiClient> {
     let stream = std::os::unix::net::UnixStream::connect(path)?;
     let reader = BufReader::new(stream.try_clone()?);
     let writer = BufWriter::new(stream);
-    let rpc = JsonRpcConnection::spawn(reader, writer, Default::default());
+    let rpc = JsonRpcConnection::try_spawn(reader, writer, Default::default())?;
     let driver = Arc::new(ClientDriver::JsonRpc {
         rpc,
         process: None,
