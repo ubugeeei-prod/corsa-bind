@@ -78,7 +78,7 @@ pub fn parse() -> Result<Option<Cli>, CompactString> {
             "--timeout-ms" => {
                 timeout_ms = parse_u64(read_value(&mut args, &argument)?, &argument)?;
             }
-            _ => return Err(argument),
+            _ => return Err(CompactString::from(format!("unknown option `{argument}`"))),
         }
     }
     if dataset_paths.is_empty() {
@@ -90,10 +90,13 @@ pub fn parse() -> Result<Option<Cli>, CompactString> {
         ));
     }
     if iterations == 0 {
-        return Err(CompactString::from("--iterations must be > 0"));
+        return Err(CompactString::from("--iterations must be greater than 0"));
     }
     if !tsgo_path.exists() {
-        return Err(CompactString::from(tsgo_path.display().to_string()));
+        return Err(CompactString::from(format!(
+            "tsgo executable does not exist: {}",
+            tsgo_path.display()
+        )));
     }
     Ok(Some(Cli {
         root_dir,
@@ -183,7 +186,7 @@ fn read_value(
     flag: &CompactString,
 ) -> Result<CompactString, CompactString> {
     let Some(value) = args.next() else {
-        return Err(CompactString::from(flag.as_str()));
+        return Err(CompactString::from(format!("missing value for `{flag}`")));
     };
     Ok(CompactString::from(value.to_string_lossy().as_ref()))
 }
@@ -201,20 +204,22 @@ fn parse_suite(value: CompactString) -> Result<SmallVec<[Suite; 2]>, CompactStri
             Ok(suites)
         }
         "both" => Ok(both_suites()),
-        _ => Err(value),
+        _ => Err(CompactString::from(format!(
+            "invalid suite `{value}`; expected project-check, workflow, or both"
+        ))),
     }
 }
 
-fn parse_usize(value: CompactString, _flag: &CompactString) -> Result<usize, CompactString> {
+fn parse_usize(value: CompactString, flag: &CompactString) -> Result<usize, CompactString> {
     value
         .parse::<usize>()
-        .map_err(|_| CompactString::from(value.as_str()))
+        .map_err(|_| CompactString::from(format!("`{flag}` must be an integer, got `{value}`")))
 }
 
-fn parse_u64(value: CompactString, _flag: &CompactString) -> Result<u64, CompactString> {
+fn parse_u64(value: CompactString, flag: &CompactString) -> Result<u64, CompactString> {
     value
         .parse::<u64>()
-        .map_err(|_| CompactString::from(value.as_str()))
+        .map_err(|_| CompactString::from(format!("`{flag}` must be an integer, got `{value}`")))
 }
 
 #[cfg(test)]

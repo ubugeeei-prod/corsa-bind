@@ -15,14 +15,14 @@ fn main() -> ExitCode {
         Ok(Some(cli)) => cli,
         Ok(None) => return ExitCode::SUCCESS,
         Err(message) => {
-            eprintln!("{message}");
+            eprintln!("error: {message}\nhelp: pass --help to see benchmark options");
             return ExitCode::FAILURE;
         }
     };
     match block_on(run(cli)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("{error}");
+            eprintln!("{}", error.diagnostic());
             ExitCode::FAILURE
         }
     }
