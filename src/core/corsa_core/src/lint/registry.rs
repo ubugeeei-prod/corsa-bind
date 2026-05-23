@@ -1,12 +1,24 @@
 use super::{
-    AwaitThenableRule, LintDiagnostic, LintNode, NoArrayDeleteRule, NoBaseToStringRule,
+    AwaitThenableRule, ConsistentReturnRule, ConsistentTypeExportsRule, DotNotationRule,
+    LintDiagnostic, LintNode, NoArrayDeleteRule, NoBaseToStringRule,
+    NoConfusingVoidExpressionRule, NoDeprecatedRule, NoDuplicateTypeConstituentsRule,
     NoFloatingPromisesRule, NoForInArrayRule, NoImpliedEvalRule, NoMeaninglessVoidOperatorRule,
-    NoMixedEnumsRule, NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeMemberAccessRule,
-    NoUnsafeReturnRule, NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule,
-    PreferFindRule, PreferIncludesRule, PreferPromiseRejectErrorsRule,
-    PreferReduceTypeParameterRule, PreferRegexpExecRule, PreferStringStartsEndsWithRule,
-    RequireArraySortCompareRule, RestrictPlusOperandsRule, RestrictTemplateExpressionsRule,
-    RuleContext, RuleMeta, RustLintRule, UseUnknownInCatchCallbackVariableRule,
+    NoMisusedPromisesRule, NoMisusedSpreadRule, NoMixedEnumsRule,
+    NoRedundantTypeConstituentsRule, NoUnsafeArgumentRule, NoUnsafeAssignmentRule,
+    NoUnsafeCallRule, NoUnsafeEnumComparisonRule, NoUnsafeMemberAccessRule, NoUnsafeReturnRule,
+    NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, NoUnnecessaryBooleanLiteralCompareRule,
+    NoUnnecessaryConditionRule, NoUnnecessaryQualifierRule, NoUnnecessaryTemplateExpressionRule,
+    NoUnnecessaryTypeArgumentsRule, NoUnnecessaryTypeAssertionRule,
+    NoUnnecessaryTypeConversionRule, NoUnnecessaryTypeParametersRule,
+    NoUselessDefaultAssignmentRule, NonNullableTypeAssertionStyleRule, OnlyThrowErrorRule,
+    PreferFindRule, PreferIncludesRule, PreferNullishCoalescingRule, PreferOptionalChainRule,
+    PreferPromiseRejectErrorsRule, PreferReadonlyParameterTypesRule, PreferReadonlyRule,
+    PreferReduceTypeParameterRule, PreferRegexpExecRule, PreferReturnThisTypeRule,
+    PreferStringStartsEndsWithRule, PromiseFunctionAsyncRule, RelatedGetterSetterPairsRule,
+    RequireArraySortCompareRule, RequireAwaitRule, RestrictPlusOperandsRule,
+    RestrictTemplateExpressionsRule, ReturnAwaitRule, RuleContext, RuleMeta, RustLintRule,
+    StrictBooleanExpressionsRule, StrictVoidReturnRule, SwitchExhaustivenessCheckRule,
+    UnboundMethodRule, UseUnknownInCatchCallbackVariableRule,
 };
 
 /// Collection of Rust-authored lint rules addressable by stable rule name.
@@ -30,30 +42,64 @@ impl LintRuleRegistry {
     /// Creates a registry containing the built-in type-aware lint rules.
     pub fn with_default_type_aware_rules() -> Self {
         Self::new()
+            .with_rule(ConsistentReturnRule)
+            .with_rule(ConsistentTypeExportsRule)
+            .with_rule(DotNotationRule)
             .with_rule(NoArrayDeleteRule)
-            .with_rule(NoForInArrayRule)
             .with_rule(NoBaseToStringRule)
+            .with_rule(NoConfusingVoidExpressionRule)
+            .with_rule(NoDeprecatedRule)
+            .with_rule(NoDuplicateTypeConstituentsRule)
             .with_rule(NoFloatingPromisesRule)
+            .with_rule(NoForInArrayRule)
             .with_rule(AwaitThenableRule)
             .with_rule(NoImpliedEvalRule)
             .with_rule(NoMeaninglessVoidOperatorRule)
+            .with_rule(NoMisusedPromisesRule)
+            .with_rule(NoMisusedSpreadRule)
             .with_rule(NoMixedEnumsRule)
+            .with_rule(NoRedundantTypeConstituentsRule)
+            .with_rule(NoUnnecessaryBooleanLiteralCompareRule)
+            .with_rule(NoUnnecessaryConditionRule)
+            .with_rule(NoUnnecessaryQualifierRule)
+            .with_rule(NoUnnecessaryTemplateExpressionRule)
+            .with_rule(NoUnnecessaryTypeArgumentsRule)
+            .with_rule(NoUnnecessaryTypeAssertionRule)
+            .with_rule(NoUnnecessaryTypeConversionRule)
+            .with_rule(NoUnnecessaryTypeParametersRule)
+            .with_rule(NoUnsafeArgumentRule)
             .with_rule(NoUnsafeAssignmentRule)
             .with_rule(NoUnsafeCallRule)
+            .with_rule(NoUnsafeEnumComparisonRule)
             .with_rule(NoUnsafeMemberAccessRule)
             .with_rule(NoUnsafeReturnRule)
             .with_rule(NoUnsafeTypeAssertionRule)
             .with_rule(NoUnsafeUnaryMinusRule)
+            .with_rule(NoUselessDefaultAssignmentRule)
+            .with_rule(NonNullableTypeAssertionStyleRule)
             .with_rule(OnlyThrowErrorRule)
             .with_rule(PreferFindRule)
             .with_rule(PreferIncludesRule)
+            .with_rule(PreferNullishCoalescingRule)
+            .with_rule(PreferOptionalChainRule)
             .with_rule(PreferPromiseRejectErrorsRule)
+            .with_rule(PreferReadonlyRule)
+            .with_rule(PreferReadonlyParameterTypesRule)
             .with_rule(PreferReduceTypeParameterRule)
             .with_rule(PreferRegexpExecRule)
+            .with_rule(PreferReturnThisTypeRule)
             .with_rule(PreferStringStartsEndsWithRule)
+            .with_rule(PromiseFunctionAsyncRule)
+            .with_rule(RelatedGetterSetterPairsRule)
             .with_rule(RequireArraySortCompareRule)
+            .with_rule(RequireAwaitRule)
             .with_rule(RestrictPlusOperandsRule)
             .with_rule(RestrictTemplateExpressionsRule)
+            .with_rule(ReturnAwaitRule)
+            .with_rule(StrictBooleanExpressionsRule)
+            .with_rule(StrictVoidReturnRule)
+            .with_rule(SwitchExhaustivenessCheckRule)
+            .with_rule(UnboundMethodRule)
             .with_rule(UseUnknownInCatchCallbackVariableRule)
     }
 

@@ -13,6 +13,7 @@ mod no_unsafe_return;
 mod no_unsafe_type_assertion;
 mod no_unsafe_unary_minus;
 mod only_throw_error;
+mod pending_parity;
 mod prefer_find;
 mod prefer_includes;
 mod prefer_promise_reject_errors;
@@ -39,6 +40,20 @@ pub use no_unsafe_return::NoUnsafeReturnRule;
 pub use no_unsafe_type_assertion::NoUnsafeTypeAssertionRule;
 pub use no_unsafe_unary_minus::NoUnsafeUnaryMinusRule;
 pub use only_throw_error::OnlyThrowErrorRule;
+pub use pending_parity::{
+    ConsistentReturnRule, ConsistentTypeExportsRule, DotNotationRule,
+    NoConfusingVoidExpressionRule, NoDeprecatedRule, NoDuplicateTypeConstituentsRule,
+    NoMisusedPromisesRule, NoMisusedSpreadRule, NoRedundantTypeConstituentsRule,
+    NoUnsafeArgumentRule, NoUnsafeEnumComparisonRule, NoUnnecessaryBooleanLiteralCompareRule,
+    NoUnnecessaryConditionRule, NoUnnecessaryQualifierRule, NoUnnecessaryTemplateExpressionRule,
+    NoUnnecessaryTypeArgumentsRule, NoUnnecessaryTypeAssertionRule,
+    NoUnnecessaryTypeConversionRule, NoUnnecessaryTypeParametersRule,
+    NoUselessDefaultAssignmentRule, NonNullableTypeAssertionStyleRule,
+    PreferNullishCoalescingRule, PreferOptionalChainRule, PreferReadonlyParameterTypesRule,
+    PreferReadonlyRule, PreferReturnThisTypeRule, PromiseFunctionAsyncRule,
+    RelatedGetterSetterPairsRule, RequireAwaitRule, ReturnAwaitRule, StrictBooleanExpressionsRule,
+    StrictVoidReturnRule, SwitchExhaustivenessCheckRule, UnboundMethodRule,
+};
 pub use prefer_find::PreferFindRule;
 pub use prefer_includes::PreferIncludesRule;
 pub use prefer_promise_reject_errors::PreferPromiseRejectErrorsRule;

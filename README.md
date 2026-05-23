@@ -265,11 +265,9 @@ The intended rule architecture has two lanes:
 
 This keeps the public integration point aligned with Oxlint's JS plugin API
 while leaving room for Rust-authored rule crates, in the spirit of swc-style
-Rust extension points. The first Rust-authored builtin rules include
-`await-thenable`, `no-array-delete`, `no-for-in-array`, `no-implied-eval`,
-`no-mixed-enums`, `no-unsafe-unary-minus`, `only-throw-error`,
-`prefer-find`, `prefer-includes`, `prefer-regexp-exec`, and
-`use-unknown-in-catch-callback-variable`.
+Rust extension points. The Rust-authored builtin set now covers the tracked
+upstream `tsgolint/internal/rules` surface exposed by
+`corsa-oxlint/rules`.
 
 ## Example
 

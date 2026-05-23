@@ -115,29 +115,10 @@ export default [
 ];
 ```
 
-Current native coverage includes:
-
-- `await-thenable`
-- `no-array-delete`
-- `no-base-to-string`
-- `no-floating-promises`
-- `no-for-in-array`
-- `no-implied-eval`
-- `no-mixed-enums`
-- `no-unsafe-assignment`
-- `no-unsafe-return`
-- `no-unsafe-unary-minus`
-- `only-throw-error`
-- `prefer-find`
-- `prefer-includes`
-- `prefer-promise-reject-errors`
-- `prefer-regexp-exec`
-- `prefer-string-starts-ends-with`
-- `require-array-sort-compare`
-- `restrict-plus-operands`
-- `use-unknown-in-catch-callback-variable`
-
-The remaining upstream rules stay listed in `pendingNativeRuleNames`, and
+Current native coverage is exported from `implementedNativeRuleNames`. It now
+covers the tracked upstream `tsgolint/internal/rules` surface, including the
+unsafe, unnecessary, promise/control-flow, preference/style, and type/export
+families. `pendingNativeRuleNames` is intentionally empty, and
 `native_rules.test.ts` fails if implemented + pending drift away from the
 tracked upstream rule list.
 
@@ -152,13 +133,10 @@ as Oxlint JS plugin rules. The bridge is:
 4. Rust returns Oxlint-shaped diagnostics, suggestions, and fixes.
 5. The JS rule reports them through `context.report()`.
 
-The first rules on this path are `await-thenable`, `no-array-delete`,
-`no-for-in-array`, `no-implied-eval`, `no-mixed-enums`,
-`no-unsafe-unary-minus`, `only-throw-error`, `prefer-find`,
-`prefer-includes`, `prefer-regexp-exec`, and
-`use-unknown-in-catch-callback-variable`. Custom project-specific rules can
-still be authored in JS/TS with `OxlintUtils.RuleCreator()`, while hot,
-shared, tsgolint-parity rules can move into Rust incrementally.
+The built-in tsgolint parity rules are registered through
+`corsa::lint::RustLintRule`. Custom project-specific rules can still be
+authored in JS/TS with `OxlintUtils.RuleCreator()`, while hot, shared rules can
+continue to move deeper into compact Rust facts as the bridge grows.
 
 ## Runtime Safety Controls
 
