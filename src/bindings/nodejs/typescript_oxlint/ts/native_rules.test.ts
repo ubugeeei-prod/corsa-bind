@@ -244,9 +244,7 @@ describe("corsa-oxlint native rules", () => {
       "prefer-reduce-type-parameter",
       typescriptOxlintRules["prefer-reduce-type-parameter"] as never,
       {
-        valid: [
-          { code: "const result = [1, 2, 3].reduce<number[]>((acc, value) => acc, []);" },
-        ],
+        valid: [{ code: "const result = [1, 2, 3].reduce<number[]>((acc, value) => acc, []);" }],
         invalid: [
           {
             code: "const result = [1, 2, 3].reduce((acc, value) => acc, [] as number[]);",

@@ -16,7 +16,6 @@ export const requireArraySortCompareRule = createRustNativeRule(
 
 function shouldRunRequireArraySortCompare(node: any): boolean {
   return (
-    node.arguments?.length === 0 &&
-    ["sort", "toSorted"].includes(calleePropertyName(node) ?? "")
+    node.arguments?.length === 0 && ["sort", "toSorted"].includes(calleePropertyName(node) ?? "")
   );
 }
