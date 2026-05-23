@@ -284,6 +284,84 @@ describe("corsa-oxlint native rules", () => {
     );
   });
 
+  integrationCase("runs pending parity slice rules through RuleTester", () => {
+    createTester().run("dot-notation", typescriptOxlintRules["dot-notation"] as never, {
+      valid: [{ code: "const record = { value: 1 }; record.value;" }],
+      invalid: [{ code: "const record = { value: 1 }; record['value'];", errors: 1 }],
+    });
+
+    createTester().run(
+      "no-duplicate-type-constituents",
+      typescriptOxlintRules["no-duplicate-type-constituents"] as never,
+      {
+        valid: [{ code: "type Value = string | number;" }],
+        invalid: [{ code: "type Value = string | string;", errors: 1 }],
+      },
+    );
+
+    createTester().run("no-unsafe-argument", typescriptOxlintRules["no-unsafe-argument"] as never, {
+      valid: [{ code: "function take(value: unknown) {} declare const value: any; take(value);" }],
+      invalid: [
+        {
+          code: "function take(value: string) {} declare const value: any; take(value);",
+          errors: 1,
+        },
+      ],
+    });
+
+    createTester().run("require-await", typescriptOxlintRules["require-await"] as never, {
+      valid: [
+        { code: "async function ok() { await Promise.resolve(1); }" },
+        { code: "async function ok() { return Promise.resolve(1); }" },
+      ],
+      invalid: [
+        { code: "async function nope() { return 1; }", errors: 1 },
+        {
+          code: "async function outer() { async function inner() { await Promise.resolve(1); } return 1; }",
+          errors: 1,
+        },
+      ],
+    });
+
+    createTester().run("return-await", typescriptOxlintRules["return-await"] as never, {
+      valid: [
+        {
+          code: "async function ok() { try { return await Promise.resolve(1); } catch { return 0; } }",
+        },
+      ],
+      invalid: [
+        { code: "async function nope() { return await Promise.resolve(1); }", errors: 1 },
+        {
+          code: "async function nope() { try { return Promise.resolve(1); } catch { return 0; } }",
+          errors: 1,
+        },
+      ],
+    });
+
+    createTester().run(
+      "no-unnecessary-type-arguments",
+      typescriptOxlintRules["no-unnecessary-type-arguments"] as never,
+      {
+        valid: [{ code: "function value<T>(input: T): T { return input; } value<string>('x');" }],
+        invalid: [
+          {
+            code: "function value<T = string>(input: T): T { return input; } value<string>('x');",
+            errors: 1,
+          },
+        ],
+      },
+    );
+
+    createTester().run(
+      "no-unnecessary-type-conversion",
+      typescriptOxlintRules["no-unnecessary-type-conversion"] as never,
+      {
+        valid: [{ code: "const value = String(1);" }],
+        invalid: [{ code: "const value = String('value');", errors: 1 }],
+      },
+    );
+  });
+
   integrationCase("runs restrict-plus-operands through RuleTester", () => {
     createTester().run(
       "restrict-plus-operands",

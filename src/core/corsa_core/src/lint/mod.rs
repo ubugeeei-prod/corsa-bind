@@ -11,13 +11,24 @@ mod types;
 pub use context::{RuleContext, RustLintRule};
 pub use registry::{LintRuleRegistry, run_default_type_aware_rule};
 pub use rules::{
-    AwaitThenableRule, NoArrayDeleteRule, NoBaseToStringRule, NoFloatingPromisesRule,
-    NoForInArrayRule, NoImpliedEvalRule, NoMeaninglessVoidOperatorRule, NoMixedEnumsRule,
-    NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeMemberAccessRule, NoUnsafeReturnRule,
-    NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, OnlyThrowErrorRule, PreferFindRule,
-    PreferIncludesRule, PreferPromiseRejectErrorsRule, PreferReduceTypeParameterRule,
-    PreferRegexpExecRule, PreferStringStartsEndsWithRule, RequireArraySortCompareRule,
-    RestrictPlusOperandsRule, RestrictTemplateExpressionsRule,
+    AwaitThenableRule, ConsistentReturnRule, ConsistentTypeExportsRule, DotNotationRule,
+    NoArrayDeleteRule, NoBaseToStringRule, NoConfusingVoidExpressionRule, NoDeprecatedRule,
+    NoDuplicateTypeConstituentsRule, NoFloatingPromisesRule, NoForInArrayRule, NoImpliedEvalRule,
+    NoMeaninglessVoidOperatorRule, NoMisusedPromisesRule, NoMisusedSpreadRule, NoMixedEnumsRule,
+    NoRedundantTypeConstituentsRule, NoUnsafeArgumentRule, NoUnsafeAssignmentRule,
+    NoUnsafeCallRule, NoUnsafeEnumComparisonRule, NoUnsafeMemberAccessRule, NoUnsafeReturnRule,
+    NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, NoUnnecessaryBooleanLiteralCompareRule,
+    NoUnnecessaryConditionRule, NoUnnecessaryQualifierRule, NoUnnecessaryTemplateExpressionRule,
+    NoUnnecessaryTypeArgumentsRule, NoUnnecessaryTypeAssertionRule,
+    NoUnnecessaryTypeConversionRule, NoUnnecessaryTypeParametersRule,
+    NoUselessDefaultAssignmentRule, NonNullableTypeAssertionStyleRule, OnlyThrowErrorRule,
+    PreferFindRule, PreferIncludesRule, PreferNullishCoalescingRule, PreferOptionalChainRule,
+    PreferPromiseRejectErrorsRule, PreferReadonlyParameterTypesRule, PreferReadonlyRule,
+    PreferReduceTypeParameterRule, PreferRegexpExecRule, PreferReturnThisTypeRule,
+    PreferStringStartsEndsWithRule, PromiseFunctionAsyncRule, RelatedGetterSetterPairsRule,
+    RequireArraySortCompareRule, RequireAwaitRule, RestrictPlusOperandsRule,
+    RestrictTemplateExpressionsRule, ReturnAwaitRule, StrictBooleanExpressionsRule,
+    StrictVoidReturnRule, SwitchExhaustivenessCheckRule, UnboundMethodRule,
     UseUnknownInCatchCallbackVariableRule,
 };
 pub use types::{

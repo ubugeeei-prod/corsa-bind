@@ -767,6 +767,262 @@ fn allows_restricted_template_expression_default_primitives() {
 }
 
 #[test]
+fn reports_dot_notation_for_literal_property() {
+    let diagnostics = registry()
+        .run_rule(
+            "dot-notation",
+            &member_expression_node(
+                node_with_field("Identifier", TextRange::new(0, 6), "name", json!("record")),
+                node_with_field("Literal", TextRange::new(7, 14), "value", json!("value")),
+                true,
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "dot-notation");
+    assert_eq!(diagnostics[0].message_id, "unexpected");
+}
+
+#[test]
+fn reports_duplicate_and_redundant_type_constituents() {
+    let duplicate = node_with_child_list(
+        "TSUnionType",
+        TextRange::new(0, 15),
+        "types",
+        vec![
+            node("TSStringKeyword", TextRange::new(0, 6)),
+            node("TSStringKeyword", TextRange::new(9, 15)),
+        ],
+    );
+    let diagnostics = registry()
+        .run_rule("no-duplicate-type-constituents", &duplicate)
+        .unwrap();
+    assert_eq!(diagnostics.len(), 1);
+
+    let redundant = node_with_child_list(
+        "TSUnionType",
+        TextRange::new(0, 16),
+        "types",
+        vec![
+            node("TSAnyKeyword", TextRange::new(0, 3)),
+            node("TSStringKeyword", TextRange::new(6, 12)),
+        ],
+    );
+    let diagnostics = registry()
+        .run_rule("no-redundant-type-constituents", &redundant)
+        .unwrap();
+    assert_eq!(diagnostics.len(), 1);
+}
+
+#[test]
+fn reports_unsafe_argument_from_expected_type_fact() {
+    let mut node = call_node(
+        node_with_field("Identifier", TextRange::new(0, 2), "name", json!("fn")),
+        vec![typed_node("Identifier", TextRange::new(3, 8), "any")],
+    );
+    node.fields.insert(
+        "__expectedArgumentTypeTexts".to_owned(),
+        json!([["string"]]),
+    );
+
+    let diagnostics = registry().run_rule("no-unsafe-argument", &node).unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "no-unsafe-argument");
+    assert_eq!(diagnostics[0].range, TextRange::new(3, 8));
+}
+
+#[test]
+fn reports_require_await_and_promise_function_async() {
+    let mut async_function = node_with_children(
+        "FunctionDeclaration",
+        TextRange::new(0, 28),
+        [("body", node("BlockStatement", TextRange::new(20, 28)))],
+    );
+    async_function.fields.insert("async".to_owned(), json!(true));
+
+    let diagnostics = registry().run_rule("require-await", &async_function).unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+
+    let mut promise_function = node("FunctionDeclaration", TextRange::new(0, 34));
+    promise_function.fields.insert("async".to_owned(), json!(false));
+    promise_function.fields.insert(
+        "__returnTypeTexts".to_owned(),
+        json!(["Promise<string>"]),
+    );
+
+    let diagnostics = registry()
+        .run_rule("promise-function-async", &promise_function)
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+}
+
+#[test]
+fn scoped_parity_rules_ignore_nested_function_bodies() {
+    let bare_return = node("ReturnStatement", TextRange::new(32, 39));
+    let value_return = node_with_children(
+        "ReturnStatement",
+        TextRange::new(40, 49),
+        [(
+            "argument",
+            node_with_field("Literal", TextRange::new(47, 48), "value", json!(1)),
+        )],
+    );
+    let nested_body = node_with_child_list(
+        "BlockStatement",
+        TextRange::new(30, 50),
+        "body",
+        vec![bare_return, value_return],
+    );
+    let nested_function = node_with_children(
+        "FunctionDeclaration",
+        TextRange::new(20, 51),
+        [("body", nested_body)],
+    );
+    let outer_body = node_with_child_list(
+        "BlockStatement",
+        TextRange::new(10, 52),
+        "body",
+        vec![nested_function],
+    );
+    let outer = node_with_children(
+        "FunctionDeclaration",
+        TextRange::new(0, 53),
+        [("body", outer_body)],
+    );
+
+    let diagnostics = registry().run_rule("consistent-return", &outer).unwrap();
+
+    assert!(diagnostics.is_empty());
+
+    let await_expression = node("AwaitExpression", TextRange::new(42, 52));
+    let nested_async_body = node_with_child_list(
+        "BlockStatement",
+        TextRange::new(40, 54),
+        "body",
+        vec![await_expression],
+    );
+    let mut nested_async = node_with_children(
+        "FunctionDeclaration",
+        TextRange::new(25, 55),
+        [("body", nested_async_body)],
+    );
+    nested_async.fields.insert("async".to_owned(), json!(true));
+    let async_body = node_with_child_list(
+        "BlockStatement",
+        TextRange::new(20, 56),
+        "body",
+        vec![nested_async],
+    );
+    let mut async_outer = node_with_children(
+        "FunctionDeclaration",
+        TextRange::new(0, 57),
+        [("body", async_body)],
+    );
+    async_outer.fields.insert("async".to_owned(), json!(true));
+
+    let diagnostics = registry().run_rule("require-await", &async_outer).unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+}
+
+#[test]
+fn require_await_allows_direct_promise_returns() {
+    let return_statement = node_with_children(
+        "ReturnStatement",
+        TextRange::new(20, 46),
+        [("argument", promise_member_call_node("resolve", vec![]))],
+    );
+    let body = node_with_child_list(
+        "BlockStatement",
+        TextRange::new(18, 48),
+        "body",
+        vec![return_statement],
+    );
+    let mut function = node_with_children(
+        "FunctionDeclaration",
+        TextRange::new(0, 49),
+        [("body", body)],
+    );
+    function.fields.insert("async".to_owned(), json!(true));
+
+    let diagnostics = registry().run_rule("require-await", &function).unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn return_await_respects_error_handling_context() {
+    let mut return_await = node_with_children(
+        "ReturnStatement",
+        TextRange::new(0, 32),
+        [(
+            "argument",
+            node_with_children(
+                "AwaitExpression",
+                TextRange::new(7, 32),
+                [("argument", promise_member_call_node("resolve", vec![]))],
+            ),
+        )],
+    );
+
+    let diagnostics = registry().run_rule("return-await", &return_await).unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+
+    return_await
+        .fields
+        .insert("__returnAwaitRequiresAwait".to_owned(), json!(true));
+    let diagnostics = registry().run_rule("return-await", &return_await).unwrap();
+
+    assert!(diagnostics.is_empty());
+
+    let mut unawaited_try_return = node_with_children(
+        "ReturnStatement",
+        TextRange::new(0, 25),
+        [("argument", promise_member_call_node("resolve", vec![]))],
+    );
+    unawaited_try_return
+        .fields
+        .insert("__returnAwaitRequiresAwait".to_owned(), json!(true));
+
+    let diagnostics = registry()
+        .run_rule("return-await", &unawaited_try_return)
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+}
+
+#[test]
+fn reports_switch_exhaustiveness_for_missing_literal_case() {
+    let mut discriminant = node_with_field("Identifier", TextRange::new(8, 12), "name", json!("kind"));
+    discriminant.type_texts = vec!["'a' | 'b'".to_owned()];
+    let case_a = node_with_children(
+        "SwitchCase",
+        TextRange::new(15, 24),
+        [(
+            "test",
+            node_with_field("Literal", TextRange::new(20, 23), "value", json!("a")),
+        )],
+    );
+    let mut switch = node_with_children(
+        "SwitchStatement",
+        TextRange::new(0, 32),
+        [("discriminant", discriminant)],
+    );
+    switch.child_lists.insert("cases".to_owned(), vec![case_a]);
+
+    let diagnostics = registry()
+        .run_rule("switch-exhaustiveness-check", &switch)
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+}
+
+#[test]
 fn respects_restricted_template_expression_boolean_option() {
     let mut node = template_node(vec![typed_node(
         "Identifier",
@@ -809,42 +1065,76 @@ fn lists_default_rule_meta() {
     assert_eq!(
         registry.rule_names().collect::<Vec<_>>(),
         vec![
+            "consistent-return",
+            "consistent-type-exports",
+            "dot-notation",
             "no-array-delete",
-            "no-for-in-array",
             "no-base-to-string",
+            "no-confusing-void-expression",
+            "no-deprecated",
+            "no-duplicate-type-constituents",
             "no-floating-promises",
+            "no-for-in-array",
             "await-thenable",
             "no-implied-eval",
             "no-meaningless-void-operator",
+            "no-misused-promises",
+            "no-misused-spread",
             "no-mixed-enums",
+            "no-redundant-type-constituents",
+            "no-unnecessary-boolean-literal-compare",
+            "no-unnecessary-condition",
+            "no-unnecessary-qualifier",
+            "no-unnecessary-template-expression",
+            "no-unnecessary-type-arguments",
+            "no-unnecessary-type-assertion",
+            "no-unnecessary-type-conversion",
+            "no-unnecessary-type-parameters",
+            "no-unsafe-argument",
             "no-unsafe-assignment",
             "no-unsafe-call",
+            "no-unsafe-enum-comparison",
             "no-unsafe-member-access",
             "no-unsafe-return",
             "no-unsafe-type-assertion",
             "no-unsafe-unary-minus",
+            "no-useless-default-assignment",
+            "non-nullable-type-assertion-style",
             "only-throw-error",
             "prefer-find",
             "prefer-includes",
+            "prefer-nullish-coalescing",
+            "prefer-optional-chain",
             "prefer-promise-reject-errors",
+            "prefer-readonly",
+            "prefer-readonly-parameter-types",
             "prefer-reduce-type-parameter",
             "prefer-regexp-exec",
+            "prefer-return-this-type",
             "prefer-string-starts-ends-with",
+            "promise-function-async",
+            "related-getter-setter-pairs",
             "require-array-sort-compare",
+            "require-await",
             "restrict-plus-operands",
             "restrict-template-expressions",
+            "return-await",
+            "strict-boolean-expressions",
+            "strict-void-return",
+            "switch-exhaustiveness-check",
+            "unbound-method",
             "use-unknown-in-catch-callback-variable"
         ]
     );
     let metas = registry.metas();
-    assert_eq!(metas[0].name, "no-array-delete");
-    assert_eq!(metas[0].listeners, vec!["UnaryExpression"]);
+    assert_eq!(metas[3].name, "no-array-delete");
+    assert_eq!(metas[3].listeners, vec!["UnaryExpression"]);
     assert_eq!(
-        metas[0].messages.get("unexpected").unwrap(),
+        metas[3].messages.get("unexpected").unwrap(),
         "Do not delete elements from an array-like value."
     );
-    assert_eq!(metas[1].name, "no-for-in-array");
-    assert_eq!(metas[1].listeners, vec!["ForInStatement"]);
+    assert_eq!(metas[9].name, "no-for-in-array");
+    assert_eq!(metas[9].listeners, vec!["ForInStatement"]);
 }
 
 fn registry() -> LintRuleRegistry {
