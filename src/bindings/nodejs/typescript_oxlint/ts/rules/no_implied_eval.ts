@@ -22,9 +22,7 @@ function shouldRunNoImpliedEval(node: any): boolean {
     case "CallExpression":
       return (
         node.arguments?.length > 0 &&
-        ["execScript", "setInterval", "setTimeout"].includes(
-          calleeName(node) ?? "",
-        )
+        ["execScript", "setInterval", "setTimeout"].includes(calleeName(node) ?? "")
       );
     case "NewExpression":
       return node.arguments?.length > 0 && isIdentifierNamed(node.callee, "Function");

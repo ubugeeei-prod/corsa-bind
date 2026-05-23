@@ -1,7 +1,11 @@
 type TypedValue = { readonly type?: string };
 type ValueToken = { readonly type?: string; readonly value?: string };
 type Predicate<T> = (value: T | null | undefined) => boolean;
-type AstNode = Record<string, unknown> & { readonly type?: string };
+type AstNode = Record<string, unknown> & {
+  readonly name?: string;
+  readonly range?: readonly [number, number];
+  readonly type?: string;
+};
 type StaticValue = { readonly value: unknown } | null;
 type Position = { readonly line: number; readonly column: number };
 type SourceLocation = { readonly start: Position; readonly end: Position };
@@ -32,13 +36,15 @@ type VariableLike = {
   readonly defs?: readonly unknown[];
   readonly references?: readonly ReferenceLike[];
 };
-type TraceMap<T = unknown> = Record<PropertyKey, TraceMapElement<T> | T | true | undefined>;
-type TraceMapElement<T = unknown> = TraceMap<T> & {
+type TraceMapValue<T> = TraceMapElement<T> | T | true | undefined;
+interface TraceMapElement<T = never> {
+  readonly [key: string]: TraceMapValue<T>;
+  readonly [key: number]: TraceMapValue<T>;
   [ReferenceTracker.READ]?: T;
   [ReferenceTracker.CALL]?: T;
   [ReferenceTracker.CONSTRUCT]?: T;
   [ReferenceTracker.ESM]?: true;
-};
+}
 type FoundReference<T = unknown> = {
   info: T;
   node: AstNode;
@@ -336,8 +342,10 @@ export function getInnermostScope(
 
 export function findVariable(
   initialScope: ScopeLike | null | undefined,
-  nameOrNode: string | ({ readonly name?: string } & { readonly range?: readonly [number, number] }),
-): unknown | null {
+  nameOrNode:
+    | string
+    | ({ readonly name?: string } & { readonly range?: readonly [number, number] }),
+): VariableLike | null {
   if (!initialScope) {
     return null;
   }
@@ -347,9 +355,8 @@ export function findVariable(
     return null;
   }
 
-  let scope: ScopeLike | null = typeof nameOrNode === "string"
-    ? initialScope
-    : getInnermostScope(initialScope, nameOrNode);
+  let scope: ScopeLike | null =
+    typeof nameOrNode === "string" ? initialScope : getInnermostScope(initialScope, nameOrNode);
   while (scope) {
     const variable = scope.set?.get(name);
     if (variable != null) {
@@ -580,8 +587,9 @@ export function getStaticValue(node: AstNode | null | undefined): StaticValue {
 
 export function getStringIfConstant(node: AstNode | null | undefined): string | null {
   if (node?.type === "Literal" && (node as { readonly value?: unknown }).value === null) {
-    const regex = (node as { readonly regex?: { readonly pattern?: string; readonly flags?: string } })
-      .regex;
+    const regex = (
+      node as { readonly regex?: { readonly pattern?: string; readonly flags?: string } }
+    ).regex;
     if (regex?.pattern != null && regex.flags != null) {
       return `/${regex.pattern}/${regex.flags}`;
     }
@@ -718,7 +726,12 @@ export class ReferenceTracker {
     } = {},
   ) {
     this.#globalScope = globalScope;
-    this.#globalObjectNames = options.globalObjectNames ?? ["global", "globalThis", "self", "window"];
+    this.#globalObjectNames = options.globalObjectNames ?? [
+      "global",
+      "globalThis",
+      "self",
+      "window",
+    ];
     this.#mode = options.mode ?? "strict";
   }
 
@@ -769,7 +782,11 @@ export class ReferenceTracker {
     const program = this.#globalScope.block;
     for (const node of arrayField<AstNode>(program ?? {}, "body")) {
       const source = node.source;
-      if (!isRecord(source) || typeof source.value !== "string" || !hasOwn(traceMap, source.value)) {
+      if (
+        !isRecord(source) ||
+        typeof source.value !== "string" ||
+        !hasOwn(traceMap, source.value)
+      ) {
         continue;
       }
       const nextTraceMap = traceElement(traceMap, source.value);
@@ -980,10 +997,14 @@ export class ReferenceTracker {
     path: string[],
     traceMap: TraceMapElement<T>,
   ): IterableIterator<FoundReference<T>> {
-    if (specifierNode.type === "ImportSpecifier" || specifierNode.type === "ImportDefaultSpecifier") {
-      const key = specifierNode.type === "ImportDefaultSpecifier"
-        ? "default"
-        : importNameOf(childNode(specifierNode, "imported"));
+    if (
+      specifierNode.type === "ImportSpecifier" ||
+      specifierNode.type === "ImportDefaultSpecifier"
+    ) {
+      const key =
+        specifierNode.type === "ImportDefaultSpecifier"
+          ? "default"
+          : importNameOf(childNode(specifierNode, "imported"));
       const nextTraceMap = key == null ? null : traceElement(traceMap, key);
       if (!key || !nextTraceMap) {
         return;
@@ -997,9 +1018,8 @@ export class ReferenceTracker {
           info: nextTraceMap[ReferenceTracker.READ] as T,
         };
       }
-      const variable = findVariable(this.#globalScope, childNode(specifierNode, "local") ?? {}) as
-        | VariableLike
-        | null;
+      const local = childNode(specifierNode, "local");
+      const variable = local ? findVariable(this.#globalScope, local) : null;
       if (variable) {
         yield* this.#iterateVariableReferences(variable, nextPath, nextTraceMap, false);
       }
@@ -1007,9 +1027,8 @@ export class ReferenceTracker {
     }
 
     if (specifierNode.type === "ImportNamespaceSpecifier") {
-      const variable = findVariable(this.#globalScope, childNode(specifierNode, "local") ?? {}) as
-        | VariableLike
-        | null;
+      const local = childNode(specifierNode, "local");
+      const variable = local ? findVariable(this.#globalScope, local) : null;
       if (variable) {
         yield* this.#iterateVariableReferences(variable, path, traceMap, false);
       }
@@ -1137,7 +1156,7 @@ function traceElement<T>(
   if (!hasOwn(traceMap, key)) {
     return null;
   }
-  const value = traceMap[key];
+  const value = Reflect.get(traceMap, key) as TraceMapValue<T>;
   return isRecord(value) ? (value as TraceMapElement<T>) : null;
 }
 
@@ -1207,26 +1226,18 @@ function locationOf(node: AstNode): SourceLocation | undefined {
 }
 
 function isSourceLocation(value: unknown): value is SourceLocation {
-  return (
-    isRecord(value) &&
-    isPosition(value.start) &&
-    isPosition(value.end)
-  );
+  return isRecord(value) && isPosition(value.start) && isPosition(value.end);
 }
 
 function isPosition(value: unknown): value is Position {
-  return (
-    isRecord(value) &&
-    typeof value.line === "number" &&
-    typeof value.column === "number"
-  );
+  return isRecord(value) && typeof value.line === "number" && typeof value.column === "number";
 }
 
 function getOpeningParenOfParams(node: AstNode, sourceCode: SourceCodeLike): TokenLike | null {
   const id = childNode(node, "id");
   return id
-    ? sourceCode.getTokenAfter?.(id, isOpeningParenToken) ?? null
-    : sourceCode.getFirstToken?.(node, isOpeningParenToken) ?? null;
+    ? (sourceCode.getTokenAfter?.(id, isOpeningParenToken) ?? null)
+    : (sourceCode.getFirstToken?.(node, isOpeningParenToken) ?? null);
 }
 
 function staticTemplateValue(node: AstNode): StaticValue {
@@ -1476,13 +1487,7 @@ const typeConversionBinaryOps = new Set([
   "in",
 ]);
 const typeConversionUnaryOps = new Set(["-", "+", "!", "~"]);
-const skippedAstChildKeys = new Set([
-  "comments",
-  "loc",
-  "parent",
-  "range",
-  "tokens",
-]);
+const skippedAstChildKeys = new Set(["comments", "loc", "parent", "range", "tokens"]);
 
 function isImplicitTypeConversionSideEffectNode(
   node: AstNode,
@@ -1496,7 +1501,9 @@ function isImplicitTypeConversionSideEffectNode(
     node.type === "BinaryExpression" &&
     typeConversionBinaryOps.has(stringField(node, "operator") ?? "")
   ) {
-    return childNode(node, "left")?.type !== "Literal" || childNode(node, "right")?.type !== "Literal";
+    return (
+      childNode(node, "left")?.type !== "Literal" || childNode(node, "right")?.type !== "Literal"
+    );
   }
 
   if (
@@ -1506,7 +1513,9 @@ function isImplicitTypeConversionSideEffectNode(
       node.type === "PropertyDefinition") &&
     isComputedProperty(node)
   ) {
-    return childNode(node, node.type === "MemberExpression" ? "property" : "key")?.type !== "Literal";
+    return (
+      childNode(node, node.type === "MemberExpression" ? "property" : "key")?.type !== "Literal"
+    );
   }
 
   return (
@@ -1591,7 +1600,7 @@ function replacePatternWithFunction(
 
   for (const match of matcher.execAll(str)) {
     chunks.push(str.slice(index, match.index));
-    chunks.push(String(replace(...match, match.index, match.input)));
+    chunks.push(String(replace(match[0], ...match.slice(1), match.index, match.input)));
     index = match.index + match[0].length;
   }
   chunks.push(str.slice(index));
@@ -1611,16 +1620,4 @@ function keywordWithValue(expected: string) {
 
 function not<T extends readonly unknown[]>(predicate: (...args: T) => boolean) {
   return (...args: T): boolean => !predicate(...args);
-}
-
-function unsupportedAstUtilsFunction(name: string): (...args: unknown[]) => never {
-  return (..._args: unknown[]): never => {
-    throw unsupportedAstUtilsError(name);
-  };
-}
-
-function unsupportedAstUtilsError(name: string): Error {
-  return new Error(
-    `ASTUtils.${name} is not supported by corsa-oxlint because it depends on ESLint SourceCode or scope internals.`,
-  );
 }

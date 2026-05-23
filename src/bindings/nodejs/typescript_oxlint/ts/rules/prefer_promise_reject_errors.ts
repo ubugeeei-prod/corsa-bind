@@ -19,17 +19,13 @@ function includeRejectTypeMetadata(_node: any, depth: number): boolean {
   return depth === 1 || depth === 2;
 }
 
-function shouldRunPreferPromiseRejectErrors(
-  node: any,
-  context: ContextWithParserOptions,
-): boolean {
+function shouldRunPreferPromiseRejectErrors(node: any, context: ContextWithParserOptions): boolean {
   const callee = stripChainExpression(node.callee) as any;
   if (memberPropertyName(callee) === "reject") {
     return true;
   }
   return (
-    callee?.type === "Identifier" &&
-    isPromiseExecutorRejectCandidate(context, node, callee.name)
+    callee?.type === "Identifier" && isPromiseExecutorRejectCandidate(context, node, callee.name)
   );
 }
 

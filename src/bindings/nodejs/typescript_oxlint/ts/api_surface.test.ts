@@ -51,8 +51,7 @@ describe("api surface", () => {
   });
 
   it("tracks the pinned typescript-eslint utility namespace keys", async () => {
-    const upstream =
-      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+    const upstream = await importUpstreamUtils();
 
     expectMissingKeys("root", main, upstream, ["__esModule", "default", "module.exports"]);
     expectMissingKeys("AST_NODE_TYPES", main.AST_NODE_TYPES, upstream.AST_NODE_TYPES);
@@ -90,8 +89,7 @@ describe("api surface", () => {
   });
 
   it("supports scope-free ASTUtils static evaluation helpers", async () => {
-    const upstream =
-      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+    const upstream = await importUpstreamUtils();
     const member = {
       type: "MemberExpression",
       computed: false,
@@ -124,41 +122,42 @@ describe("api surface", () => {
     expect(astUtilsEntry.getStringIfConstant(template)).toBe(
       upstream.ASTUtils.getStringIfConstant(template),
     );
-    expect(astUtilsEntry.getStaticValue(binary)).toEqual(
-      upstream.ASTUtils.getStaticValue(binary),
-    );
+    expect(astUtilsEntry.getStaticValue(binary)).toEqual(upstream.ASTUtils.getStaticValue(binary));
     expect(
       astUtilsEntry.getStringIfConstant({
         type: "Literal",
         value: null,
         regex: { pattern: "a+", flags: "u" },
       }),
-    ).toBe(upstream.ASTUtils.getStringIfConstant({
-      type: "Literal",
-      value: null,
-      regex: { pattern: "a+", flags: "u" },
-    }));
+    ).toBe(
+      upstream.ASTUtils.getStringIfConstant({
+        type: "Literal",
+        value: null,
+        regex: { pattern: "a+", flags: "u" },
+      }),
+    );
     expect(
       astUtilsEntry.getPropertyName({
         type: "PropertyDefinition",
         computed: false,
         key: { type: "PrivateIdentifier", name: "value" },
       }),
-    ).toBe(upstream.ASTUtils.getPropertyName({
-      type: "PropertyDefinition",
-      computed: false,
-      key: { type: "PrivateIdentifier", name: "value" },
-    }));
+    ).toBe(
+      upstream.ASTUtils.getPropertyName({
+        type: "PropertyDefinition",
+        computed: false,
+        key: { type: "PrivateIdentifier", name: "value" },
+      }),
+    );
   });
 
   it("matches scope and function ASTUtils helpers for lightweight inputs", async () => {
-    const upstream =
-      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
-    const innerVariable = { name: "value" };
+    const upstream = await importUpstreamUtils();
+    const innerVariable = variable(idNode("value"));
     const outerScope = {
       block: { range: [0, 100] },
       childScopes: [] as unknown[],
-      set: new Map<string, unknown>([["outer", { name: "outer" }]]),
+      set: new Map<string, unknown>([["outer", variable(idNode("outer"))]]),
       upper: null,
     };
     const innerScope = {
@@ -168,12 +167,12 @@ describe("api surface", () => {
       upper: outerScope,
     };
     outerScope.childScopes = [innerScope];
-    const identifier = { type: "Identifier", name: "value", range: [10, 15] };
+    const identifier = { type: "Identifier", name: "value", range: [10, 15] as const };
 
-    expect(astUtilsEntry.getInnermostScope(outerScope, identifier)).toBe(
+    expect(astUtilsEntry.getInnermostScope(outerScope as never, identifier)).toBe(
       upstream.ASTUtils.getInnermostScope(outerScope, identifier),
     );
-    expect(astUtilsEntry.findVariable(outerScope, identifier)).toBe(
+    expect(astUtilsEntry.findVariable(outerScope as never, identifier)).toBe(
       upstream.ASTUtils.findVariable(outerScope, identifier),
     );
 
@@ -207,8 +206,7 @@ describe("api surface", () => {
   });
 
   it("matches PatternMatcher and side-effect helper behavior", async () => {
-    const upstream =
-      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+    const upstream = await importUpstreamUtils();
     const input = "foo \\foo foo";
     const localMatcher = new astUtilsEntry.PatternMatcher(/foo/g);
     const upstreamMatcher = new upstream.ASTUtils.PatternMatcher(/foo/g);
@@ -266,8 +264,7 @@ describe("api surface", () => {
   });
 
   it("matches ReferenceTracker for global, CommonJS, and ESM references", async () => {
-    const upstream =
-      await import("../../../../../bench/cli_compare/node_modules/@typescript-eslint/utils/dist/index.js");
+    const upstream = await importUpstreamUtils();
 
     const globalScope = programScope();
     const mathId = idNode("Math");
@@ -340,7 +337,7 @@ describe("api surface", () => {
 
     const localEsmTrace = {
       fs: {
-        [astUtilsEntry.ReferenceTracker.ESM]: true,
+        [astUtilsEntry.ReferenceTracker.ESM]: true as const,
         readFile: { [astUtilsEntry.ReferenceTracker.CALL]: "esm call" },
       },
     };
@@ -389,6 +386,10 @@ function expectMissingKeys(
     .filter((key) => !ignoredKeys.has(key))
     .filter((key) => !localKeys.has(key));
   expect(missing, `${label} missing keys`).toEqual([]);
+}
+
+async function importUpstreamUtils(): Promise<any> {
+  return await import("@typescript-eslint/utils");
 }
 
 function programScope() {
@@ -466,12 +467,14 @@ function importNamedDeclaration(source: string, imported: string, local: Record<
   return node;
 }
 
-function summarizeReferences(references: Iterable<{
-  readonly info: unknown;
-  readonly node: { readonly type?: string };
-  readonly path: readonly string[];
-  readonly type: symbol;
-}>) {
+function summarizeReferences(
+  references: Iterable<{
+    readonly info: unknown;
+    readonly node: { readonly type?: string };
+    readonly path: readonly string[];
+    readonly type: symbol;
+  }>,
+) {
   return [...references].map((reference) => ({
     info: reference.info,
     nodeType: reference.node.type,
