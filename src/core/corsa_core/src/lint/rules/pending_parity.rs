@@ -53,7 +53,11 @@ parity_rule!(
     ConsistentReturnRule,
     "consistent-return",
     "Require functions to return values consistently.",
-    ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"],
+    [
+        "FunctionDeclaration",
+        "FunctionExpression",
+        "ArrowFunctionExpression"
+    ],
     check_consistent_return
 );
 parity_rule!(
@@ -247,14 +251,23 @@ parity_rule!(
     PreferReturnThisTypeRule,
     "prefer-return-this-type",
     "Prefer this as a return type for fluent instance methods.",
-    ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "MethodDefinition"],
+    [
+        "FunctionDeclaration",
+        "FunctionExpression",
+        "ArrowFunctionExpression",
+        "MethodDefinition"
+    ],
     check_prefer_return_this_type
 );
 parity_rule!(
     PromiseFunctionAsyncRule,
     "promise-function-async",
     "Require functions that return promises to be async.",
-    ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"],
+    [
+        "FunctionDeclaration",
+        "FunctionExpression",
+        "ArrowFunctionExpression"
+    ],
     check_promise_function_async
 );
 parity_rule!(
@@ -268,7 +281,11 @@ parity_rule!(
     RequireAwaitRule,
     "require-await",
     "Disallow async functions that contain no await expression.",
-    ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"],
+    [
+        "FunctionDeclaration",
+        "FunctionExpression",
+        "ArrowFunctionExpression"
+    ],
     check_require_await
 );
 parity_rule!(
@@ -407,22 +424,20 @@ fn check_no_misused_spread(ctx: &mut RuleContext<'_>, node: &LintNode) {
         return;
     };
     match node.field_str("__parentKind") {
-        Some("ArrayExpression" | "CallExpression" | "NewExpression") => {
+        Some("ArrayExpression" | "CallExpression" | "NewExpression")
             if !is_array_like_type_texts(&argument.type_texts)
                 && !argument
                     .property_names
                     .iter()
-                    .any(|property| property == "Symbol.iterator")
-            {
-                ctx.report("unexpected", argument.range);
-            }
+                    .any(|property| property == "Symbol.iterator") =>
+        {
+            ctx.report("unexpected", argument.range);
         }
-        Some("ObjectExpression") => {
+        Some("ObjectExpression")
             if is_array_like_type_texts(&argument.type_texts)
-                || has_type_kind(&argument.type_texts, TypeTextKind::Nullish, None)
-            {
-                ctx.report("unexpected", argument.range);
-            }
+                || has_type_kind(&argument.type_texts, TypeTextKind::Nullish, None) =>
+        {
+            ctx.report("unexpected", argument.range);
         }
         _ => {}
     }
@@ -433,13 +448,8 @@ fn check_no_redundant_type_constituents(ctx: &mut RuleContext<'_>, node: &LintNo
     if constituents.len() < 2 {
         return;
     }
-    let keys = constituents
-        .iter()
-        .map(|ty| type_node_key(ty))
-        .collect::<Vec<_>>();
-    if node.kind == "TSUnionType"
-        && keys.iter().any(|key| key == "any" || key == "unknown")
-    {
+    let keys = constituents.iter().map(type_node_key).collect::<Vec<_>>();
+    if node.kind == "TSUnionType" && keys.iter().any(|key| key == "any" || key == "unknown") {
         report_first_redundant(ctx, constituents, &keys, &["any", "unknown"]);
     }
     if node.kind == "TSIntersectionType" && keys.iter().any(|key| key == "never") {
@@ -616,13 +626,13 @@ fn check_non_nullable_type_assertion_style(ctx: &mut RuleContext<'_>, node: &Lin
 }
 
 fn check_prefer_nullish_coalescing(ctx: &mut RuleContext<'_>, node: &LintNode) {
-    if node.kind == "LogicalExpression" && node.field_str("operator") == Some("||") {
-        if node
+    if node.kind == "LogicalExpression"
+        && node.field_str("operator") == Some("||")
+        && node
             .child("left")
             .is_some_and(|left| has_type_kind(&left.type_texts, TypeTextKind::Nullish, None))
-        {
-            ctx.report("unexpected", node.range);
-        }
+    {
+        ctx.report("unexpected", node.range);
     }
 }
 
@@ -659,7 +669,11 @@ fn check_prefer_readonly(ctx: &mut RuleContext<'_>, node: &LintNode) {
 
 fn check_prefer_readonly_parameter_types(ctx: &mut RuleContext<'_>, node: &LintNode) {
     for param in child_list(node, "params") {
-        if param.type_texts.iter().any(is_mutable_array_type_text) {
+        if param
+            .type_texts
+            .iter()
+            .any(|text| is_mutable_array_type_text(text.as_str()))
+        {
             ctx.report("unexpected", param.range);
             return;
         }
@@ -737,7 +751,10 @@ fn check_return_await(ctx: &mut RuleContext<'_>, node: &LintNode) {
     };
     let argument = strip_chain_expression(argument);
     let is_return_await = argument.kind == "AwaitExpression";
-    if node.field_bool("__returnAwaitRequiresAwait").unwrap_or(false) {
+    if node
+        .field_bool("__returnAwaitRequiresAwait")
+        .unwrap_or(false)
+    {
         if !is_return_await && is_promise_like_return_argument(argument) {
             ctx.report("unexpected", argument.range);
         }
@@ -818,7 +835,10 @@ fn check_switch_exhaustiveness(ctx: &mut RuleContext<'_>, node: &LintNode) {
 }
 
 fn check_unbound_method(ctx: &mut RuleContext<'_>, node: &LintNode) {
-    if matches!(node.field_str("__parentKind"), Some("CallExpression" | "ChainExpression")) {
+    if matches!(
+        node.field_str("__parentKind"),
+        Some("CallExpression" | "ChainExpression")
+    ) {
         return;
     }
     if node
@@ -953,7 +973,11 @@ fn type_node_key(node: &LintNode) -> String {
             .text
             .as_deref()
             .map(normalize_type_text)
-            .or_else(|| node.type_texts.first().map(|text| normalize_type_text(text)))
+            .or_else(|| {
+                node.type_texts
+                    .first()
+                    .map(|text| normalize_type_text(text))
+            })
             .unwrap_or_default(),
     }
 }
@@ -998,8 +1022,7 @@ fn has_type_kind(type_texts: &[String], kind: TypeTextKind, exact: Option<&str>)
         }
         split_top_level_type_text(text, '|').iter().any(|part| {
             let part = part.trim();
-            exact.is_some_and(|expected| part == expected)
-                || classify_type_text(Some(part)) == kind
+            exact.is_some_and(|expected| part == expected) || classify_type_text(Some(part)) == kind
         })
     })
 }
@@ -1072,7 +1095,7 @@ fn enum_domain(node: &LintNode) -> Option<String> {
     })
 }
 
-fn is_mutable_array_type_text(text: &String) -> bool {
+fn is_mutable_array_type_text(text: &str) -> bool {
     let text = text.trim();
     (text.ends_with("[]") && !text.starts_with("readonly "))
         || text.starts_with("Array<")
