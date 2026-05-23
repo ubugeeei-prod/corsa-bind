@@ -840,18 +840,23 @@ fn reports_require_await_and_promise_function_async() {
         TextRange::new(0, 28),
         [("body", node("BlockStatement", TextRange::new(20, 28)))],
     );
-    async_function.fields.insert("async".to_owned(), json!(true));
+    async_function
+        .fields
+        .insert("async".to_owned(), json!(true));
 
-    let diagnostics = registry().run_rule("require-await", &async_function).unwrap();
+    let diagnostics = registry()
+        .run_rule("require-await", &async_function)
+        .unwrap();
 
     assert_eq!(diagnostics.len(), 1);
 
     let mut promise_function = node("FunctionDeclaration", TextRange::new(0, 34));
-    promise_function.fields.insert("async".to_owned(), json!(false));
-    promise_function.fields.insert(
-        "__returnTypeTexts".to_owned(),
-        json!(["Promise<string>"]),
-    );
+    promise_function
+        .fields
+        .insert("async".to_owned(), json!(false));
+    promise_function
+        .fields
+        .insert("__returnTypeTexts".to_owned(), json!(["Promise<string>"]));
 
     let diagnostics = registry()
         .run_rule("promise-function-async", &promise_function)
@@ -998,7 +1003,8 @@ fn return_await_respects_error_handling_context() {
 
 #[test]
 fn reports_switch_exhaustiveness_for_missing_literal_case() {
-    let mut discriminant = node_with_field("Identifier", TextRange::new(8, 12), "name", json!("kind"));
+    let mut discriminant =
+        node_with_field("Identifier", TextRange::new(8, 12), "name", json!("kind"));
     discriminant.type_texts = vec!["'a' | 'b'".to_owned()];
     let case_a = node_with_children(
         "SwitchCase",
