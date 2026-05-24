@@ -136,6 +136,21 @@ export default defineConfig({
         cwd: "src/bindings/nodejs/corsa_node/ts",
         dependsOn: ["build_node_debug"],
       },
+      check_js_runtime_compat: {
+        command: noopCommand,
+        dependsOn: ["check_js_runtime_compat_bun", "check_js_runtime_compat_deno"],
+      },
+      check_js_runtime_compat_bun: {
+        command: "bun run ./runtime_compat.ts",
+        cwd: "examples",
+        dependsOn: ["build_wrapper_ci"],
+      },
+      check_js_runtime_compat_deno: {
+        command:
+          "deno run --node-modules-dir=manual --allow-ffi --allow-read --allow-env --allow-run ./runtime_compat.ts",
+        cwd: "examples",
+        dependsOn: ["build_wrapper_ci"],
+      },
       lint_rust: {
         command: "cargo clippy --workspace --all-targets -- -D warnings",
       },

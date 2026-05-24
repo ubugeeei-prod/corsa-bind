@@ -1,6 +1,6 @@
 # corsa
 
-Rust bindings, orchestration layers, and Node bindings for `typescript-go` over stdio.
+Rust bindings, orchestration layers, and JS runtime bindings for `typescript-go` over stdio.
 
 > [!WARNING]
 > This repository is still evolving.
@@ -16,7 +16,7 @@ Rust bindings, orchestration layers, and Node bindings for `typescript-go` over 
 
 ## What This Is
 
-`corsa` is a multi-crate workspace for talking to `typescript-go` from Rust and Node.js without patching upstream, with a Rust-backed native FFI layer that exposes `tsgo` API, virtual-document, and `utils` surfaces across C-family and other native languages.
+`corsa` is a multi-crate workspace for talking to `typescript-go` from Rust and JavaScript runtimes without patching upstream, with a Rust-backed native FFI layer that exposes `tsgo` API, virtual-document, and `utils` surfaces across C-family and other native languages.
 
 In practice, that means:
 
@@ -47,7 +47,7 @@ Current focus:
 - Fast-path bias: `CompactString`, `SmallVec`, `bumpalo`, `memchr`, `phf`, `FxHash`
 - JS toolchain: Vite+ (`vp`) with vp-managed Node `24`, pnpm `10`, `oxfmt`, and `oxlint`
 - Repo automation: `scripts/*.ts` executed directly through Node `24` with `--strip-types`
-- Node bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa-oxlint` (`src/bindings/nodejs/typescript_oxlint`) (public npm packages that still expect a caller-managed `typescript-go` executable)
+- JS bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa-oxlint` (`src/bindings/nodejs/typescript_oxlint`) (public npm packages that still expect a caller-managed `typescript-go` executable)
 - Distributed orchestration: `experimental-distributed` cargo feature
 - TS benchmark project: `bench`
 - Example workspace: `examples`
@@ -134,7 +134,7 @@ vp check
 
 Repository automation scripts now assume Node `24` so they can run TypeScript
 directly through `node --strip-types`. The published npm packages themselves
-still target Node `22+`.
+target Node `22+`, Deno `2.0+`, and Bun `1.2+`.
 
 ## Examples
 

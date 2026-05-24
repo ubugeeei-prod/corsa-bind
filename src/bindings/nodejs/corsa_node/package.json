@@ -1,7 +1,7 @@
 {
   "name": "@corsa-bind/napi",
   "version": "0.10.0",
-  "description": "Native Node.js bindings for corsa and typescript-go stdio workflows",
+  "description": "Native JS runtime bindings for corsa and typescript-go stdio workflows",
   "homepage": "https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/corsa_node",
   "bugs": {
     "url": "https://github.com/ubugeeei/corsa-bind/issues"
@@ -18,13 +18,16 @@
     "index.d.ts",
     "index.js"
   ],
+  "type": "commonjs",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "default": "./dist/index.mjs",
-      "import": "./dist/index.mjs"
+      "deno": "./dist/index.mjs",
+      "bun": "./dist/index.mjs",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
     }
   },
   "publishConfig": {
@@ -43,6 +46,8 @@
     }
   },
   "engines": {
+    "bun": ">=1.2",
+    "deno": ">=2.0",
     "node": ">=22"
   }
 }

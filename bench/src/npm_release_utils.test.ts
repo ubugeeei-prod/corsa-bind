@@ -14,12 +14,47 @@ import {
 const nodeBindingManifest = JSON.parse(
   readFileSync(resolve(process.cwd(), "src/bindings/nodejs/corsa_node/package.json"), "utf8"),
 ) as {
+  engines: Record<string, string>;
+  exports: Record<string, unknown>;
   files: string[];
   name: string;
+  type: string;
   version: string;
 };
 
 describe("npm release utils", () => {
+  it("declares Deno and Bun support for published JS packages", () => {
+    const manifests = [
+      nodeBindingManifest,
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), "src/bindings/nodejs/typescript_oxlint/package.json"),
+          "utf8",
+        ),
+      ) as { engines: Record<string, string>; exports: Record<string, unknown> },
+    ];
+
+    for (const manifest of manifests) {
+      expect(manifest.engines).toMatchObject({
+        node: ">=22",
+        deno: ">=2.0",
+        bun: ">=1.2",
+      });
+
+      for (const entry of Object.values(manifest.exports)) {
+        if (typeof entry === "string") {
+          continue;
+        }
+        expect(entry).toMatchObject({
+          deno: expect.any(String),
+          bun: expect.any(String),
+        });
+      }
+    }
+
+    expect(nodeBindingManifest.type).toBe("commonjs");
+  });
+
   it("includes the configured native binding targets", () => {
     expect(
       getNodeBindingTargets(nodeBindingManifest).map(
