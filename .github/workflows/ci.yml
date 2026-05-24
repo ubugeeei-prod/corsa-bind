@@ -164,8 +164,21 @@ jobs:
           cache: true
           run-install: true
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.2.18"
+
       - name: Build workspace
         run: vp run -w build_ci
+
+      - name: Check Deno and Bun runtime compatibility
+        run: vp run -w check_js_runtime_compat
 
   test:
     name: Test (${{ matrix.os }})

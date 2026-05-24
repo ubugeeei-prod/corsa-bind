@@ -8,7 +8,7 @@ use and what remains experimental.
 The supported production surface is currently:
 
 - local Rust API clients
-- published Node bindings for the documented prebuilt targets
+- published JS bindings for the documented prebuilt targets
 - LSP stdio integrations
 - local worker orchestration and cache reuse
 - C ABI, C++ headers, and Go wrappers that pass the non-Node binding CI smoke suite
@@ -34,7 +34,7 @@ receives fixes.
 ## Compatibility Matrix
 
 - Rust: `1.85+`
-- Node.js runtime for published packages: `22+`
+- JavaScript runtimes for published packages: Node.js `22+`, Deno `2.0+`, Bun `1.2+`
 - Node.js tooling for repository scripts and examples: `24+`
 - Go: the version declared by `ref/typescript-go/go.mod`
 - Operating systems: Linux, macOS, and Windows for the supported local surface
@@ -43,6 +43,7 @@ receives fixes.
 CI is expected to exercise:
 
 - workspace quality checks on Linux, macOS, and Windows
+- Deno and Bun runtime smoke coverage for the published JS wrapper on Linux, macOS, and Windows
 - real `tsgo` smoke coverage on Linux, macOS, and Windows
 - C ABI, C++ header, and Go wrapper smoke coverage on Ubuntu
 - benchmark verification on Ubuntu

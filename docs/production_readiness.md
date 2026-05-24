@@ -8,8 +8,8 @@ For the current source-level gap register, see [Production Readiness Audit](./pr
 
 The current production target is:
 
-- local Rust and Node API clients
-- published Node bindings with prebuilt packages for supported targets
+- local Rust and JS API clients
+- published JS bindings for Node.js, Deno, and Bun with prebuilt packages for supported targets
 - LSP stdio integrations
 - local worker orchestration and cache reuse
 
@@ -75,7 +75,7 @@ The main quality workflow is intended to stay green on:
 Real `tsgo` smoke coverage now runs across the supported OS matrix, while the
 heavier benchmark verification remains concentrated in the Ubuntu benchmark job.
 
-Published Node prebuild coverage currently targets:
+Published JS prebuild coverage currently targets:
 
 - `darwin-arm64`
 - `darwin-x64`
