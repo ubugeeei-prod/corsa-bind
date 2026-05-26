@@ -36,7 +36,7 @@ export function resolveProjectConfig(context: ContextWithParserOptions): Resolve
     discoverTsconfig(filename, rootDir) ??
     resolveDefaultProject(rootDir, filename, parserOptions.projectService);
   if (!configPath) {
-    throw new Error(`corsa-oxlint could not resolve a tsconfig for ${filename}`);
+    throw new Error(`corsa oxlint could not resolve a tsconfig for ${filename}`);
   }
   return { filename, rootDir, configPath, runtime };
 }
@@ -45,7 +45,7 @@ export function resolveProjectConfig(context: ContextWithParserOptions): Resolve
  * Resolves the type-aware parser options visible to a rule.
  *
  * Oxlint exposes a fixed `context.languageOptions.parserOptions` object at
- * runtime, so `corsa-oxlint` stores its richer configuration under
+ * runtime, so `corsa oxlint` stores its richer configuration under
  * `settings.typescriptOxlint` and rehydrates the rule-facing parser options
  * shape from there.
  *

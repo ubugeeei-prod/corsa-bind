@@ -65,6 +65,7 @@ export class TsgoProjectSession {
   #projects: ProjectResponse[] = [];
   #files = new Map<string, FileCache>();
   #symbolsById = new Map<string, TsgoSymbol>();
+  #syntheticSymbolsById = new Map<string, TsgoSymbol>();
   #symbolTypeById = new Map<string, string>();
   #nodesById = new Map<string, TsgoNode>();
   #typeLookupById = new Map<string, TypeLookup>();
@@ -136,6 +137,10 @@ export class TsgoProjectSession {
   getSymbol(symbol: string | TsgoSymbol): TsgoSymbol | undefined {
     if (typeof symbol !== "string") {
       return this.rememberSymbol(symbol);
+    }
+    const synthetic = this.#syntheticSymbolsById.get(symbol);
+    if (synthetic) {
+      return synthetic;
     }
     const cached = this.#symbolsById.get(symbol);
     if (cached) {
@@ -469,6 +474,10 @@ export class TsgoProjectSession {
     if (!symbol) {
       return symbol;
     }
+    const synthetic = this.#syntheticSymbolsById.get(symbol.id);
+    if (synthetic) {
+      return synthetic as T;
+    }
     this.#symbolsById.set(symbol.id, symbol);
     for (const declaration of symbol.declarations ?? []) {
       this.rememberNode(declaration);
@@ -515,7 +524,7 @@ export class TsgoProjectSession {
     parameter?: ParameterInfo,
     fallbackName = "",
   ): TsgoSymbol {
-    const cached = this.#symbolsById.get(id);
+    const cached = this.#syntheticSymbolsById.get(id);
     if (cached && (cached.name || !parameter?.name)) {
       return cached;
     }
@@ -528,6 +537,7 @@ export class TsgoProjectSession {
       declarations: declaration ? [declaration] : (cached?.declarations ?? []),
       valueDeclaration: declaration ?? cached?.valueDeclaration,
     };
+    this.#syntheticSymbolsById.set(id, symbol);
     this.#symbolsById.set(id, symbol);
     if (declaration) {
       this.#nodesById.set(declaration, parameter.node);
@@ -546,6 +556,7 @@ export class TsgoProjectSession {
 
   private clearHandleCaches(): void {
     this.#symbolsById.clear();
+    this.#syntheticSymbolsById.clear();
     this.#symbolTypeById.clear();
     this.#nodesById.clear();
     this.#typeLookupById.clear();
@@ -557,7 +568,7 @@ export class TsgoProjectSession {
     if (!source) {
       return [];
     }
-    const open = source.text.indexOf("(");
+    const open = findConstructorParameterOpen(source.text);
     if (open < 0) {
       return [];
     }
@@ -610,7 +621,7 @@ export class TsgoProjectSession {
     }
     const config = this.#config;
     if (!config) {
-      throw new Error(`corsa-oxlint could not parse a Corsa config for ${this.project.configPath}`);
+      throw new Error(`corsa oxlint could not parse a Corsa config for ${this.project.configPath}`);
     }
     return config;
   }
@@ -676,7 +687,7 @@ export class TsgoProjectSession {
     const id = this.#projects[0]?.id;
     if (!id) {
       throw new Error(
-        `corsa-oxlint could not resolve a Corsa project for ${this.project.filename}`,
+        `corsa oxlint could not resolve a Corsa project for ${this.project.filename}`,
       );
     }
     return id;
@@ -741,6 +752,19 @@ export class TsgoProjectSession {
     }
     return this.#supportsOverlayChanges;
   }
+}
+
+function findConstructorParameterOpen(text: string): number {
+  const constructorPattern = /\bconstructor\s*\(/g;
+  let match: RegExpExecArray | null;
+  let open = -1;
+  while ((match = constructorPattern.exec(text)) !== null) {
+    open = match.index + match[0].lastIndexOf("(");
+  }
+  if (open >= 0) {
+    return open;
+  }
+  return text.indexOf("(");
 }
 
 function overlayTextFor(fileName: string, sourceText?: string): string | undefined {

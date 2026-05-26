@@ -243,7 +243,7 @@ function findNodeByRange(
 function nativeRuleMeta(ruleName: string): NativeLintRuleMeta {
   const meta = nativeRuleMetasByName.get(ruleName);
   if (!meta) {
-    throw new Error(`corsa-oxlint native Rust rule is not registered: ${ruleName}`);
+    throw new Error(`corsa oxlint native Rust rule is not registered: ${ruleName}`);
   }
   return meta;
 }

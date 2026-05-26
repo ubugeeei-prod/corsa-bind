@@ -1,6 +1,6 @@
-# corsa-oxlint
+# corsa oxlint
 
-`corsa-oxlint` is a self-hosted type-aware framework for building Oxlint JS
+`corsa oxlint` is a self-hosted type-aware framework for building Oxlint JS
 plugins with real type information powered by Corsa.
 
 > [!WARNING]
@@ -26,7 +26,7 @@ custom rules in plain JS/TS.
 ## Configuration
 
 Oxlint does not expose arbitrary parser options at runtime, so
-`corsa-oxlint` reads its type-aware settings from `settings.typescriptOxlint`.
+`corsa oxlint` reads its type-aware settings from `settings.typescriptOxlint`.
 
 ```ts
 import { OxlintUtils } from "corsa-oxlint";
@@ -94,7 +94,7 @@ export default [
 
 ## Native Rules
 
-`corsa-oxlint/rules` exports the TS-native rule set and plugin surface.
+`corsa oxlint` exports the TS-native rule set and plugin surface via `corsa-oxlint/rules`.
 Rule parity is tracked against upstream `tsgolint/internal/rules`, but the
 runtime implementation lives entirely in this package.
 
@@ -128,7 +128,7 @@ General-purpose built-in rules can be implemented as Rust rules and still ship
 as Oxlint JS plugin rules. The bridge is:
 
 1. Oxlint visits the ESTree node in JS.
-2. `corsa-oxlint` collects compact node facts and type texts.
+2. `corsa oxlint` collects compact node facts and type texts.
 3. `@corsa-bind/napi` calls `corsa::lint::RustLintRule`.
 4. Rust returns Oxlint-shaped diagnostics, suggestions, and fixes.
 5. The JS rule reports them through `context.report()`.

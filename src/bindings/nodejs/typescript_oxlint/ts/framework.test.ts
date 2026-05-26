@@ -5,13 +5,14 @@ import { describe, expect, it } from "vitest";
 
 import { defaultTsgoExecutable } from "./context";
 import { OxlintUtils } from "./oxlint_utils";
+import { getParserServices } from "./parser_services";
 import { decorateRule, definePlugin } from "./plugin";
 import { RuleTester } from "./rule_tester";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const realTsgoBinary = defaultTsgoExecutable(workspaceRoot);
 
-describe("corsa-oxlint", () => {
+describe("corsa oxlint", () => {
   it("creates docs URLs through the Oxlint RuleCreator", () => {
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
     const rule = createRule({
@@ -98,6 +99,64 @@ describe("corsa-oxlint", () => {
       executable: realTsgoBinary,
       project: ["tsconfig.json"],
       hasParserServices: true,
+    });
+  });
+
+  it("reuses existing parserServices when ESLint already provides type information", () => {
+    const program = {
+      getTypeChecker() {
+        return {
+          getTypeAtLocation() {
+            return { kind: "type" };
+          },
+          getSymbolAtLocation() {
+            return { kind: "symbol" };
+          },
+        };
+      },
+    };
+    const tsNode = { kind: "ts-node" };
+    const parserServices = {
+      program,
+      esTreeNodeToTSNodeMap: {
+        get() {
+          return tsNode;
+        },
+        has() {
+          return true;
+        },
+      },
+      tsNodeToESTreeNodeMap: {
+        get() {
+          return { type: "Identifier" };
+        },
+        has() {
+          return true;
+        },
+      },
+    };
+
+    const services = getParserServices({
+      cwd: workspaceRoot,
+      filename: resolve(workspaceRoot, "fixture.ts"),
+      languageOptions: {
+        parserOptions: {},
+      },
+      parserServices: parserServices as never,
+      report() {},
+      settings: {},
+      sourceCode: {
+        text: "const fixture = 1;",
+      },
+    } as never);
+
+    expect(services.program).toBe(program);
+    expect(services.hasFullTypeInformation).toBe(true);
+    expect(services.getTypeAtLocation({ type: "Identifier" } as never)).toEqual({
+      kind: "type",
+    });
+    expect(services.getSymbolAtLocation({ type: "Identifier" } as never)).toEqual({
+      kind: "symbol",
     });
   });
 

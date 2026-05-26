@@ -15,7 +15,7 @@ const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_tsgo${executableSuffix}`);
 const integrationCase = existsSync(realTsgoBinary) ? it : it.skip;
 
-describe("corsa-oxlint type locations", () => {
+describe("corsa oxlint type locations", () => {
   integrationCase("resolves types from declaration wrapper nodes", () => {
     const seen: Record<string, string | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
@@ -109,7 +109,7 @@ describe("corsa-oxlint type locations", () => {
         const checker = services.program.getTypeChecker();
         return {
           NewExpression(node: any) {
-            if (node.callee?.name !== "Foo") {
+            if (node.callee?.name !== "Construct") {
               return;
             }
             const type = checker.getTypeAtLocation(node.callee);
@@ -117,7 +117,7 @@ describe("corsa-oxlint type locations", () => {
               return;
             }
             const signature = checker.getSignaturesOfType(type, 1)[0];
-            seen.parameterNames = signature?.parameters.map((id) => checker.getSymbol(id)?.name);
+            seen.parameterNames = signature?.parameters.map((id) => checker.getSymbolById(id)?.name);
             const symbol = type.symbol ? checker.getSymbol(type.symbol) : undefined;
             seen.typeSymbolName = symbol?.name;
             const declarationNode = symbol?.valueDeclaration
@@ -136,10 +136,95 @@ describe("corsa-oxlint type locations", () => {
       valid: [
         {
           code: [
-            "class Foo {",
-            "  constructor(a: string, b: number) {}",
+            "type IDependable = { __d?: 1 };",
+            "type IMixin = { __x?: 1 };",
+            "/**",
+            " * Represents a construct.",
+            " */",
+            "interface IConstruct extends IDependable {",
+            "  /**",
+            "   * The tree node.",
+            "   */",
+            "  readonly node: Node;",
+            "  /**",
+            "   * Applies one or more mixins to this construct.",
+            "   *",
+            "   * Mixins are applied in order. The list of constructs is captured at the",
+            "   * start of the call, so constructs added by a mixin will not be visited.",
+            "   *",
+            "   * @param mixins The mixins to apply",
+            "   * @returns This construct for chaining",
+            "   */",
+            "  with(...mixins: IMixin[]): IConstruct;",
             "}",
-            'const foo = new Foo("x", 1);',
+            "/**",
+            " * Represents the construct node in the scope tree.",
+            " */",
+            "declare class Node {",
+            "  private readonly host;",
+            "  /**",
+            "   * Separator used to delimit construct path components.",
+            "   */",
+            "  static readonly PATH_SEP = \"/\";",
+            "  /**",
+            "   * Returns the node associated with a construct.",
+            "   * @param construct the construct",
+            "   *",
+            "   * @deprecated use `construct.node` instead",
+            "   */",
+            "  static of(construct: IConstruct): Node;",
+            "  /**",
+            "   * Returns the scope in which this construct is defined.",
+            "   *",
+            "   * The value is `undefined` at the root of the construct scope tree.",
+            "   */",
+            "  readonly scope?: IConstruct;",
+            "  /**",
+            "   * The id of this construct within the current scope.",
+            "   *",
+            "   * This is a scope-unique id. To obtain an app-unique id for this construct, use `addr`.",
+            "   */",
+            "  readonly id: string;",
+            "  constructor(host: Construct, scope: IConstruct, id: string);",
+            "}",
+            "/**",
+            " * Represents the building block of the construct graph.",
+            " *",
+            " * All constructs besides the root construct must be created within the scope of",
+            " * another construct.",
+            " */",
+            "declare class Construct implements IConstruct {",
+            "  /**",
+            "   * Checks if `x` is a construct.",
+            "   *",
+            "   * Use this method instead of `instanceof` to properly detect `Construct`",
+            "   * instances, even when the construct library is symlinked.",
+            "   */",
+            "  static isConstruct(x: any): x is Construct;",
+            "  /**",
+            "   * The tree node.",
+            "   */",
+            "  readonly node: Node;",
+            "  /**",
+            "   * Creates a new construct node.",
+            "   *",
+            "   * @param scope The scope in which to define this construct",
+            "   * @param id The scoped construct ID. Must be unique amongst siblings. If",
+            "   * the ID includes a path separator (`/`), then it will be replaced by double",
+            "   * dash `--`.",
+            "   */",
+            "  constructor(scope: Construct, id: string);",
+            "  /**",
+            "   * Applies one or more mixins to this construct.",
+            "   */",
+            "  with(...mixins: IMixin[]): IConstruct;",
+            "  /**",
+            "   * Returns a string representation of this construct.",
+            "   */",
+            "  toString(): string;",
+            "}",
+            "declare const scope: Construct;",
+            'new Construct(scope, "x");',
           ].join("\n"),
           settings: {
             typescriptOxlint: {
@@ -156,9 +241,9 @@ describe("corsa-oxlint type locations", () => {
       invalid: [],
     });
 
-    expect(seen.parameterNames).toEqual(["a", "b"]);
-    expect(seen.typeSymbolName).toBe("Foo");
-    expect(seen.declarationText).toContain("class Foo");
+    expect(seen.parameterNames).toEqual(["scope", "id"]);
+    expect(seen.typeSymbolName).toBe("Construct");
+    expect(seen.declarationText).toContain("class Construct");
   });
 
   integrationCase("exposes constituent and mapped type traversal helpers", () => {

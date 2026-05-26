@@ -47,7 +47,7 @@ Current focus:
 - Fast-path bias: `CompactString`, `SmallVec`, `bumpalo`, `memchr`, `phf`, `FxHash`
 - JS toolchain: Vite+ (`vp`) with vp-managed Node `24`, pnpm `10`, `oxfmt`, and `oxlint`
 - Repo automation: `scripts/*.ts` executed directly through Node `24` with `--strip-types`
-- JS bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa-oxlint` (`src/bindings/nodejs/typescript_oxlint`) (public npm packages that still expect a caller-managed Corsa executable)
+- JS bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa oxlint` (`src/bindings/nodejs/typescript_oxlint`, published as `corsa-oxlint`) (public npm packages that still expect a caller-managed Corsa executable)
 - Distributed orchestration: `experimental-distributed` cargo feature
 - TS benchmark project: `bench`
 - Example workspace: `examples`
@@ -139,7 +139,7 @@ target Node `22+`, Deno `2.0+`, and Bun `1.2+`.
 ## Examples
 
 The repository now ships executable examples for Rust, `@corsa-bind/napi`, and
-`corsa-oxlint` under [`examples/`](./examples/README.md), from
+`corsa oxlint` under [`examples/`](./examples/README.md), from
 minimal virtual-document edits up through checker-query walkthroughs and
 opt-in upstream printer flows.
 
@@ -178,7 +178,7 @@ vp run -w examples_rust_experimental
 
 ## Type-Aware Oxlint
 
-`corsa-oxlint` lets us write Oxlint JS plugins with a compact, self-hosted
+`corsa oxlint` lets us write Oxlint JS plugins with a compact, self-hosted
 type-aware authoring model while sourcing type information from the pinned
 Corsa binary. The heavy lifting stays in Rust, then `napi-rs` binds
 that implementation into JS so end users can keep writing custom plugins and
@@ -232,7 +232,7 @@ export const noStringPlusNumber = createRule({
 The rule-side type-aware config lives under `settings.typescriptOxlint`. Package
 details and caveats are documented in [`src/bindings/nodejs/typescript_oxlint/README.md`](./src/bindings/nodejs/typescript_oxlint/README.md).
 
-`corsa-oxlint/rules` exposes a TS-native type-aware rule set and plugin:
+`corsa oxlint` exposes a TS-native type-aware rule set and plugin via `corsa-oxlint/rules`:
 
 ```ts
 import { typescriptOxlintPlugin } from "corsa-oxlint/rules";
@@ -301,8 +301,8 @@ The repo ships two benchmark layers:
 - Native Rust benchmark: `vp run -w bench_native`
 - Native profiling benchmark: `vp run -w bench_native_profile`
 - Node binding benchmark: `vp run -w bench_ts`
-- `corsa-oxlint` checker benchmark: `vp test bench --config ./vite.config.ts bench/src/typescript_oxlint.bench.ts`
-- `corsa-oxlint` native-rule benchmark: `vp test bench --config ./vite.config.ts bench/src/typescript_oxlint_rules.bench.ts`
+- `corsa oxlint` checker benchmark: `vp test bench --config ./vite.config.ts bench/src/typescript_oxlint.bench.ts`
+- `corsa oxlint` native-rule benchmark: `vp test bench --config ./vite.config.ts bench/src/typescript_oxlint_rules.bench.ts`
 - Combined benchmark + budget guard: `vp run -w bench`
 
 The TS benchmark writes machine-readable output to `.cache/bench_ts.json`.

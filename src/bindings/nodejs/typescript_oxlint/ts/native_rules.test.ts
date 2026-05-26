@@ -18,7 +18,7 @@ const realTsgoBinary = defaultTsgoExecutable(workspaceRoot);
 const upstreamCase = existsSync(upstreamRulesDir) ? it : it.skip;
 const integrationCase = existsSync(realTsgoBinary) ? it : it.skip;
 
-describe("corsa-oxlint native rules", () => {
+describe("corsa oxlint native rules", () => {
   it("exports the native plugin surface", () => {
     expect(Object.keys(typescriptOxlintPlugin.rules ?? {}).sort()).toEqual(
       [...implementedNativeRuleNames].sort(),

@@ -11,7 +11,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const realTsgoBinary = defaultTsgoExecutable(workspaceRoot);
 const integrationCase = existsSync(realTsgoBinary) ? it : it.skip;
 
-describe("corsa-oxlint native rule edges", () => {
+describe("corsa oxlint native rule edges", () => {
   integrationCase("covers array and enum edge cases", () => {
     const tester = createTester();
 

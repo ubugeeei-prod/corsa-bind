@@ -11,7 +11,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const realTsgoBinary = defaultTsgoExecutable(workspaceRoot);
 const integrationCase = existsSync(realTsgoBinary) ? it : it.skip;
 
-describe("corsa-oxlint type arguments", () => {
+describe("corsa oxlint type arguments", () => {
   integrationCase("returns empty type arguments for non-generic types", () => {
     const seen: Record<string, readonly string[]> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

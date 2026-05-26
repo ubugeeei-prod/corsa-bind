@@ -23,7 +23,7 @@ function unsupportedTSESLintClass(name: string) {
   return class UnsupportedTSESLintClass {
     constructor(..._args: unknown[]) {
       throw new Error(
-        `TSESLint.${name} is not supported by corsa-oxlint because it depends on ESLint runtime internals.`,
+        `TSESLint.${name} is not supported by corsa oxlint because it depends on ESLint runtime internals.`,
       );
     }
   };

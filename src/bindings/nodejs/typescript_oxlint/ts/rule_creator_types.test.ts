@@ -3,7 +3,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { OxlintUtils } from "./oxlint_utils";
 
-describe("corsa-oxlint RuleCreator types", () => {
+describe("corsa oxlint RuleCreator types", () => {
   it("preserves typed RuleCreator return values", () => {
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
     const rule = createRule({
