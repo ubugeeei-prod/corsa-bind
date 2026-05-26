@@ -87,6 +87,171 @@ describe("corsa-oxlint type locations", () => {
     expect(seen.classFromNode).toBe(seen.classFromId);
   });
 
+  integrationCase("resolves symbol and node handles exposed by signatures and types", () => {
+    const seen: Record<string, unknown> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "symbol-handle-resolution",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise symbol and node handle resolution",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          NewExpression(node: any) {
+            if (node.callee?.name !== "Foo") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node.callee);
+            if (!type) {
+              return;
+            }
+            const signature = checker.getSignaturesOfType(type, 1)[0];
+            seen.parameterNames = signature?.parameters.map((id) => checker.getSymbol(id)?.name);
+            const symbol = type.symbol ? checker.getSymbol(type.symbol) : undefined;
+            seen.typeSymbolName = symbol?.name;
+            const declarationNode = symbol?.valueDeclaration
+              ? checker.getNode(symbol.valueDeclaration)
+              : undefined;
+            seen.declarationText = declarationNode
+              ? context.sourceCode.text.slice(declarationNode.pos, declarationNode.end)
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("symbol-handle-resolution", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Foo {",
+            "  constructor(a: string, b: number) {}",
+            "}",
+            'const foo = new Foo("x", 1);',
+          ].join("\n"),
+          settings: {
+            typescriptOxlint: {
+              parserOptions: {
+                tsgo: {
+                  executable: realTsgoBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.parameterNames).toEqual(["a", "b"]);
+    expect(seen.typeSymbolName).toBe("Foo");
+    expect(seen.declarationText).toContain("class Foo");
+  });
+
+  integrationCase("exposes constituent and mapped type traversal helpers", () => {
+    const seen: Record<
+      string,
+      {
+        args: readonly string[];
+        parts: readonly string[];
+        target?: string;
+        isUnion: boolean;
+        isIntersection: boolean;
+      }
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "type-relation-accessors",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise type relation accessors",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSPropertySignature(node: any) {
+            const keyName = node.key?.name;
+            if (!keyName) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            if (!type) {
+              return;
+            }
+            const target = checker.getTargetOfType(type);
+            seen[keyName] = {
+              args: checker
+                .getTypeArguments(type)
+                .map((argument) => checker.typeToString(argument)),
+              parts: checker.getTypesOfType(type).map((part) => checker.typeToString(part)),
+              target: target ? checker.typeToString(target) : undefined,
+              isUnion: checker.isUnionType(type),
+              isIntersection: checker.isIntersectionType(type),
+            };
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("type-relation-accessors", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Foo { value = 1; }",
+            "interface Bag {",
+            "  arr: Foo[];",
+            "  union: Foo | string;",
+            "  intersection: Foo & { x: number };",
+            "  mapped: Readonly<Foo>;",
+            "}",
+          ].join("\n"),
+          settings: {
+            typescriptOxlint: {
+              parserOptions: {
+                tsgo: {
+                  executable: realTsgoBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.arr.args).toEqual(["Foo"]);
+    expect(seen.union.isUnion).toBe(true);
+    expect(seen.union.parts).toEqual(expect.arrayContaining(["Foo", "string"]));
+    expect(seen.intersection.isIntersection).toBe(true);
+    expect(seen.intersection.parts).toEqual(expect.arrayContaining(["Foo", "{ x: number; }"]));
+    expect(seen.mapped.args).toEqual(["Foo"]);
+    expect(seen.mapped.target).toBe("Readonly<T>");
+  });
+
   it("sends linted source text overlay changes when it differs from disk", () => {
     const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-overlay-"));
     const srcDir = resolve(workspace, "src");
