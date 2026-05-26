@@ -36,7 +36,7 @@ export type RuleCreatorFactory = <TRule extends RuleCreatorRule>(
 ) => RuleCreatorCreatedRule<TRule>;
 
 /**
- * Self-hosted type-aware utilities for Oxlint rules backed by tsgo.
+ * Self-hosted type-aware utilities for Oxlint rules backed by Corsa.
  */
 export const OxlintUtils = Object.freeze({
   RuleCreator(urlCreator: (ruleName: string) => string): RuleCreatorFactory {

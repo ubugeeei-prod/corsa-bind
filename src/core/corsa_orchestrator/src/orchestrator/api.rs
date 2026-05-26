@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Local pool/cache orchestrator for multiple `tsgo` API workers.
+/// Local pool/cache orchestrator for multiple Corsa API workers.
 ///
 /// This type is where session reuse becomes a first-class concept. It can:
 ///
@@ -34,7 +34,7 @@ use std::{
 /// - fan work out across multiple workers while preserving input order
 ///
 /// In other words, it optimizes for end-to-end workflow latency rather than
-/// trying to outperform `tsgo`'s own compiler internals directly.
+/// trying to outperform Corsa's own compiler internals directly.
 #[derive(Clone)]
 pub struct ApiOrchestratorConfig {
     /// Maximum number of workers allowed in a single profile fleet.

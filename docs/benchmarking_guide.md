@@ -6,10 +6,10 @@ For CI structure, local reproduction, and troubleshooting, see [ci_guide.md](./c
 
 ## Why This Exists
 
-`corsa` sits on top of upstream `typescript-go`.
+`corsa` wraps the Corsa upstream.
 That creates an important constraint:
 
-- if `corsa` and `tsgo` do exactly the same work, `corsa` should usually aim for parity, not miracles
+- if `corsa` and the Corsa CLI do exactly the same work, `corsa` should usually aim for parity, not miracles
 - the realistic place to win is the end-to-end workflow, not the compiler engine itself
 
 That is why this repository keeps benchmark layers separate.
@@ -21,7 +21,7 @@ We want to answer different questions with different tools instead of forcing on
 
 `corsa` follows a strict upstream policy:
 
-- use upstream-supported `tsgo` entry points
+- use upstream-supported Corsa entry points
 - pin an exact upstream commit
 - do not patch `ref/typescript-go`
 
@@ -39,9 +39,9 @@ Those are not the same question.
 
 Examples:
 
-- `tsgo` vs `tsc` is an engine and compiler CLI comparison
+- Corsa CLI vs `tsc` is an engine and compiler CLI comparison
 - `msgpack` vs `jsonrpc` is a transport comparison
-- `corsa` warm workflow vs `tsgo --noEmit` is an orchestration comparison
+- `corsa` warm workflow vs Corsa CLI `--noEmit` is an orchestration comparison
 
 If those get mixed together, conclusions become misleading very quickly.
 
@@ -77,7 +77,7 @@ The native runner is [`bench_real_tsgo`](../src/bindings/rust/corsa/src/bin/benc
 
 Its purpose:
 
-- measure the Rust client directly against the real pinned `tsgo` binary
+- measure the Rust client directly against the real pinned Corsa binary
 - compare transports such as `msgpack` and `jsonrpc`
 - inspect hot paths like `updateSnapshot`, `getSourceFile`, and type queries
 
@@ -95,7 +95,7 @@ It has two workloads:
 `project_check` compares:
 
 - `tsc`
-- `tsgo`
+- Corsa CLI
 - `typescript-eslint`
 
 on the same dataset and the same effective project configuration.
@@ -110,7 +110,7 @@ This is the layer that answers whether orchestration actually changes the user-f
 
 ## Key Concepts
 
-## Why `corsa` Cannot Reliably Beat `tsgo` on Identical Work
+## Why `corsa` Cannot Reliably Beat Corsa on Identical Work
 
 If a wrapper talks to the same engine and asks it to do the same work, it usually inherits:
 
@@ -120,7 +120,7 @@ If a wrapper talks to the same engine and asks it to do the same work, it usuall
 
 So the healthy target is:
 
-- same work: roughly equal to `tsgo`, maybe with small overhead
+- same work: roughly equal to the Corsa CLI, maybe with small overhead
 - different workflow: potentially faster if orchestration avoids redundant work
 
 That distinction is the heart of the benchmarking model.
@@ -150,7 +150,7 @@ The comparison should be read as:
 
 not as:
 
-- "This is the same thing as `tsgo --noEmit`."
+- "This is the same thing as Corsa CLI `--noEmit`."
 
 ## Why Overlay `tsconfig` Files Exist
 
@@ -185,7 +185,7 @@ Main files:
 Flow:
 
 1. Parse CLI arguments and choose datasets.
-2. Load real project metadata from the pinned `tsgo`.
+2. Load real project metadata from the pinned Corsa CLI.
 3. Run cold and warm scenarios.
 4. Collect samples into `Stats`.
 5. Emit human-readable tables and machine-readable JSON.
@@ -211,9 +211,9 @@ Main files:
 
 Flow:
 
-1. Load datasets through the real pinned `tsgo`.
+1. Load datasets through the real pinned Corsa.
 2. Build temporary overlay `tsconfig` files.
-3. Run `tsc`, `tsgo`, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` as child processes for `project_check`.
+3. Run `tsc`, Corsa CLI, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` as child processes for `project_check`.
 4. Run a live `corsa` msgpack session for `editor_workflow`.
 5. Emit timing tables and JSON.
 
@@ -258,7 +258,7 @@ Do not use one benchmark layer to answer a different layer's question.
 
 ## Read Workflow Numbers Carefully
 
-If `corsa` beats `tsgo` in `editor_workflow`, it does not mean the wrapper is faster than the engine.
+If `corsa` beats the Corsa CLI in `editor_workflow`, it does not mean the wrapper is faster than the engine.
 It means the wrapper avoided redundant work by reusing state and narrowing the workload.
 
 That is a good outcome, but it is a different claim.
@@ -311,11 +311,11 @@ The current benchmarks intentionally run on real projects from the pinned upstre
 
 Good claim:
 
-- "`corsa` warm editor workflow is faster than rerunning `tsgo --noEmit` on the same project."
+- "`corsa` warm editor workflow is faster than rerunning Corsa CLI `--noEmit` on the same project."
 
 Bad claim:
 
-- "`corsa` is faster than `tsgo`."
+- "`corsa` is faster than Corsa."
 
 The first says what was actually measured.
 The second overstates what the data means.

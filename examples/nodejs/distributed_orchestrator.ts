@@ -1,11 +1,11 @@
-import { TsgoDistributedOrchestrator, TsgoVirtualDocument } from "@corsa-bind/napi";
+import { CorsaDistributedOrchestrator, CorsaVirtualDocument } from "@corsa-bind/napi";
 
 import { isMain } from "../shared.ts";
 
 export function runDistributedOrchestratorExample() {
-  const cluster = new TsgoDistributedOrchestrator(["n1", "n2", "n3"]);
+  const cluster = new CorsaDistributedOrchestrator(["n1", "n2", "n3"]);
   const term = cluster.campaign("n1");
-  const document = TsgoVirtualDocument.inMemory(
+  const document = CorsaVirtualDocument.inMemory(
     "cluster",
     "/main.ts",
     "typescript",

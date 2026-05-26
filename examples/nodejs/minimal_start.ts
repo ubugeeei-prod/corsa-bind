@@ -1,9 +1,9 @@
-import { isUnsafeAssignment, isUnsafeReturn, TsgoVirtualDocument } from "@corsa-bind/napi";
+import { isUnsafeAssignment, isUnsafeReturn, CorsaVirtualDocument } from "@corsa-bind/napi";
 
 import { isMain } from "../shared.ts";
 
 export function runMinimalStartExample() {
-  const document = TsgoVirtualDocument.untitled(
+  const document = CorsaVirtualDocument.untitled(
     "/virtual/minimal.ts",
     "typescript",
     "const answer = 41;\n",

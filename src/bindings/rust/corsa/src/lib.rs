@@ -1,9 +1,9 @@
 //! Top-level facade crate for the `corsa` workspace.
 //!
-//! This crate re-exports the building blocks used to talk to `typescript-go`
+//! This crate re-exports the building blocks used to talk to Corsa
 //! over stdio:
 //!
-//! - [`api`] for the tsgo API bindings
+//! - [`api`] for the Corsa API bindings
 //! - [`jsonrpc`] for stdio JSON-RPC framing and transport
 //! - [`lint`] for Rust-authored rule primitives behind Oxlint JS plugins
 //! - [`lsp`] for LSP clients and virtual-document overlays
@@ -34,7 +34,7 @@
 //! # Ok::<(), corsa::CorsaError>(())
 //! ```
 
-/// Re-exports the tsgo stdio API bindings.
+/// Re-exports the Corsa stdio API bindings.
 pub mod api {
     pub use corsa_client::*;
 }

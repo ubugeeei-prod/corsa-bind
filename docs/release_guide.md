@@ -24,8 +24,8 @@ Public npm packages:
 - `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`)
 - `corsa-oxlint` (`src/bindings/nodejs/typescript_oxlint`)
 
-The npm packages do not bundle the `typescript-go` executable. Consumers must
-point them at a compatible `tsgo` binary at runtime.
+The npm packages do not bundle the Corsa executable. Consumers must
+point them at a compatible Corsa binary at runtime.
 
 `@corsa-bind/napi` is built with `napi-rs`. The publish workflow now ships
 the root package plus target-specific native binary packages for:
@@ -287,7 +287,7 @@ Each public release should ship with GitHub release notes that call out:
 
 Workflows:
 
-- `CI`: quality, experimental-surface validation, real-`tsgo` smoke, and benchmark verification
+- `CI`: quality, experimental-surface validation, real-Corsa smoke, and benchmark verification
 - `Release Dry Run`: validates publishable artifacts without publishing them
 - `Publish Rust`: tag-triggered trusted publish path, plus one-time token bootstrap mode
 - `Publish npm`: tag-triggered trusted publish path, plus one-time token bootstrap mode

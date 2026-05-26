@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use corsa::{
-    TsgoError,
+    CorsaError,
     api::{ApiMode, ApiSpawnConfig},
     lsp::LspSpawnConfig,
 };
@@ -80,21 +80,21 @@ pub fn real_dataset() -> PathBuf {
     })
 }
 
-pub fn require_path(path: &Path, label: &str, hint: &str) -> Result<(), TsgoError> {
+pub fn require_path(path: &Path, label: &str, hint: &str) -> Result<(), CorsaError> {
     if path.exists() {
         Ok(())
     } else {
-        Err(TsgoError::Protocol(
+        Err(CorsaError::Protocol(
             format!("missing {label} at {}; {hint}", path.display()).into(),
         ))
     }
 }
 
-pub fn mock_api_config(example_name: &str, mode: ApiMode) -> Result<ApiSpawnConfig, TsgoError> {
+pub fn mock_api_config(example_name: &str, mode: ApiMode) -> Result<ApiSpawnConfig, CorsaError> {
     let binary = mock_binary();
     require_path(
         &binary,
-        "mock tsgo binary",
+        "mock Corsa binary",
         "run `vp run -w build_mock` or `vp run -w build` first",
     )?;
     Ok(ApiSpawnConfig::new(binary)
@@ -102,24 +102,24 @@ pub fn mock_api_config(example_name: &str, mode: ApiMode) -> Result<ApiSpawnConf
         .with_cwd(example_cwd(example_name)))
 }
 
-pub fn mock_lsp_config(example_name: &str) -> Result<LspSpawnConfig, TsgoError> {
+pub fn mock_lsp_config(example_name: &str) -> Result<LspSpawnConfig, CorsaError> {
     let binary = mock_binary();
     require_path(
         &binary,
-        "mock tsgo binary",
+        "mock Corsa binary",
         "run `vp run -w build_mock` or `vp run -w build` first",
     )?;
     Ok(LspSpawnConfig::new(binary).with_cwd(example_cwd(example_name)))
 }
 
-pub fn real_api_config(_example_name: &str, mode: ApiMode) -> Result<ApiSpawnConfig, TsgoError> {
+pub fn real_api_config(_example_name: &str, mode: ApiMode) -> Result<ApiSpawnConfig, CorsaError> {
     let binary = resolved_real_binary().ok_or_else(|| {
-        TsgoError::Protocol("missing real tsgo binary; run `vp run -w build_tsgo` first".into())
+        CorsaError::Protocol("missing real Corsa binary; run `vp run -w build_tsgo` first".into())
     })?;
     let dataset = real_dataset();
     require_path(
         &dataset,
-        "pinned tsgo dataset",
+        "pinned Corsa dataset",
         "run `vp run -w sync_ref` and `vp run -w verify_ref` first",
     )?;
     Ok(ApiSpawnConfig::new(binary)

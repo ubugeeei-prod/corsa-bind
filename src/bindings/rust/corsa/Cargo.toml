@@ -2,7 +2,7 @@
 name = "corsa"
 version = "0.10.0"
 edition = "2024"
-description = "Production-oriented Rust bindings, orchestration layers, and Node integration for typescript-go"
+description = "Production-oriented Rust bindings, orchestration layers, and Node integration for Corsa"
 publish = ["crates-io"]
 documentation.workspace = true
 homepage.workspace = true

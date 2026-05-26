@@ -1,4 +1,4 @@
-//! LSP client and virtual-document helpers for `typescript-go`.
+//! LSP client and virtual-document helpers for Corsa.
 //!
 //! The public API intentionally mirrors the way editor integrations think about
 //! the world:
@@ -6,7 +6,7 @@
 //! - [`LspClient`] owns the transport connection
 //! - [`LspOverlay`] tracks which documents are open
 //! - [`VirtualDocument`] and [`VirtualChange`] model the in-memory text state
-//! - custom request types expose `tsgo`-specific extensions
+//! - custom request types expose Corsa-specific extensions
 
 mod client;
 mod custom;
@@ -17,7 +17,7 @@ mod virtual_document_tests;
 
 /// Stdio LSP client and spawn configuration.
 pub use client::{LspClient, LspSpawnConfig};
-/// Custom `tsgo` LSP request definitions.
+/// Custom Corsa LSP request definitions.
 pub use custom::{
     InitializeApiSessionParams, InitializeApiSessionRequest, InitializeApiSessionResult,
 };

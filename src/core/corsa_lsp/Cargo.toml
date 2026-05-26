@@ -2,7 +2,7 @@
 name = "corsa_lsp"
 version = "0.10.0"
 edition = "2024"
-description = "LSP-focused clients, overlays, and virtual documents for typescript-go"
+description = "LSP-focused clients, overlays, and virtual documents for Corsa"
 publish = ["crates-io"]
 documentation.workspace = true
 homepage.workspace = true

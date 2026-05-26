@@ -1,13 +1,13 @@
 mod support;
 
 use corsa::{
-    TsgoError,
+    CorsaError,
     api::{ApiClient, ApiMode, UpdateSnapshotParams},
     runtime::block_on,
 };
 use serde_json::json;
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     let result = block_on(async {
         let workspace_root = support::workspace_root();
         let dataset = support::real_dataset();
@@ -27,7 +27,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             })
             .await?;
         let project = snapshot.projects.first().ok_or_else(|| {
-            TsgoError::Protocol("real snapshot example did not return a project".into())
+            CorsaError::Protocol("real snapshot example did not return a project".into())
         })?;
         let primary_file = config
             .file_names
@@ -36,7 +36,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             .cloned()
             .or_else(|| config.file_names.first().cloned())
             .ok_or_else(|| {
-                TsgoError::Protocol("real snapshot example did not find a file".into())
+                CorsaError::Protocol("real snapshot example did not find a file".into())
             })?;
         let source = client
             .get_source_file(
@@ -46,7 +46,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?
             .ok_or_else(|| {
-                TsgoError::Protocol("real snapshot example did not return source".into())
+                CorsaError::Protocol("real snapshot example did not return source".into())
             })?;
         let string_type = client
             .get_string_type(snapshot.handle.clone(), project.id.clone())
@@ -72,7 +72,7 @@ fn main() -> Result<(), corsa::TsgoError> {
         });
         snapshot.release().await?;
         client.close().await?;
-        Ok::<_, corsa::TsgoError>(result)
+        Ok::<_, corsa::CorsaError>(result)
     })?;
 
     support::print_json(result);

@@ -1,13 +1,13 @@
-//! LSP-focused client helpers for `typescript-go`.
+//! LSP-focused client helpers for Corsa.
 //!
 //! This crate complements `corsa_client` with Language Server Protocol
 //! utilities:
 //!
-//! - [`LspClient`] talks to `tsgo --lsp --stdio`
+//! - [`LspClient`] talks to Corsa over LSP stdio
 //! - [`LspOverlay`] keeps a mirrored set of virtual documents
 //! - [`VirtualDocument`] and [`VirtualChange`] model in-memory edits in LSP
 //!   coordinates
-//! - custom request types expose the extra protocol extensions that `tsgo`
+//! - custom request types expose the extra protocol extensions that Corsa
 //!   layers on top of standard LSP
 //!
 //! These types are most useful for editor integrations, benchmarks that mimic
@@ -19,7 +19,7 @@ pub mod jsonrpc {
     pub use corsa_jsonrpc::*;
 }
 
-/// Re-exports child-process helpers used to launch `tsgo --lsp`.
+/// Re-exports child-process helpers used to launch Corsa over LSP stdio.
 pub mod process {
     pub use corsa_core::{AsyncChildGuard, TsgoCommand};
 }

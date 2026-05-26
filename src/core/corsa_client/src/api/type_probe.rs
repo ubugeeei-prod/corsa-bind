@@ -12,7 +12,7 @@ pub struct TypeProbeOptions {
 
 /// Aggregated checker view of a type at a single query site.
 ///
-/// This is intentionally higher level than the raw `tsgo` endpoints. It keeps
+/// This is intentionally higher level than the raw Corsa endpoints. It keeps
 /// the hot path for linters and editor integrations small by bundling the
 /// repeated symbol, type, property, and signature lookups that usually travel
 /// together.

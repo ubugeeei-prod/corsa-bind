@@ -6,7 +6,7 @@ use corsa_core::{SharedObserver, fast::CompactString};
 
 use super::profiling::SharedProfiler;
 
-/// Transport mode used to talk to the tsgo API.
+/// Transport mode used to talk to the Corsa API.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ApiMode {
     /// Async JSON-RPC over stdio.
@@ -15,7 +15,7 @@ pub enum ApiMode {
     SyncMsgpackStdio,
 }
 
-/// Process configuration for spawning a tsgo API worker.
+/// Process configuration for spawning a Corsa API worker.
 ///
 /// A single config describes both the executable to launch and the transport
 /// strategy used to communicate with it. The default is sync msgpack because
@@ -26,7 +26,7 @@ pub enum ApiMode {
 /// ```
 /// use corsa_client::{ApiMode, ApiSpawnConfig};
 ///
-/// let config = ApiSpawnConfig::new("/opt/bin/tsgo")
+/// let config = ApiSpawnConfig::new("/opt/bin/corsa")
 ///     .with_cwd("/workspace")
 ///     .with_mode(ApiMode::AsyncJsonRpcStdio);
 ///
@@ -37,9 +37,9 @@ pub enum ApiMode {
 pub struct ApiSpawnConfig {
     /// Reusable command template used to launch the worker.
     pub command: TsgoCommand,
-    /// Wire protocol used between the client and `tsgo`.
+    /// Wire protocol used between the client and Corsa.
     pub mode: ApiMode,
-    /// Optional filesystem callback implementation exposed to `tsgo`.
+    /// Optional filesystem callback implementation exposed to Corsa.
     ///
     /// This is primarily useful when the worker should consult an overlay or a
     /// virtualized filesystem instead of only reading from disk.
@@ -102,7 +102,7 @@ impl ApiSpawnConfig {
         self
     }
 
-    /// Installs filesystem callbacks that tsgo can call back into.
+    /// Installs filesystem callbacks that Corsa can call back into.
     pub fn with_filesystem(mut self, filesystem: Arc<dyn ApiFileSystem>) -> Self {
         self.filesystem = Some(filesystem);
         self
@@ -162,7 +162,7 @@ impl ApiSpawnConfig {
 /// ```
 /// use corsa_client::{ApiProfile, ApiSpawnConfig};
 ///
-/// let profile = ApiProfile::new("primary", ApiSpawnConfig::new("/opt/bin/tsgo"));
+/// let profile = ApiProfile::new("primary", ApiSpawnConfig::new("/opt/bin/corsa"));
 /// assert_eq!(profile.id.as_str(), "primary");
 /// ```
 #[derive(Clone)]

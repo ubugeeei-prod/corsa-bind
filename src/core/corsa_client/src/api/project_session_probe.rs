@@ -110,7 +110,7 @@ impl ProjectSession {
 
     /// Renders all stable type texts currently known for a type.
     ///
-    /// The `texts` already returned by `tsgo` are preferred, and the method
+    /// The `texts` already returned by Corsa are preferred, and the method
     /// falls back to `typeToString` only when those are absent.
     pub async fn render_type_texts(
         &self,

@@ -1,10 +1,10 @@
 use corsa_core::fast::CompactString;
 use serde::{Deserialize, Serialize};
 
-/// File or URI identifier accepted by tsgo API endpoints.
+/// File or URI identifier accepted by Corsa API endpoints.
 ///
 /// Most endpoints accept either an on-disk file name or a URI. The enum keeps
-/// both forms explicit while still serializing to the wire shape that `tsgo`
+/// both forms explicit while still serializing to the wire shape that Corsa
 /// expects.
 ///
 /// # Examples
@@ -22,7 +22,7 @@ pub enum DocumentIdentifier {
     FileName(CompactString),
     /// URI form used by LSP-style or virtual-document workflows.
     Uri {
-        /// URI string sent to the `tsgo` endpoint.
+        /// URI string sent to the Corsa endpoint.
         uri: CompactString,
     },
 }

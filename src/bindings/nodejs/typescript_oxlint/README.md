@@ -1,17 +1,17 @@
 # corsa-oxlint
 
 `corsa-oxlint` is a self-hosted type-aware framework for building Oxlint JS
-plugins with real type information powered by `tsgo`.
+plugins with real type information powered by Corsa.
 
 > [!WARNING]
 > This package is still an early WIP.
 > The core direction is stable, but the API surface will keep moving while
-> `typescript-go`, Oxlint's JS plugin APIs, and the surrounding benchmarks are
+> Corsa upstream, Oxlint's JS plugin APIs, and the surrounding benchmarks are
 > still evolving.
 
 ## What It Does
 
-- exposes `OxlintUtils.RuleCreator()` and `getParserServices()` backed by `tsgo`
+- exposes `OxlintUtils.RuleCreator()` and `getParserServices()` backed by Corsa
 - exposes compatibility namespaces such as `ESLintUtils`, `TSESLint`, `TSESTree`, and `TSUtils`
 - keeps a compact self-hosted helper surface with no extra lint-framework dependency
 - binds Rust-implemented hot paths into JS through `napi-rs`
@@ -80,7 +80,7 @@ export default [
         parserOptions: {
           project: ["./tsconfig.json"],
           tsconfigRootDir: import.meta.dirname,
-          tsgo: {
+          corsa: {
             executable: "./.cache/tsgo",
             mode: "msgpack",
             requestTimeoutMs: 30000,

@@ -238,7 +238,7 @@ jobs:
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
-      - name: Build mock tsgo binary
+      - name: Build mock Corsa binary
         run: cargo build -p corsa --bin mock_tsgo
 
       - name: Validate public facade without experimental features
@@ -349,8 +349,8 @@ jobs:
           done
           exit "$failed"
 
-  real-tsgo-smoke:
-    name: Real tsgo Smoke (${{ matrix.os }})
+  real-corsa-smoke:
+    name: Real Corsa Smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     if: ${{ github.event_name != 'pull_request' }}
@@ -373,10 +373,10 @@ jobs:
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
-      - name: Sync pinned tsgo ref
+      - name: Sync pinned Corsa ref
         run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
 
-      - name: Setup Go for pinned tsgo ref
+      - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: ref/typescript-go/go.mod
@@ -387,21 +387,21 @@ jobs:
         with:
           node-version: "24"
           # Windows can fail inside setup-vp's dependency cache resolver after
-          # the managed typescript-go checkout has been materialized.
+          # the managed Corsa upstream checkout has been materialized.
           cache: ${{ runner.os != 'Windows' }}
           run-install: true
 
-      - name: Build pinned tsgo binary
+      - name: Build pinned Corsa binary
         run: vp run -w build_tsgo
 
-      - name: Real tsgo smoke tests
+      - name: Real Corsa smoke tests
         run: cargo test -p corsa --no-default-features --test real_tsgo_regression --test real_tsgo_typecheck
 
       - name: Real examples
         run: vp run -w examples_real
 
-  bench-tsgo-ref:
-    name: tsgo Ref Bench
+  bench-corsa-ref:
+    name: Corsa Ref Bench
     runs-on: ubuntu-latest
     timeout-minutes: 60
     if: ${{ github.event_name != 'pull_request' }}
@@ -417,10 +417,10 @@ jobs:
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
-      - name: Sync pinned tsgo ref
+      - name: Sync pinned Corsa ref
         run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
 
-      - name: Setup Go for pinned tsgo ref
+      - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: ref/typescript-go/go.mod
@@ -433,10 +433,10 @@ jobs:
           cache: true
           run-install: true
 
-      - name: Build pinned tsgo binary
+      - name: Build pinned Corsa binary
         run: vp run -w build_tsgo
 
-      - name: Real tsgo baseline and regression tests
+      - name: Real Corsa baseline and regression tests
         run: cargo test -p corsa --no-default-features --test real_tsgo_baseline --test real_tsgo_regression --test real_tsgo_typecheck
 
       - name: Benchmark guards

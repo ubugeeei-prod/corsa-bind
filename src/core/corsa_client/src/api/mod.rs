@@ -1,4 +1,4 @@
-//! Typed request/response layer for the `tsgo` stdio API.
+//! Typed request/response layer for the Corsa stdio API.
 //!
 //! The module is organized around a few concepts:
 //!
@@ -58,7 +58,7 @@ pub use changes::{
     FileChangeSummary, FileChanges, OverlayChanges, OverlayUpdate, SnapshotChanges,
     UpdateSnapshotParams,
 };
-/// High-level `tsgo` API client.
+/// High-level Corsa API client.
 pub use client::ApiClient;
 /// Spawn-time transport and profile configuration.
 pub use config::{ApiMode, ApiProfile, ApiSpawnConfig};
@@ -70,7 +70,7 @@ pub use diagnostics::{
 pub use document::{DocumentIdentifier, DocumentPosition};
 /// Binary payload wrappers and print options.
 pub use encoded::{EncodedPayload, PrintNodeOptions};
-/// Opaque handles returned by `tsgo`.
+/// Opaque handles returned by Corsa.
 pub use handles::{
     NodeHandle, ProjectHandle, SignatureHandle, SnapshotHandle, SymbolHandle, TypeHandle,
 };

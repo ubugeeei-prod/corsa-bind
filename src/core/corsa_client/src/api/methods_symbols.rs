@@ -1,7 +1,7 @@
 //! Symbol-oriented `ApiClient` methods.
 //!
 //! These helpers cover name resolution and symbol lookup entry points from the
-//! `tsgo` API. Most methods mirror upstream endpoint names closely so it is easy
+//! Corsa API. Most methods mirror upstream endpoint names closely so it is easy
 //! to correlate source code, wire traces, and TypeScript checker concepts.
 
 use serde_json::json;
@@ -106,7 +106,7 @@ impl ApiClient {
 
     /// Returns the apparent checker type of a symbol.
     ///
-    /// Returns `Ok(None)` when `tsgo` cannot associate a type with the symbol.
+    /// Returns `Ok(None)` when Corsa cannot associate a type with the symbol.
     pub async fn get_type_of_symbol(
         &self,
         snapshot: SnapshotHandle,

@@ -2,7 +2,7 @@
 
 `corsa` ships with multiple benchmark layers:
 
-- Native real-tsgo benchmark: `vp run -w bench_native`
+- Native real-Corsa benchmark: `vp run -w bench_native`
 - Native deep benchmark: `vp run -w bench_native_deep`
 - Native profiling benchmark: `vp run -w bench_native_profile`
 - Tooling + orchestration benchmark: `vp run -w bench_tooling_compare`
@@ -30,7 +30,7 @@ For the reasoning behind these benchmark layers, implementation notes, and exten
 
 The tooling benchmark is the `bench_tooling_compare` binary. It tracks two workloads:
 
-- `project_check`: `tsc`, `tsgo`, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` on the same dataset
+- `project_check`: `tsc`, Corsa CLI, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` on the same dataset
 - `editor_workflow`: `corsa` msgpack cold and warm orchestration over a representative multi-query API flow
 
 Before running it for the first time, install the comparison dependencies:
@@ -52,7 +52,7 @@ cargo run --release -p corsa --bin bench_tooling_compare -- \
 The lint lanes use the overlapping type-aware rules currently published by
 `corsa-oxlint/rules`, so `typescript-eslint`, `corsa-oxlint`, and `tsgolint`
 are timed against the same rule workload.
-`editor_workflow` is intentionally a different workload: it asks whether session reuse and orchestration can beat rerunning a full `tsgo --noEmit` project check.
+`editor_workflow` is intentionally a different workload: it asks whether session reuse and orchestration can beat rerunning a full Corsa CLI `--noEmit` project check.
 
 The runner creates temporary overlay `tsconfig` files for CLI parity, enforces per-process timeouts, and always kills plus reaps spawned children before returning.
 
@@ -142,26 +142,26 @@ vp run -w bench_tooling_compare
 
 ### Project Check
 
-| dataset      |   `tsc` | `tsgo` | `typescript-eslint` |
-| ------------ | ------: | -----: | ------------------: |
-| `ast`        | 425.527 | 23.995 |            1690.141 |
-| `api`        | 440.209 | 35.783 |            1341.204 |
-| `_extension` | 612.055 | 58.801 |            1136.773 |
+| dataset      |   `tsc` | Corsa CLI | `typescript-eslint` |
+| ------------ | ------: | --------: | ------------------: |
+| `ast`        | 425.527 |    23.995 |            1690.141 |
+| `api`        | 440.209 |    35.783 |            1341.204 |
+| `_extension` | 612.055 |    58.801 |            1136.773 |
 
 ### Editor Workflow
 
 These rows are intentionally not the same workload as a full compiler CLI check.
 They model a `corsa` session that opens a project once and then runs a representative query flow (`default project` + `source file` + `symbol` + `type` + `typeToString`).
 
-| dataset      | `tsgo` CLI project check | `corsa` cold workflow | `corsa` warm workflow |
-| ------------ | -----------------------: | --------------------: | --------------------: |
-| `ast`        |                   23.995 |                19.666 |                 0.376 |
-| `api`        |                   35.783 |                30.049 |                 0.181 |
-| `_extension` |                   58.801 |                45.811 |                 0.186 |
+| dataset      | Corsa CLI project check | `corsa` cold workflow | `corsa` warm workflow |
+| ------------ | ----------------------: | --------------------: | --------------------: |
+| `ast`        |                  23.995 |                19.666 |                 0.376 |
+| `api`        |                  35.783 |                30.049 |                 0.181 |
+| `_extension` |                  58.801 |                45.811 |                 0.186 |
 
 The interesting part is not that `corsa` somehow beats the underlying engine on identical work.
 It does not.
-The interesting part is that orchestration plus session reuse can beat rerunning `tsgo --noEmit` when the workload is editor-like rather than a full project check.
+The interesting part is that orchestration plus session reuse can beat rerunning Corsa CLI `--noEmit` when the workload is editor-like rather than a full project check.
 
 ## 2026-03-30 Native Bench
 
@@ -189,8 +189,8 @@ The current Vitest bench summary is useful for relative ranking but the JSON fil
 
 ## Notes
 
-- `ApiSpawnConfig::new()` defaults to `SyncMsgpackStdio`, because it is still consistently ahead on the measured real-tsgo paths.
+- `ApiSpawnConfig::new()` defaults to `SyncMsgpackStdio`, because it is still consistently ahead on the measured real-Corsa paths.
 - `getSourceFile` benefits strongly from msgpack because async JSON-RPC has to carry binary payloads through JSON framing.
 - `bench/src/report_guard.test.ts` fails when benchmark samples go missing or when the measured hot paths drift past the configured budget.
-- `src/bindings/rust/corsa/tests/real_tsgo_baseline.rs` pins the real upstream API summary for the locked `tsgo` commit.
-- `printNode` is intentionally excluded from the default native suite at the pinned upstream commit because the real `tsgo` server can still panic inside `internal/printer` on real project data.
+- `src/bindings/rust/corsa/tests/real_tsgo_baseline.rs` pins the real upstream API summary for the locked Corsa upstream commit.
+- `printNode` is intentionally excluded from the default native suite at the pinned upstream commit because the real Corsa server can still panic inside `internal/printer` on real project data.

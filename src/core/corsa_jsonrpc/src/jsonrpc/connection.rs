@@ -127,7 +127,7 @@ impl std::fmt::Debug for JsonRpcConnectionOptions {
 /// inbound frames are decoded on the reader thread.
 ///
 /// Local handlers are useful for request/notification callbacks such as the
-/// filesystem bridge used by the `tsgo` API client.
+/// filesystem bridge used by the Corsa API client.
 #[derive(Clone)]
 pub struct JsonRpcConnection {
     inner: Arc<Inner>,

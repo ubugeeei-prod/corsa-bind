@@ -16,7 +16,7 @@ use super::{
     InitializeApiSessionParams, InitializeApiSessionRequest, InitializeApiSessionResult, LspOverlay,
 };
 
-/// LSP client backed by the `tsgo` stdio server.
+/// LSP client backed by the Corsa stdio server.
 ///
 /// `LspClient` is the transport-facing half of editor-style workflows. It owns
 /// the server process, provides typed request/notification helpers via
@@ -36,7 +36,7 @@ pub struct LspClient {
 /// ```
 /// use corsa_lsp::LspSpawnConfig;
 ///
-/// let config = LspSpawnConfig::new("/opt/bin/tsgo")
+/// let config = LspSpawnConfig::new("/opt/bin/corsa")
 ///     .with_cwd("/workspace")
 ///     .with_arg("--logToFile");
 ///
@@ -44,7 +44,7 @@ pub struct LspClient {
 /// ```
 #[derive(Clone)]
 pub struct LspSpawnConfig {
-    /// Reusable command template used to launch `tsgo --lsp --stdio`.
+    /// Reusable command template used to launch Corsa over LSP stdio.
     pub command: TsgoCommand,
     /// Additional CLI flags appended after `--lsp --stdio`.
     pub extra_args: SmallVec<[CompactString; 4]>,
@@ -91,7 +91,7 @@ impl LspSpawnConfig {
         self
     }
 
-    /// Appends an extra CLI argument passed to tsgo.
+    /// Appends an extra CLI argument passed to Corsa.
     pub fn with_arg(mut self, arg: impl Into<CompactString>) -> Self {
         self.extra_args.push(arg.into());
         self
@@ -123,7 +123,7 @@ impl LspSpawnConfig {
 }
 
 impl LspClient {
-    /// Spawns a tsgo LSP server over stdio.
+    /// Spawns a Corsa LSP server over stdio.
     ///
     /// The client owns the spawned process and will terminate it when
     /// [`close`](Self::close) is called.
@@ -203,7 +203,7 @@ impl LspClient {
         self.rpc.respond(id, body)
     }
 
-    /// Calls the custom `initializeAPISession` request exposed by `tsgo`.
+    /// Calls the custom `initializeAPISession` request exposed by Corsa.
     ///
     /// This is useful when an LSP session needs to bootstrap a separate API
     /// session and exchange its pipe information with another component.

@@ -17,9 +17,9 @@ pub struct InitializeResponse {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigResponse {
-    /// Compiler options after `tsgo` normalization and inheritance resolution.
+    /// Compiler options after Corsa normalization and inheritance resolution.
     pub options: Value,
-    /// Files that belong to the parsed config according to `tsgo`.
+    /// Files that belong to the parsed config according to Corsa.
     pub file_names: Vec<String>,
 }
 
@@ -37,7 +37,7 @@ pub struct ProjectResponse {
     pub root_files: Vec<String>,
 }
 
-/// Symbol metadata returned by `tsgo`.
+/// Symbol metadata returned by Corsa.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SymbolResponse {
@@ -52,7 +52,7 @@ pub struct SymbolResponse {
     /// Declaration nodes associated with the symbol.
     #[serde(default)]
     pub declarations: Vec<NodeHandle>,
-    /// Preferred declaration node when `tsgo` exposes one.
+    /// Preferred declaration node when Corsa exposes one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value_declaration: Option<NodeHandle>,
 }
@@ -114,7 +114,7 @@ pub struct TypeResponse {
     /// Substitution constraint for substituted type variables.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subst_constraint: Option<TypeHandle>,
-    /// Human-readable type renderings produced by `tsgo`.
+    /// Human-readable type renderings produced by Corsa.
     ///
     /// Many higher-level integrations can use this directly instead of
     /// round-tripping through another text-rendering endpoint.

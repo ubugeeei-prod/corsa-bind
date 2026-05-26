@@ -8,7 +8,7 @@ use corsa::{
 use lsp_types::{Position, Range};
 use serde_json::json;
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     let doubled = block_on(async { 21 * 2 });
     let mut document =
         VirtualDocument::untitled("/examples/minimal.ts", "typescript", "const answer = 41;\n")?;

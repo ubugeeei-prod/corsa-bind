@@ -36,7 +36,7 @@ use super::{
     spawn_stdio::{spawn_jsonrpc_stdio, spawn_msgpack_stdio},
 };
 
-/// High-level client for the tsgo stdio API.
+/// High-level client for the Corsa stdio API.
 ///
 /// `ApiClient` owns a single worker connection and memoizes the result of the
 /// `initialize` handshake so later requests can assume the session is ready.
@@ -56,7 +56,7 @@ use super::{
 /// use corsa_client::{ApiClient, ApiSpawnConfig};
 ///
 /// # async fn demo() -> Result<(), corsa_client::TsgoError> {
-/// let client = ApiClient::spawn(ApiSpawnConfig::new("/opt/bin/tsgo")).await?;
+/// let client = ApiClient::spawn(ApiSpawnConfig::new("/opt/bin/corsa")).await?;
 /// let _initialize = client.initialize().await?;
 /// client.close().await?;
 /// # Ok(())
@@ -220,7 +220,7 @@ fn clone_shared_result<T>(result: &Result<Arc<T>>) -> Result<Arc<T>> {
 }
 
 impl ApiClient {
-    /// Spawns a new tsgo API worker using the supplied configuration.
+    /// Spawns a new Corsa API worker using the supplied configuration.
     ///
     /// The underlying transport depends on [`ApiSpawnConfig::mode`]. For
     /// production and benchmark workflows, sync msgpack is typically the
@@ -332,10 +332,10 @@ impl ApiClient {
             .await
     }
 
-    /// Parses a `tsconfig` file through `tsgo`.
+    /// Parses a `tsconfig` file through Corsa.
     ///
     /// The returned [`ConfigResponse`] contains the normalized compiler options
-    /// and the file set that `tsgo` resolved for that config file.
+    /// and the file set that Corsa resolved for that config file.
     pub async fn parse_config_file(
         &self,
         file: impl Into<DocumentIdentifier>,
@@ -348,7 +348,7 @@ impl ApiClient {
 
     /// Applies file changes and returns a managed snapshot handle.
     ///
-    /// Snapshots are the unit of reuse for project graphs inside `tsgo`. The
+    /// Snapshots are the unit of reuse for project graphs inside Corsa. The
     /// returned [`ManagedSnapshot`] automatically releases its remote handle
     /// when dropped, but can also be released eagerly via
     /// [`ManagedSnapshot::release`](crate::ManagedSnapshot::release).

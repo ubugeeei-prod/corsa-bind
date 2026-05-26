@@ -1,6 +1,6 @@
-//! Managed-reference utilities for the pinned `typescript-go` checkout.
+//! Managed-reference utilities for the pinned Corsa upstream checkout.
 //!
-//! The workspace keeps an upstream `typescript-go` checkout under
+//! The workspace keeps a Corsa upstream checkout under
 //! `ref/typescript-go` and treats it as a reproducible input for regression
 //! tests, benchmarks, and CI. This crate owns the lockfile format and the logic
 //! that verifies the checkout really matches that pin.

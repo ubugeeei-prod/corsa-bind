@@ -30,12 +30,12 @@ bun run ./main.ts
 
 - native JS bindings for the `corsa` API and LSP surface
 - an ESM TypeScript wrapper under `dist/`
-- no bundled `typescript-go` executable
+- no bundled Corsa executable
 
 ## Runtime requirement
 
-You must provide a compatible `typescript-go` (`tsgo`) executable yourself and
-pass its path through `TsgoApiClient.spawn({ executable: "/path/to/tsgo" })`.
+You must provide a compatible Corsa executable yourself and
+pass its path through `CorsaApiClient.spawn({ executable: "/path/to/corsa" })`.
 
 ## API style
 
@@ -55,4 +55,4 @@ vp test run --config ./vite.config.ts src/bindings/nodejs/corsa_node/ts/**/*.tes
 
 Repository-level executable examples live under [`examples/`](../../examples/README.md),
 including mock-client, virtual-document, distributed-orchestrator, and
-real-`tsgo` snapshot samples.
+real-Corsa snapshot samples.

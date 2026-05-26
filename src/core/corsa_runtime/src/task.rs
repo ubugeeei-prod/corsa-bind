@@ -19,8 +19,8 @@ pub struct JoinHandle<T> {
 /// ```
 /// use corsa_runtime::spawn;
 ///
-/// let handle = spawn(async { String::from("tsgo") });
-/// assert_eq!(handle.join().unwrap(), "tsgo");
+/// let handle = spawn(async { String::from("corsa") });
+/// assert_eq!(handle.join().unwrap(), "corsa");
 /// ```
 pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
 where

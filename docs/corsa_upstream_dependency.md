@@ -1,12 +1,12 @@
-# tsgo Dependency Management
+# Corsa Upstream Dependency Management
 
-`typescript-go` is managed as a pinned git dependency via [tsgo_ref.lock.toml](../tsgo_ref.lock.toml).
+Corsa upstream is managed as a pinned git dependency via [tsgo_ref.lock.toml](../tsgo_ref.lock.toml).
 
 Core policy:
 
-- `corsa` follows upstream-supported `typescript-go` integration points.
-- `corsa` does not maintain a fork of `typescript-go`.
-- `corsa` does not patch upstream `typescript-go`.
+- `corsa` follows upstream-supported Corsa integration points.
+- `corsa` does not maintain a fork of Corsa upstream.
+- `corsa` does not patch Corsa upstream.
 - Upstream changes are adopted by updating the pinned commit and adapting our bindings around that exact revision.
 
 Rules:

@@ -23,7 +23,7 @@ Please include:
 - affected crate or package
 - affected operating system and architecture
 - reproduction steps
-- whether the issue depends on a specific pinned `typescript-go` commit
+- whether the issue depends on a specific pinned Corsa upstream commit
 
 ## Hardening Principles
 

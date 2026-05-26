@@ -58,7 +58,7 @@ pub struct DirectoryEntries {
     pub directories: SmallVec<[CompactString; 8]>,
 }
 
-/// Filesystem interface exposed to tsgo.
+/// Filesystem interface exposed to Corsa.
 ///
 /// Implementations can opt into individual callbacks via
 /// [`capabilities`](Self::capabilities).
@@ -67,7 +67,7 @@ pub trait ApiFileSystem: Send + Sync + 'static {
     fn capabilities(&self) -> FileSystemCapabilities;
 
     /// Returns file contents for `path`, or [`ReadFileResult::Fallback`] to let
-    /// `tsgo` read from disk directly.
+    /// Corsa read from disk directly.
     fn read_file(&self, _path: &str) -> ReadFileResult {
         ReadFileResult::Fallback
     }
@@ -96,7 +96,7 @@ pub trait ApiFileSystem: Send + Sync + 'static {
     }
 }
 
-/// Returns the enabled callback names in the order expected by tsgo.
+/// Returns the enabled callback names in the order expected by Corsa.
 ///
 /// # Examples
 ///

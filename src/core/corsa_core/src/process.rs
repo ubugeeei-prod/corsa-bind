@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Immutable process template for launching `typescript-go`.
+/// Immutable process template for launching Corsa.
 ///
 /// The command is cheap to clone and can be reused across multiple clients.
 ///
@@ -21,7 +21,7 @@ use std::{
 /// use std::path::PathBuf;
 /// use corsa_core::TsgoCommand;
 ///
-/// let command = TsgoCommand::new("/opt/bin/tsgo")
+/// let command = TsgoCommand::new("/opt/bin/corsa")
 ///     .with_cwd("/workspace")
 ///     .with_env("TSGO_TRACE", "0");
 ///
@@ -118,7 +118,7 @@ impl TsgoCommand {
 /// Owns a child process and guarantees it is eventually terminated.
 ///
 /// This guard exists to keep long-running editors, tests, and benchmarks from
-/// leaking `tsgo` subprocesses. Shutdown attempts a graceful wait first and
+/// leaking Corsa subprocesses. Shutdown attempts a graceful wait first and
 /// then forcefully kills and reaps the child when necessary.
 #[derive(Debug)]
 pub struct AsyncChildGuard {

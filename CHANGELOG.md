@@ -16,5 +16,5 @@
 
 - `printNode` now requires explicit opt-in through `ApiSpawnConfig::with_allow_unstable_upstream_calls(true)`
 - local worker orchestration now enforces configured resource limits instead of growing unbounded
-- pinned `typescript-go` has been refreshed to the 2026-05-15 upstream main revision
+- pinned Corsa upstream has been refreshed to the 2026-05-15 upstream main revision
 - package publishing now requires tag refs for manual runs, and GitHub Release creation uses the release environment

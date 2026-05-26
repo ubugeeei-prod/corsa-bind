@@ -23,7 +23,7 @@ pub struct CapabilitiesResponse {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapabilities {
-    /// Human-oriented runtime kind such as `tsgo`, `native-preview`, or `mock-tsgo`.
+    /// Human-oriented runtime kind such as `corsa`, `native-preview`, or `mock-corsa`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<CompactString>,
     /// Executable path used to spawn the worker when known locally.

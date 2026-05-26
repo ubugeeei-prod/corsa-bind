@@ -9,7 +9,7 @@ import type {
 const parserServices = new WeakMap<object, ParserServices>();
 
 /**
- * Returns type-aware parser services backed by tsgo.
+ * Returns type-aware parser services backed by Corsa.
  *
  * @example
  * ```ts

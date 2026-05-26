@@ -9,11 +9,11 @@ If you want CI and local reproduction details, go to [ci_guide.md](./ci_guide.md
 
 ## Why This Project Exists
 
-`corsa` exists to make `typescript-go` usable from Rust and Node.js in production-style workflows without maintaining a fork of upstream.
+`corsa` exists to make Corsa usable from Rust and Node.js in production-style workflows without maintaining a fork of upstream.
 
 In practical terms, the repository is trying to provide:
 
-- typed Rust bindings for the upstream `tsgo` API and LSP surfaces
+- typed Rust bindings for the upstream Corsa API and LSP surfaces
 - fast transport and orchestration layers for repeated editor-like queries
 - Node bindings that preserve Rust-side performance while keeping JS and TS authoring ergonomic
 - a strict and auditable upstream pin so regressions are reproducible
@@ -31,7 +31,7 @@ Several decisions in the codebase look unusual until you read them through the r
 
 ### 1. No Forks, No Patches
 
-This repository intentionally does not patch `typescript-go`.
+This repository intentionally does not patch Corsa upstream.
 
 That means:
 
@@ -57,7 +57,7 @@ Without it, regressions in a fast-moving upstream project become very hard to re
 
 ### 3. Workflow Speed Matters More Than Single-Call Glory
 
-`corsa` sits on top of `tsgo`.
+`corsa` sits on top of Corsa.
 If both are asked to do exactly the same work exactly once, parity is the healthy target.
 
 The realistic win conditions are:
@@ -97,7 +97,7 @@ flowchart LR
     C --> G["corsa_core"]
     D --> G
     E --> G
-    C --> H["tsgo process"]
+    C --> H["Corsa process"]
     D --> H
     I["corsa_orchestrator"] --> C
     I --> D
@@ -149,7 +149,7 @@ Role:
 Why it exists:
 
 - both the stdio API client and the LSP client need the same protocol machinery
-- keeping transport generic avoids baking tsgo-specific concepts into the protocol layer
+- keeping transport generic avoids baking Corsa-specific concepts into the protocol layer
 
 Touch this crate when:
 
@@ -161,7 +161,7 @@ Touch this crate when:
 
 Role:
 
-- typed bindings for the upstream `tsgo --api` surface
+- typed bindings for the upstream Corsa API surface
 - support for both async JSON-RPC and sync msgpack stdio transports
 - snapshot lifecycle management
 - symbol, type, and relation query methods
@@ -181,7 +181,7 @@ Touch this crate when:
 
 Role:
 
-- `tsgo --lsp --stdio` client
+- Corsa LSP stdio client
 - virtual document and overlay handling
 - custom LSP request definitions such as `initializeAPISession`
 
@@ -213,7 +213,7 @@ Why it exists:
 
 Touch this crate when:
 
-- building higher-level services on top of `tsgo`
+- building higher-level services on top of Corsa
 - adding new caching strategies
 - experimenting with replicated editor state
 
@@ -408,7 +408,7 @@ That is intentional.
 
 Reasons:
 
-- the upstream payload is already structured for `tsgo`
+- the upstream payload is already structured for Corsa
 - decoding everything eagerly would add cost and maintenance surface
 - many consumers only need to round-trip or print the payload
 
@@ -442,7 +442,7 @@ Recommended pattern:
 4. Add a method on `ApiClient` in the appropriate `methods_*` module.
 5. Prefer names that mirror upstream closely.
 6. Add a mock-server integration test.
-7. Add a real-tsgo regression test if the endpoint matters to compatibility.
+7. Add a real-Corsa regression test if the endpoint matters to compatibility.
 
 Good instincts:
 
@@ -511,7 +511,7 @@ Good instincts:
 
 ### Mistaking Wrapper Wins for Engine Wins
 
-If `corsa` wins in an editor-style benchmark, that does not mean it out-compiled `tsgo`.
+If `corsa` wins in an editor-style benchmark, that does not mean it out-compiled Corsa.
 It usually means it:
 
 - reused state
@@ -559,7 +559,7 @@ For most work:
 
 1. `vp check`
 2. `cargo test --workspace`
-3. if the change touches the real upstream path, run the real-tsgo regression tests
+3. if the change touches the real upstream path, run the real-Corsa regression tests
 4. if the change touches performance-sensitive code, run the relevant benchmark layer
 5. if the change touches docs.rs-facing Rust API, run `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps`
 
@@ -568,7 +568,7 @@ For upstream pin updates:
 1. sync the managed ref
 2. move it intentionally to the new upstream commit
 3. pin current metadata
-4. rebuild the real `tsgo`
+4. rebuild the real Corsa binary
 5. rerun regression tests and benchmarks
 
 ## How to Read the Repository Efficiently
@@ -601,7 +601,7 @@ If you are debugging CI or environment issues:
 
 The easiest way to reason about `corsa` is:
 
-- upstream `tsgo` is the compiler engine
+- Corsa upstream is the compiler engine
 - this repository is the systems layer around that engine
 
 That systems layer is responsible for:

@@ -1,9 +1,9 @@
-import { TsgoVirtualDocument } from "@corsa-bind/napi";
+import { CorsaVirtualDocument } from "@corsa-bind/napi";
 
 import { isMain } from "../shared.ts";
 
 export function runVirtualDocumentExample() {
-  const document = TsgoVirtualDocument.untitled(
+  const document = CorsaVirtualDocument.untitled(
     "/virtual/demo.ts",
     "typescript",
     "const value = 1;\n",

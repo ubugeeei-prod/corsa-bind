@@ -1,6 +1,6 @@
 # corsa
 
-Rust bindings, orchestration layers, and JS runtime bindings for `typescript-go` over stdio.
+Rust bindings, orchestration layers, and JS runtime bindings for Corsa over stdio.
 
 > [!WARNING]
 > This repository is still evolving.
@@ -9,33 +9,33 @@ Rust bindings, orchestration layers, and JS runtime bindings for `typescript-go`
 > cargo feature and some upstream-facing endpoints remain explicitly experimental.
 
 > [!IMPORTANT]
-> `corsa` is intentionally built around upstream-supported `typescript-go`
-> workflows. We follow `tsgo`'s recommended stdio/API/LSP integration points,
+> `corsa` is intentionally built around upstream-supported Corsa
+> workflows. We follow Corsa's recommended stdio/API/LSP integration points,
 > keep `ref/typescript-go` as an exact upstream checkout, and preserve a strict
 > `no forks, no patches` policy.
 
 ## What This Is
 
-`corsa` is a multi-crate workspace for talking to `typescript-go` from Rust and JavaScript runtimes without patching upstream, with a Rust-backed native FFI layer that exposes `tsgo` API, virtual-document, and `utils` surfaces across C-family and other native languages.
+`corsa` is a multi-crate workspace for talking to Corsa from Rust and JavaScript runtimes without patching upstream, with a Rust-backed native FFI layer that exposes Corsa API, virtual-document, and `utils` surfaces across C-family and other native languages.
 
 In practice, that means:
 
-- use `typescript-go` through the interfaces it already intends consumers to use
+- use Corsa through the interfaces it already intends consumers to use
 - track upstream by exact commit so behavior is reproducible and auditable
-- never maintain a fork and never carry local patches against upstream `tsgo`
+- never maintain a fork and never carry local patches against Corsa upstream
 - implement hot paths in Rust, keep them zero-cost and high-performance, and
   expose them to JS through `napi-rs` so end users can author custom plugins
   and custom rules in JS/TS
 
 Current focus:
 
-- Full Rust-side stdio bindings for the tsgo API
+- Full Rust-side stdio bindings for the Corsa API
 - stdio LSP bindings with virtual-file support
 - zero-cost-lean hot paths with msgpack-first defaults
 - `napi-rs` bindings that surface Rust performance to JS/TS authoring workflows
-- Rust-backed `tsgo` API, `utils`, and virtual-document bindings for C, C++, Go, Zig, C#, Swift, and MoonBit
+- Rust-backed Corsa API, `utils`, and virtual-document bindings for C, C++, Go, Zig, C#, Swift, and MoonBit
 - local multi-process orchestration, cache reuse, and experimental replicated state
-- strict upstream pinning by exact `typescript-go` commit
+- strict upstream pinning by exact Corsa upstream commit
 - regression tests and benchmarks against the real pinned upstream server
 
 ## Current Status
@@ -47,7 +47,7 @@ Current focus:
 - Fast-path bias: `CompactString`, `SmallVec`, `bumpalo`, `memchr`, `phf`, `FxHash`
 - JS toolchain: Vite+ (`vp`) with vp-managed Node `24`, pnpm `10`, `oxfmt`, and `oxlint`
 - Repo automation: `scripts/*.ts` executed directly through Node `24` with `--strip-types`
-- JS bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa-oxlint` (`src/bindings/nodejs/typescript_oxlint`) (public npm packages that still expect a caller-managed `typescript-go` executable)
+- JS bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa-oxlint` (`src/bindings/nodejs/typescript_oxlint`) (public npm packages that still expect a caller-managed Corsa executable)
 - Distributed orchestration: `experimental-distributed` cargo feature
 - TS benchmark project: `bench`
 - Example workspace: `examples`
@@ -55,7 +55,7 @@ Current focus:
 - Default graceful shutdown timeout: `2s`
 - Default outbound queue capacity: `256`
 - Unstable upstream endpoints such as `printNode` are opt-in
-- Structured event sink: `TsgoObserver` / `TsgoEvent`
+- Structured event sink: `CorsaObserver` / `CorsaEvent`
 
 Pinned upstream at the time of writing:
 
@@ -68,7 +68,7 @@ Pinned upstream at the time of writing:
 
 - `corsa_core`: shared errors, process handles, and fast-path primitives
 - `corsa_jsonrpc`: stdio JSON-RPC framing and connection management
-- `corsa_client`: typed tsgo stdio client bindings for JSON-RPC and msgpack
+- `corsa_client`: typed Corsa stdio client bindings for JSON-RPC and msgpack
 - `corsa_lsp`: LSP client support plus virtual-document overlays
 - `corsa_orchestrator`: local orchestration, caching, and experimental replicated state / Raft core
 - `corsa_runtime`: lightweight custom runtime and task primitives
@@ -77,7 +77,7 @@ Pinned upstream at the time of writing:
 - `src/bindings/c/corsa_ffi`: shared C ABI over the Rust `corsa_client::ApiClient`, `corsa_core::utils`, and `corsa_lsp::VirtualDocument` surfaces
 - `src/bindings/cpp`, `src/bindings/go`, `src/bindings/zig`, `src/bindings/csharp`, `src/bindings/swift`, `src/bindings/moonbit`: thin language bindings layered on top of `corsa_ffi`
 - `src/bindings/nodejs/corsa_node`: `napi-rs` native bindings and the `@corsa-bind/napi` TypeScript wrapper package
-- `src/bindings/nodejs/typescript_oxlint`: type-aware Oxlint rule framework powered by `tsgo`
+- `src/bindings/nodejs/typescript_oxlint`: type-aware Oxlint rule framework powered by Corsa
 - `bench`: Vitest benchmark project for the Node binding
 - `examples`: curated `examples/nodejs`, `examples/rust`, and `examples/typescript_oxlint` flows from minimal start to real-project runs
 
@@ -161,7 +161,7 @@ Run only the Node / TypeScript smoke examples with:
 vp run -w examples_node_smoke
 ```
 
-Run the real pinned-`tsgo` examples with:
+Run the real pinned Corsa examples with:
 
 ```bash
 vp run -w sync_ref
@@ -180,7 +180,7 @@ vp run -w examples_rust_experimental
 
 `corsa-oxlint` lets us write Oxlint JS plugins with a compact, self-hosted
 type-aware authoring model while sourcing type information from the pinned
-`tsgo` binary. The heavy lifting stays in Rust, then `napi-rs` binds
+Corsa binary. The heavy lifting stays in Rust, then `napi-rs` binds
 that implementation into JS so end users can keep writing custom plugins and
 custom rules in JS/TS.
 
@@ -277,7 +277,7 @@ use corsa::{
     runtime::block_on,
 };
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     block_on(async {
         let client = ApiClient::spawn(
             ApiSpawnConfig::new(".cache/tsgo")
@@ -308,7 +308,7 @@ The repo ships two benchmark layers:
 The TS benchmark writes machine-readable output to `.cache/bench_ts.json`.
 The native benchmark writes machine-readable output to `.cache/bench_native.json`.
 The native profiling benchmark writes machine-readable output to `.cache/bench_native_profile.json`.
-The native Rust benchmark uses the real pinned tsgo binary through [`bench_real_tsgo`](./src/bindings/rust/corsa/src/bin/bench_real_tsgo/main.rs).
+The native Rust benchmark uses the real pinned Corsa binary through [`bench_real_tsgo`](./src/bindings/rust/corsa/src/bin/bench_real_tsgo/main.rs).
 
 Latest native measurements are documented in [docs/performance.md](./docs/performance.md).
 Benchmarking rationale, implementation notes, and usage tips are documented in [docs/benchmarking_guide.md](./docs/benchmarking_guide.md).
@@ -317,12 +317,12 @@ On the pinned upstream commit and bundled datasets, `msgpack` was consistently f
 
 ## Regression Strategy
 
-The repository is intentionally aggressive about change detection because `typescript-go` is still unstable.
+The repository is intentionally aggressive about change detection because Corsa upstream is still unstable.
 
-- `cargo test --workspace` includes mock-server integration tests, policy tests, and real-tsgo regression tests when `.cache/tsgo` is available
+- `cargo test --workspace` includes mock-server integration tests, policy tests, and real-Corsa regression tests when `.cache/tsgo` is available
 - `src/bindings/rust/corsa/tests/real_tsgo_baseline.rs` locks a real-server API summary to the pinned upstream commit
-- `src/bindings/rust/corsa/tests/real_tsgo_regression.rs` checks both transports against the real pinned tsgo binary
-- the real-tsgo regression suite includes a hot-path guard that fails if msgpack falls too far behind JSON-RPC on the same machine
+- `src/bindings/rust/corsa/tests/real_tsgo_regression.rs` checks both transports against the real pinned Corsa binary
+- the real-Corsa regression suite includes a hot-path guard that fails if msgpack falls too far behind JSON-RPC on the same machine
 - `vp run -w bench_native` and `vp run -w bench_ts` give repeatable transport-level measurements for Rust and Node
 - `vp run -w bench_verify` regenerates both reports and fails if benchmark samples disappear or hot-path budgets regress
 - `corsa_ref` enforces detached-HEAD exact-commit verification for `ref/typescript-go`
@@ -330,10 +330,10 @@ The repository is intentionally aggressive about change detection because `types
 
 ## Upstream Tracking
 
-`typescript-go` is under heavy development, so reproducibility is treated as a hard requirement.
+Corsa upstream is under heavy development, so reproducibility is treated as a hard requirement.
 
 - exact commit metadata lives in [`tsgo_ref.lock.toml`](./tsgo_ref.lock.toml)
-- sync and drift tooling lives in [`docs/tsgo_dependency.md`](./docs/tsgo_dependency.md)
+- sync and drift tooling lives in [`docs/corsa_upstream_dependency.md`](./docs/corsa_upstream_dependency.md)
 - CI and local reproduction details live in [`docs/ci_guide.md`](./docs/ci_guide.md)
 - `ref/typescript-go` must remain on detached `HEAD`
 - dirty upstream worktrees fail verification
@@ -341,7 +341,7 @@ The repository is intentionally aggressive about change detection because `types
 ## Known Limitations
 
 - Public APIs are still `0.x`, so compatibility should be treated as conservative rather than frozen.
-- `printNode` is disabled by default because the pinned upstream `tsgo` commit can panic in `internal/printer` on real project data; opt in only when you accept that risk.
+- `printNode` is disabled by default because the pinned Corsa upstream commit can panic in `internal/printer` on real project data; opt in only when you accept that risk.
 - The distributed layer currently includes an in-process Raft core; full network transport between nodes is not finished yet.
 - Some binary API surfaces are still exposed as opaque encoded payloads rather than fully decoded Rust AST types.
 

@@ -153,7 +153,7 @@ pub struct ManagedSnapshot {
     pub handle: SnapshotHandle,
     /// Projects visible inside the snapshot at creation time.
     pub projects: Vec<ProjectResponse>,
-    /// Optional project-level delta information returned by `tsgo`.
+    /// Optional project-level delta information returned by Corsa.
     pub changes: Option<SnapshotChanges>,
 }
 

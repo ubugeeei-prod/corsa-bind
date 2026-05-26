@@ -105,7 +105,7 @@ pub struct ProjectFileChanges {
     pub deleted_files: Vec<String>,
 }
 
-/// Project-level delta information returned by tsgo.
+/// Project-level delta information returned by Corsa.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SnapshotChanges {

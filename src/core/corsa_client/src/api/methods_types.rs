@@ -2,7 +2,7 @@
 //!
 //! These helpers mostly expose TypeScript checker queries. They are useful for
 //! "what type is this?" style workflows, intrinsic type access, and for turning
-//! `tsgo`'s opaque type handles back into richer structural information.
+//! Corsa's opaque type handles back into richer structural information.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
@@ -295,7 +295,7 @@ impl ApiClient {
         .await
     }
 
-    /// Renders a type to text using `tsgo`'s checker printer.
+    /// Renders a type to text using Corsa's checker printer.
     pub async fn type_to_string(
         &self,
         snapshot: SnapshotHandle,

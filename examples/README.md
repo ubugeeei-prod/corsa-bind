@@ -46,7 +46,7 @@ Run only the Rust example suite:
 vp run -w examples_rust_smoke
 ```
 
-Build the real pinned `tsgo` binary before running the real-snapshot examples:
+Build the real pinned Corsa binary before running the real-snapshot examples:
 
 ```bash
 vp run -w sync_ref
@@ -63,11 +63,11 @@ vp run -w examples_rust_experimental
 
 ## Minimal Start
 
-These examples do not require a real `typescript-go` binary and are the best first touchpoints.
+These examples do not require a real Corsa binary and are the best first touchpoints.
 
 - `examples/nodejs/minimal_start.ts`: zero-binary start that combines virtual-document edits with the Rust-backed unsafe-type helpers
 - `examples/nodejs/unsafe_type_flow.ts`: direct `isUnsafeAssignment()` / `isUnsafeReturn()` predicates for quick rule prototyping
-- `examples/nodejs/virtual_document.ts`: focused in-memory document editing through `TsgoVirtualDocument`
+- `examples/nodejs/virtual_document.ts`: focused in-memory document editing through `CorsaVirtualDocument`
 - `examples/rust/minimal_start.rs`: smallest Rust facade example for `VirtualDocument`, `RequestId`, and `block_on()`
 - `examples/rust/virtual_document.rs`: incremental and replace-style edits through the Rust `VirtualDocument`
 
@@ -80,10 +80,10 @@ cargo run -p corsa --example minimal_start
 
 ## Mock Binary Workflows
 
-These examples use the repo-local `mock_tsgo` binary so you can exercise realistic API and LSP flows without building the real upstream server.
+These examples use the repo-local mock Corsa binary so you can exercise realistic API and LSP flows without building the real upstream server.
 
 - `examples/nodejs/checker_queries.ts`: advanced checker walkthrough using `callJson()` for symbols, types, signatures, and relation endpoints
-- `examples/nodejs/mock_client.ts`: high-level mock API roundtrip through `TsgoApiClient`
+- `examples/nodejs/mock_client.ts`: high-level mock API roundtrip through `CorsaApiClient`
 - `examples/nodejs/raw_calls.ts`: low-level `callJson()` / `callBinary()` escape hatches for custom endpoints
 - `examples/nodejs/distributed_orchestrator.ts`: in-process distributed state replication for virtual documents
 - `examples/rust/checker_queries.rs`: typed symbol/type/signature traversal with parsed declaration handles and relation helpers
@@ -91,7 +91,7 @@ These examples use the repo-local `mock_tsgo` binary so you can exercise realist
 - `examples/rust/filesystem_callbacks.rs`: custom `ApiFileSystem` callbacks with a virtualized workspace
 - `examples/rust/lsp_overlay.rs`: `LspClient` plus `LspOverlay` for `didOpen` / `didChange` / `didClose`
 - `examples/rust/orchestrator_cache.rs`: local worker pooling, snapshot caching, and parallel fan-out through `ApiOrchestrator`
-- `examples/rust/observer_events.rs`: structured `TsgoEvent` capture for cache eviction and operational telemetry
+- `examples/rust/observer_events.rs`: structured `CorsaEvent` capture for cache eviction and operational telemetry
 
 Run one of them directly with:
 
@@ -114,7 +114,7 @@ Run it with:
 cargo run -p corsa --example print_node_opt_in
 ```
 
-## Real Pinned `tsgo`
+## Real Pinned Corsa
 
 These examples hit the exact upstream-pinned checkout under `ref/typescript-go`.
 
@@ -146,5 +146,5 @@ cargo run -p corsa --features experimental-distributed --example distributed_orc
 - `examples/typescript_oxlint/custom_plugin.ts`: plugin wrapper around the custom rule
 - `examples/typescript_oxlint/custom_rules_config.ts`: flat config using the custom plugin
 - `examples/typescript_oxlint/native_rules_config.ts`: flat config using the built-in native rules
-- `examples/typescript_oxlint/rule_tester.ts`: executable `RuleTester` example against the real pinned `tsgo` binary
+- `examples/typescript_oxlint/rule_tester.ts`: executable `RuleTester` example against the real pinned Corsa binary
 - `examples/typescript_oxlint/native_rule_tester.ts`: executable `RuleTester` example for the built-in Rust-backed and TS-native rules

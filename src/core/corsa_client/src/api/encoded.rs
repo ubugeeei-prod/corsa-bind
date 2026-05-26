@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// Opaque binary payload returned by binary tsgo endpoints.
+/// Opaque binary payload returned by binary Corsa endpoints.
 ///
 /// # Examples
 ///
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub struct EncodedPayload(Vec<u8>);
 
 impl EncodedPayload {
-    /// Wraps raw bytes returned by tsgo.
+    /// Wraps raw bytes returned by Corsa.
     pub fn new(bytes: Vec<u8>) -> Self {
         Self(bytes)
     }

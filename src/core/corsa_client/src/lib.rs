@@ -1,10 +1,10 @@
-//! High-level client bindings for the `typescript-go` stdio API.
+//! High-level client bindings for the Corsa stdio API.
 //!
-//! This crate wraps the raw transports and endpoint naming used by `tsgo`
+//! This crate wraps the raw transports and endpoint naming used by Corsa
 //! behind typed request/response helpers. In practice it is the main entry
 //! point when you want to:
 //!
-//! - spawn a `tsgo` worker process
+//! - spawn a Corsa worker process
 //! - initialize it once and reuse the session
 //! - create and reuse snapshots
 //! - ask type, symbol, and syntax questions through strongly typed helpers
@@ -19,7 +19,7 @@
 //!
 //! # Performance Model
 //!
-//! `corsa` does not try to out-compile `tsgo` itself. The win comes from
+//! `corsa` does not try to out-compile Corsa itself. The win comes from
 //! session reuse, snapshot reuse, and cheaper transports such as sync msgpack.
 //! For docs and benchmarks around that trade-off, see the workspace guides.
 
@@ -33,7 +33,7 @@ pub mod jsonrpc {
     pub use corsa_jsonrpc::*;
 }
 
-/// Re-exports process-spawning primitives used to launch `tsgo`.
+/// Re-exports process-spawning primitives used to launch Corsa.
 pub mod process {
     pub use corsa_core::{AsyncChildGuard, TsgoCommand};
 }
@@ -51,7 +51,7 @@ pub mod lsp_types {
 pub use corsa_core::{Result, SharedObserver, TsgoError, TsgoEvent, TsgoObserver};
 
 #[path = "api/mod.rs"]
-/// Typed bindings for the `tsgo` stdio API surface.
+/// Typed bindings for the Corsa stdio API surface.
 pub mod api;
 
 pub use api::*;

@@ -34,7 +34,7 @@ export function createNodeMaps(context: ContextWithParserOptions): {
       get(node) {
         const value = tsgoToEstree.get(node);
         if (!value) {
-          throw new Error("corsa-oxlint could not map tsgo node back to ESTree");
+          throw new Error("corsa-oxlint could not map Corsa node back to ESTree");
         }
         return value;
       },

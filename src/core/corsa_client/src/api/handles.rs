@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 macro_rules! handle_type {
     ($name:ident) => {
-        /// Opaque handle returned by tsgo.
+        /// Opaque handle returned by Corsa.
         ///
         /// Handles are lightweight string wrappers and can be passed back to
         /// follow-up requests without parsing.

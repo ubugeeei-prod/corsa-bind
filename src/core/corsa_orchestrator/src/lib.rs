@@ -1,4 +1,4 @@
-//! Orchestration layers for coordinating one or more `tsgo` workers.
+//! Orchestration layers for coordinating one or more Corsa workers.
 //!
 //! The orchestration crates are where `corsa` can outperform naive CLI usage:
 //! by prewarming workers, reusing snapshots, memoizing results, and replicating

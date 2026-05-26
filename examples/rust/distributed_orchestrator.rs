@@ -10,7 +10,7 @@ use corsa::{
 };
 use serde_json::{Value, json};
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     let result = block_on(async {
         let orchestrator = DistributedApiOrchestrator::new(["n1", "n2", "n3"]);
         let profile = ApiProfile::new(
@@ -42,12 +42,12 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?;
         let follower_document = orchestrator.document("n2", &document.uri).ok_or_else(|| {
-            corsa::TsgoError::Protocol(
+            corsa::CorsaError::Protocol(
                 "distributed orchestrator example did not replicate to follower".into(),
             )
         })?;
 
-        Ok::<_, corsa::TsgoError>(json!({
+        Ok::<_, corsa::CorsaError>(json!({
             "leaderId": orchestrator.leader_id(),
             "term": term,
             "cachedPing": cached_ping,

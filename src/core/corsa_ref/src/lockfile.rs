@@ -5,7 +5,7 @@ use corsa_core::{
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 
-/// Lockfile describing the pinned `typescript-go` repository.
+/// Lockfile describing the pinned Corsa upstream repository.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TsgoRefLock {
     /// Lockfile schema version.

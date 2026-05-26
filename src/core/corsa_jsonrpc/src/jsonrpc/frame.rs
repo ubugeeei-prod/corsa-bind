@@ -1,6 +1,6 @@
 //! Content-Length framing helpers for stdio JSON-RPC.
 //!
-//! `typescript-go` uses the same header-based framing style as LSP: an ASCII
+//! Corsa uses the same header-based framing style as LSP: an ASCII
 //! header block terminated by `\r\n\r\n`, followed by an exact number of body
 //! bytes. The helpers in this module focus on that framing layer only; they do
 //! not parse or validate the JSON payload itself.

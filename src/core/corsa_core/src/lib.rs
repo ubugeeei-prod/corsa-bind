@@ -6,7 +6,7 @@
 //!
 //! Most applications will consume this crate indirectly via `corsa_client`
 //! or the top-level `corsa` facade, but it is also useful on its own when
-//! embedding `tsgo` process management in another integration.
+//! embedding Corsa process management in another integration.
 
 mod error;
 /// Compact string/collection aliases used to keep hot paths allocation-light.
@@ -21,6 +21,6 @@ pub mod utils;
 
 pub use error::{Result, TsgoError};
 pub use observability::{SharedObserver, TsgoEvent, TsgoObserver, observe};
-/// Child-process guard and reusable command template for `tsgo`.
+/// Child-process guard and reusable command template for Corsa.
 pub use process::{AsyncChildGuard, TsgoCommand, terminate_child_process, wait_for_child_exit};
 pub use rpc::RpcResponseError;

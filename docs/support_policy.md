@@ -44,7 +44,7 @@ CI is expected to exercise:
 
 - workspace quality checks on Linux, macOS, and Windows
 - Deno and Bun runtime smoke coverage for the published JS wrapper on Linux, macOS, and Windows
-- real `tsgo` smoke coverage on Linux, macOS, and Windows
+- real Corsa smoke coverage on Linux, macOS, and Windows
 - C ABI, C++ header, and Go wrapper smoke coverage on Ubuntu
 - benchmark verification on Ubuntu
 

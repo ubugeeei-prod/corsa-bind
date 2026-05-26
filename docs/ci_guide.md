@@ -12,7 +12,7 @@ This repository has a slightly unusual shape:
 - Rust crates
 - Node bindings through `napi-rs`
 - JS and TS code checked through Vite+ and Oxlint
-- a pinned upstream `typescript-go` checkout under `ref/typescript-go`
+- a pinned Corsa upstream checkout under `ref/typescript-go`
 - regression tests and benchmarks that talk to the real pinned upstream binary
 
 That means "CI is green" is not just one compiler succeeding.
@@ -22,7 +22,7 @@ It means several layers agree on:
 - Rust correctness
 - Node wrapper correctness
 - upstream pin cleanliness
-- real `tsgo` integration behavior
+- real Corsa integration behavior
 - benchmark report availability
 
 ## CI Topology
@@ -39,8 +39,8 @@ It currently has these jobs in the main workflow:
 - `test`
 - `public-facade`
 - `quality`
-- `real-tsgo-smoke`
-- `bench-tsgo-ref`
+- `real-Corsa-smoke`
+- `bench-corsa-ref` (`Corsa Ref Bench`)
 
 The PR performance workflow lives in
 [`../.github/workflows/pr-performance.yml`](../.github/workflows/pr-performance.yml).
@@ -75,12 +75,12 @@ vp run -w build
 vp run -w test
 ```
 
-## `real-tsgo-smoke`
+## `real-Corsa-smoke`
 
-The `real-tsgo-smoke` job answers:
+The `real-Corsa-smoke` job answers:
 
 - is the pinned upstream checkout exactly where the lockfile says it should be?
-- can the pinned upstream `tsgo` binary actually build?
+- can the pinned upstream Corsa binary actually build?
 - do real-server smoke and typecheck tests pass against that binary on every supported OS?
 
 The important commands are:
@@ -92,9 +92,9 @@ vp run -w build_tsgo
 cargo test -p corsa --no-default-features --test real_tsgo_regression --test real_tsgo_typecheck
 ```
 
-## `bench-tsgo-ref`
+## `bench-corsa-ref`
 
-The `bench-tsgo-ref` job keeps the heavier Ubuntu-only path:
+The `bench-corsa-ref` job, displayed as `Corsa Ref Bench`, keeps the heavier Ubuntu-only path:
 
 - baseline validation against the pinned upstream server
 - benchmark report regeneration
@@ -105,7 +105,7 @@ The `bench-tsgo-ref` job keeps the heavier Ubuntu-only path:
 The `non-node-bindings` job validates the production-supported native wrappers
 outside Node:
 
-- builds the Rust C ABI crate and mock `tsgo` server
+- builds the Rust C ABI crate and mock Corsa server
 - runs the Go wrapper tests in `src/bindings/go/corsa_utils`
 - compiles the C++ header surface against the generated C ABI header
 
@@ -214,7 +214,7 @@ After module resolution was fixed, several TypeScript errors remained in `typesc
 
 The important ones were:
 
-- `TsgoType` access patterns assuming an `id` path while the checker only knew a narrower local shape
+- `CorsaType` access patterns assuming an `id` path while the checker only knew a narrower local shape
 - an unnecessary cast around `texts`
 - a cached config path that could be inferred as `undefined`
 
@@ -304,12 +304,12 @@ The CI pass validated that expectation under real benchmark execution too.
 
 The benchmark path:
 
-- rebuilt the real pinned `tsgo`
+- rebuilt the real pinned Corsa
 - regenerated `.cache/bench_native.json`
 - regenerated `.cache/bench_ts.json`
 - ran the benchmark guard tests
 
-After the run, no leftover `tsgo`, `bench_real_tsgo`, or related benchmark worker processes remained.
+After the run, no leftover Corsa, `bench_real_tsgo`, or related benchmark worker processes remained.
 
 That matters because benchmark pipelines that leak processes are not just untidy.
 They are measurement bugs waiting to happen.
@@ -374,10 +374,10 @@ Required status checks for `main` should include:
 - `Quality (ubuntu-latest)`
 - `Quality (macos-latest)`
 - `Quality (windows-latest)`
-- `Real tsgo Smoke (ubuntu-latest)`
-- `Real tsgo Smoke (macos-latest)`
-- `Real tsgo Smoke (windows-latest)`
-- `tsgo Ref Bench`
+- `Real Corsa Smoke (ubuntu-latest)`
+- `Real Corsa Smoke (macos-latest)`
+- `Real Corsa Smoke (windows-latest)`
+- `Corsa Ref Bench`
 - `Cargo Deny`
 - `Release Dry Run`
 
@@ -464,4 +464,4 @@ The slowest part is usually rebuilding or rerunning the real pinned upstream bin
 - [README.md](../README.md)
 - [performance.md](./performance.md)
 - [benchmarking_guide.md](./benchmarking_guide.md)
-- [tsgo_dependency.md](./tsgo_dependency.md)
+- [corsa_upstream_dependency.md](./corsa_upstream_dependency.md)

@@ -25,13 +25,13 @@ impl lsp_types::request::Request for OverlayStateRequest {
     const METHOD: &'static str = "custom/overlayState";
 }
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     let result = block_on(async {
         let client = LspClient::spawn(support::mock_lsp_config("lsp_overlay")?).await?;
         let events = client.subscribe();
         let initialize = client.request::<InitializeRequest>(json!({})).await?;
         let first_event = match events.recv_timeout(Duration::from_secs(1)).map_err(|err| {
-            corsa::TsgoError::Protocol(
+            corsa::CorsaError::Protocol(
                 format!("timed out waiting for first LSP event: {err}").into(),
             )
         })? {
@@ -64,7 +64,7 @@ fn main() -> Result<(), corsa::TsgoError> {
         let state = client.request::<OverlayStateRequest>(json!({})).await?;
         overlay.close(&document.uri)?;
         client.close().await?;
-        Ok::<_, corsa::TsgoError>(json!({
+        Ok::<_, corsa::CorsaError>(json!({
             "textDocumentSync": initialize["capabilities"]["textDocumentSync"],
             "firstEvent": first_event,
             "apiSessionId": session.session_id,

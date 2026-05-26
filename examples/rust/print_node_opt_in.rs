@@ -1,13 +1,13 @@
 mod support;
 
 use corsa::{
-    TsgoError,
+    CorsaError,
     api::{ApiClient, ApiMode, PrintNodeOptions, UpdateSnapshotParams},
     runtime::block_on,
 };
 use serde_json::json;
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     let result = block_on(async {
         let client = ApiClient::spawn(
             support::mock_api_config("print_node_opt_in", ApiMode::AsyncJsonRpcStdio)?
@@ -22,7 +22,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             })
             .await?;
         let project = snapshot.projects.first().ok_or_else(|| {
-            TsgoError::Protocol("print node example did not return a project".into())
+            CorsaError::Protocol("print node example did not return a project".into())
         })?;
         let string_type = client
             .get_string_type(snapshot.handle.clone(), project.id.clone())
@@ -37,7 +37,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?
             .ok_or_else(|| {
-                TsgoError::Protocol("print node example did not return a type node".into())
+                CorsaError::Protocol("print node example did not return a type node".into())
             })?;
         let rendered = client
             .print_node(
@@ -67,7 +67,7 @@ fn main() -> Result<(), corsa::TsgoError> {
         });
         snapshot.release().await?;
         client.close().await?;
-        Ok::<_, corsa::TsgoError>(result)
+        Ok::<_, corsa::CorsaError>(result)
     })?;
 
     support::print_json(result);

@@ -4,7 +4,7 @@ use crate::{CommitMetadata, LockedRepository, RepositoryStatus, TsgoRefLock};
 use corsa_core::{Result, TsgoError, fast::compact_format};
 use std::path::{Path, PathBuf};
 
-/// High-level manager for the pinned `ref/typescript-go` checkout.
+/// High-level manager for the pinned Corsa upstream checkout.
 ///
 /// The manager reads [`TsgoRefLock`](crate::TsgoRefLock), locates the managed
 /// repository relative to that lockfile, and provides the small set of

@@ -1,7 +1,7 @@
 {
   "name": "corsa-workspace",
   "private": true,
-  "description": "Rust, Node, and orchestration tooling for production-style typescript-go workflows",
+  "description": "Rust, Node, and orchestration tooling for production-style Corsa workflows",
   "homepage": "https://github.com/ubugeeei/corsa-bind",
   "bugs": {
     "url": "https://github.com/ubugeeei/corsa-bind/issues"

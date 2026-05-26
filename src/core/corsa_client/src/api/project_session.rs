@@ -7,7 +7,7 @@ use crate::{Result, TsgoError};
 
 /// Snapshot-backed project session for repeated checker queries.
 ///
-/// `tsgo` exposes most checker APIs in terms of `(snapshot, project, ...)`.
+/// Corsa exposes most checker APIs in terms of `(snapshot, project, ...)`.
 /// This wrapper keeps those two handles alive and refreshes them together so
 /// callers can focus on document-level queries instead of transport plumbing.
 pub struct ProjectSession {

@@ -5,7 +5,7 @@ import type { TypeAwareParserOptions } from "corsa-oxlint";
 
 const examplesDir = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(examplesDir, "../..");
-const tsgoExecutable =
+const corsaExecutable =
   process.platform === "win32"
     ? resolve(workspaceRoot, ".cache/tsgo.exe")
     : resolve(workspaceRoot, ".cache/tsgo");
@@ -16,8 +16,8 @@ export function createExampleParserOptions(): TypeAwareParserOptions {
       allowDefaultProject: ["*.ts", "*.tsx"],
     },
     tsconfigRootDir: workspaceRoot,
-    tsgo: {
-      executable: tsgoExecutable,
+    corsa: {
+      executable: corsaExecutable,
       cwd: workspaceRoot,
       mode: "msgpack",
       requestTimeoutMs: 30_000,

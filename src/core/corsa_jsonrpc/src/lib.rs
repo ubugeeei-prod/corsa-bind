@@ -1,4 +1,4 @@
-//! JSON-RPC framing and transport utilities used by the `tsgo` integrations.
+//! JSON-RPC framing and transport utilities used by the Corsa integrations.
 //!
 //! The types in this crate are transport-focused rather than compiler-focused:
 //! they help you read and write JSON-RPC 2.0 messages over stdio or sockets,

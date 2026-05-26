@@ -2,7 +2,7 @@
 name = "corsa_client"
 version = "0.10.0"
 edition = "2024"
-description = "Typed stdio API client bindings for typescript-go"
+description = "Typed stdio API client bindings for Corsa"
 publish = ["crates-io"]
 documentation.workspace = true
 homepage.workspace = true

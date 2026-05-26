@@ -15,7 +15,7 @@ pub struct ReplicatedSnapshot {
     pub handle: SnapshotHandle,
     /// Project list visible when the snapshot was created.
     pub projects: SmallVec<[ProjectResponse; 4]>,
-    /// Optional incremental change summary returned by `tsgo`.
+    /// Optional incremental change summary returned by Corsa.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub changes: Option<SnapshotChanges>,
 }

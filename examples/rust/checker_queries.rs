@@ -1,13 +1,13 @@
 mod support;
 
 use corsa::{
-    TsgoError,
+    CorsaError,
     api::{ApiClient, ApiMode, DocumentPosition, UpdateSnapshotParams},
     runtime::block_on,
 };
 use serde_json::json;
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     let result = block_on(async {
         let client = ApiClient::spawn(support::mock_api_config(
             "checker_queries",
@@ -22,7 +22,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             })
             .await?;
         let project = snapshot.projects.first().ok_or_else(|| {
-            TsgoError::Protocol("checker queries example did not return a project".into())
+            CorsaError::Protocol("checker queries example did not return a project".into())
         })?;
         let symbol = client
             .get_symbol_at_position(
@@ -33,10 +33,10 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?
             .ok_or_else(|| {
-                TsgoError::Protocol("checker queries example did not resolve a symbol".into())
+                CorsaError::Protocol("checker queries example did not resolve a symbol".into())
             })?;
         let declaration = symbol.value_declaration.clone().ok_or_else(|| {
-            TsgoError::Protocol("checker queries example did not return a declaration".into())
+            CorsaError::Protocol("checker queries example did not return a declaration".into())
         })?;
         let parsed = declaration.parse()?;
         let type_at_position = client
@@ -48,7 +48,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?
             .ok_or_else(|| {
-                TsgoError::Protocol("checker queries example did not resolve a type".into())
+                CorsaError::Protocol("checker queries example did not resolve a type".into())
             })?;
         let type_at_location = client
             .get_type_at_location(
@@ -58,7 +58,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?
             .ok_or_else(|| {
-                TsgoError::Protocol(
+                CorsaError::Protocol(
                     "checker queries example did not resolve a location type".into(),
                 )
             })?;
@@ -70,7 +70,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?
             .ok_or_else(|| {
-                TsgoError::Protocol(
+                CorsaError::Protocol(
                     "checker queries example did not resolve a declared type".into(),
                 )
             })?;
@@ -83,7 +83,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?;
         let signature = signatures.first().ok_or_else(|| {
-            TsgoError::Protocol("checker queries example did not return a signature".into())
+            CorsaError::Protocol("checker queries example did not return a signature".into())
         })?;
         let return_type = client
             .get_return_type_of_signature(
@@ -93,7 +93,7 @@ fn main() -> Result<(), corsa::TsgoError> {
             )
             .await?
             .ok_or_else(|| {
-                TsgoError::Protocol("checker queries example did not resolve a return type".into())
+                CorsaError::Protocol("checker queries example did not resolve a return type".into())
             })?;
         let predicate = client
             .get_type_predicate_of_signature(
@@ -204,7 +204,7 @@ fn main() -> Result<(), corsa::TsgoError> {
         });
         snapshot.release().await?;
         client.close().await?;
-        Ok::<_, corsa::TsgoError>(result)
+        Ok::<_, corsa::CorsaError>(result)
     })?;
 
     support::print_json(result);

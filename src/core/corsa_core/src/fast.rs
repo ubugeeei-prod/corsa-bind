@@ -33,8 +33,8 @@ pub type FastMap<K, V> = FxHashMap<K, V>;
 /// use corsa_core::fast::FastSet;
 ///
 /// let mut set = FastSet::default();
-/// set.insert("tsgo");
-/// assert!(set.contains("tsgo"));
+/// set.insert("corsa");
+/// assert!(set.contains("corsa"));
 /// ```
 pub type FastSet<T> = FxHashSet<T>;
 

@@ -10,7 +10,7 @@ use corsa::{
 };
 use serde_json::{Value, json};
 
-fn main() -> Result<(), corsa::TsgoError> {
+fn main() -> Result<(), corsa::CorsaError> {
     let result = block_on(async {
         let orchestrator = ApiOrchestrator::default();
         let profile = ApiProfile::new(
@@ -55,21 +55,21 @@ fn main() -> Result<(), corsa::TsgoError> {
                     .raw_json_request("echo", json!({ "value": value }))
                     .await?;
                 let Some(echoed_value) = echoed.get("value").and_then(Value::as_u64) else {
-                    return Err(corsa::TsgoError::Protocol(compact_format(format_args!(
+                    return Err(corsa::CorsaError::Protocol(compact_format(format_args!(
                         "echo response did not contain a numeric `value`: {echoed}"
                     ))));
                 };
                 let echoed_value = u32::try_from(echoed_value).map_err(|_| {
-                    corsa::TsgoError::Protocol(compact_format(format_args!(
+                    corsa::CorsaError::Protocol(compact_format(format_args!(
                         "echo response value is outside u32 range: {echoed_value}"
                     )))
                 })?;
-                Ok::<_, corsa::TsgoError>(echoed_value)
+                Ok::<_, corsa::CorsaError>(echoed_value)
             })
             .await?;
         let stats = orchestrator.stats();
 
-        Ok::<_, corsa::TsgoError>(json!({
+        Ok::<_, corsa::CorsaError>(json!({
             "snapshotCacheHit": Arc::ptr_eq(&snapshot_a, &snapshot_b),
             "snapshotHandle": snapshot_a.handle,
             "cachedPing": ping,
