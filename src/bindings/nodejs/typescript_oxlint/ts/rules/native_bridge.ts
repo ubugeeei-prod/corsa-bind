@@ -10,7 +10,7 @@ import type {
 
 import { createNativeRule } from "./rule_creator";
 import { checkerFor, propertyNamesOfNode, typeAtNode, typeTextsAtNode } from "./type_utils";
-import type { ContextWithParserOptions, TsgoSignature, TsgoType } from "../types";
+import type { ContextWithParserOptions, TsgoNode, TsgoSignature, TsgoType } from "../types";
 
 type RangedNode = {
   readonly type: string;
@@ -377,12 +377,13 @@ function expectedArgumentTypeTextsOfCall(
     return [];
   }
   const signature = signatureForCall(context, node, calleeType);
-  if (!signature || signature.parameters.length === 0) {
+  const parameters = signatureParameters(signature);
+  if (parameters.length === 0) {
     return [];
   }
   const args = Array.isArray(node.arguments) ? node.arguments : [];
   return args.map((_arg: unknown, index: number) => {
-    const parameterId = signature.parameters[Math.min(index, signature.parameters.length - 1)];
+    const parameterId = parameters[Math.min(index, parameters.length - 1)];
     return parameterId ? parameterTypeTexts(context, parameterId) : [];
   });
 }
@@ -447,7 +448,7 @@ function scoreSignatureForArguments(
   signature: TsgoSignature,
   args: readonly any[],
 ): number {
-  const parameterTypes = signature.parameters.map((parameterId) =>
+  const parameterTypes = signatureParameters(signature).map((parameterId) =>
     parameterTypeTexts(context, parameterId),
   );
   let score = -Math.abs(args.length - parameterTypes.length);
@@ -467,15 +468,55 @@ function scoreSignatureForArguments(
   return score;
 }
 
+function signatureParameters(signature: TsgoSignature | undefined): readonly string[] {
+  return Array.isArray(signature?.parameters) ? signature.parameters : [];
+}
+
 function parameterTypeTexts(
   context: ContextWithParserOptions,
   parameterId: string,
 ): readonly string[] {
   const checker = checkerFor(context);
-  const parameterSymbol = { id: parameterId } as any;
+  const parameterSymbol = checker.getSymbol(parameterId) ?? ({ id: parameterId } as any);
+  const declaration =
+    checker.getNode(parameterSymbol.valueDeclaration) ??
+    checker.getNode(parameterSymbol.declarations?.[0]);
   const parameterType =
-    checker.getTypeOfSymbol(parameterSymbol) ?? checker.getDeclaredTypeOfSymbol(parameterSymbol);
-  return parameterType ? renderTypeTexts(context, parameterType) : [];
+    (declaration ? checker.getTypeOfSymbolAtLocation(parameterSymbol, declaration) : undefined) ??
+    checker.getTypeOfSymbol(parameterSymbol) ??
+    checker.getDeclaredTypeOfSymbol(parameterSymbol);
+  const typeTexts = parameterType ? renderTypeTexts(context, parameterType) : [];
+  const fallbackTexts = parameterAnnotationTexts(context, declaration);
+  return typeTexts.length > 0 ? typeTexts : fallbackTexts;
+}
+
+function parameterAnnotationTexts(
+  context: ContextWithParserOptions,
+  declaration: TsgoNode | undefined,
+): readonly string[] {
+  if (!declaration) {
+    return [];
+  }
+  const sourceText = sourceTextForPath(context, declaration.fileName);
+  if (
+    !sourceText ||
+    declaration.pos < 0 ||
+    declaration.end > sourceText.length ||
+    declaration.pos >= declaration.end
+  ) {
+    return [];
+  }
+  const parameterText = sourceText.slice(declaration.pos, declaration.end);
+  const annotationStart = topLevelIndexOf(parameterText, ":");
+  if (annotationStart < 0) {
+    return [];
+  }
+  const annotationText = parameterText.slice(annotationStart + 1);
+  const defaultStart = topLevelIndexOf(annotationText, "=");
+  const typeText = (defaultStart >= 0 ? annotationText.slice(0, defaultStart) : annotationText)
+    .trim()
+    .replace(/\s+$/, "");
+  return typeText ? [typeText] : [];
 }
 
 function typeTextsOverlap(actual: readonly string[], expected: readonly string[]): boolean {

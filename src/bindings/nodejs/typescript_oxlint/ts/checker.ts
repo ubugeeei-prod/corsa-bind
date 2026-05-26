@@ -57,6 +57,18 @@ export function createTypeChecker(context: ContextWithParserOptions): TsgoTypeCh
         sourceTextFor(context, lookupNode),
       );
     },
+    getSymbol(symbol) {
+      return sessionForContext(context).session.getSymbol(symbol);
+    },
+    getSymbolById(id) {
+      return sessionForContext(context).session.getSymbol(id);
+    },
+    getNode(node) {
+      return sessionForContext(context).session.getNode(node);
+    },
+    getNodeById(id) {
+      return sessionForContext(context).session.getNode(id);
+    },
     getTypeOfSymbol(symbol) {
       return sessionForContext(context).session.getTypeOfSymbol(symbol);
     },
@@ -102,8 +114,52 @@ export function createTypeChecker(context: ContextWithParserOptions): TsgoTypeCh
     getTypeArguments(type) {
       return sessionForContext(context).session.getTypeArguments(type);
     },
+    getTypesOfType(type) {
+      return sessionForContext(context).session.getTypesOfType(type);
+    },
+    getTargetOfType(type) {
+      return sessionForContext(context).session.getTargetOfType(type);
+    },
+    getTypeParametersOfType(type) {
+      return sessionForContext(context).session.getTypeParametersOfType(type);
+    },
+    getOuterTypeParametersOfType(type) {
+      return sessionForContext(context).session.getOuterTypeParametersOfType(type);
+    },
+    getLocalTypeParametersOfType(type) {
+      return sessionForContext(context).session.getLocalTypeParametersOfType(type);
+    },
+    getObjectTypeOfType(type) {
+      return sessionForContext(context).session.getObjectTypeOfType(type);
+    },
+    getIndexTypeOfType(type) {
+      return sessionForContext(context).session.getIndexTypeOfType(type);
+    },
+    getCheckTypeOfType(type) {
+      return sessionForContext(context).session.getCheckTypeOfType(type);
+    },
+    getExtendsTypeOfType(type) {
+      return sessionForContext(context).session.getExtendsTypeOfType(type);
+    },
+    getBaseTypeOfType(type) {
+      return sessionForContext(context).session.getBaseTypeOfType(type);
+    },
+    getConstraintOfType(type) {
+      return sessionForContext(context).session.getConstraintOfType(type);
+    },
+    isUnionType(type) {
+      return (type.flags & typeFlags.union) !== 0;
+    },
+    isIntersectionType(type) {
+      return (type.flags & typeFlags.intersection) !== 0;
+    },
   };
 }
+
+const typeFlags = {
+  union: 1 << 27,
+  intersection: 1 << 28,
+} as const;
 
 function sourceTextFor(
   context: ContextWithParserOptions,

@@ -66,27 +66,37 @@ export class RuleTester {
   }
 
   run(ruleName: string, rule: Record<string, unknown>, tests: TestCases): void {
-    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-"));
-    registerCleanup(workspace);
     const transformed = {
-      valid: tests.valid.map((test) => prepareTestCase(workspace, test, this.#config)),
-      invalid: tests.invalid.map((test) => prepareTestCase(workspace, test, this.#config)),
+      valid: tests.valid.map((test, index) =>
+        prepareTestCase(createWorkspace(), test, this.#config, "valid", index),
+      ),
+      invalid: tests.invalid.map((test, index) =>
+        prepareTestCase(createWorkspace(), test, this.#config, "invalid", index),
+      ),
     };
     this.#inner.run(ruleName, decorateRule(rule as never) as never, transformed as TestCases);
   }
+}
+
+function createWorkspace(): string {
+  const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-"));
+  registerCleanup(workspace);
+  return workspace;
 }
 
 function prepareTestCase(
   workspace: string,
   test: string | TestCase,
   config: TesterConfig | undefined,
+  group: "valid" | "invalid",
+  index: number,
 ): string | TestCase {
   if (typeof test === "string") {
-    const filename = resolve(workspace, "fixture.ts");
+    const filename = resolve(workspace, `${group}-${index}.ts`);
     writeFixture(filename, test);
     return test;
   }
-  const filename = resolve(workspace, test.filename ?? "fixture.ts");
+  const filename = resolve(workspace, test.filename ?? `${group}-${index}.ts`);
   writeFixture(filename, test.code);
   const testerConfig = config as ConfigWithSettings | undefined;
   const baseSettings = testerConfig?.settings?.typescriptOxlint;

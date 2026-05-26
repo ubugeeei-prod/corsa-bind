@@ -46,6 +46,7 @@ export interface ResolvedProjectConfig {
 }
 
 export interface TsgoNode {
+  readonly id?: string;
   readonly fileName: string;
   readonly pos: number;
   readonly end: number;
@@ -97,6 +98,10 @@ export interface TsgoTypeCheckerShape {
   getTypeAtLocation(node: Node | TsgoNode): TsgoType | undefined;
   getContextualType(node: Node | TsgoNode): TsgoType | undefined;
   getSymbolAtLocation(node: Node | TsgoNode): TsgoSymbol | undefined;
+  getSymbol(symbol: string | TsgoSymbol): TsgoSymbol | undefined;
+  getSymbolById(id: string): TsgoSymbol | undefined;
+  getNode(node: string | TsgoNode): TsgoNode | undefined;
+  getNodeById(id: string): TsgoNode | undefined;
   getTypeOfSymbol(symbol: TsgoSymbol): TsgoType | undefined;
   getDeclaredTypeOfSymbol(symbol: TsgoSymbol): TsgoType | undefined;
   getTypeOfSymbolAtLocation(symbol: TsgoSymbol, node: Node | TsgoNode): TsgoType | undefined;
@@ -109,6 +114,19 @@ export interface TsgoTypeCheckerShape {
   getBaseTypes(type: TsgoType): readonly TsgoType[];
   getImplementedTypes(node: Node | TsgoNode): readonly TsgoType[];
   getTypeArguments(type: TsgoType): readonly TsgoType[];
+  getTypesOfType(type: TsgoType): readonly TsgoType[];
+  getTargetOfType(type: TsgoType): TsgoType | undefined;
+  getTypeParametersOfType(type: TsgoType): readonly TsgoType[];
+  getOuterTypeParametersOfType(type: TsgoType): readonly TsgoType[];
+  getLocalTypeParametersOfType(type: TsgoType): readonly TsgoType[];
+  getObjectTypeOfType(type: TsgoType): TsgoType | undefined;
+  getIndexTypeOfType(type: TsgoType): TsgoType | undefined;
+  getCheckTypeOfType(type: TsgoType): TsgoType | undefined;
+  getExtendsTypeOfType(type: TsgoType): TsgoType | undefined;
+  getBaseTypeOfType(type: TsgoType): TsgoType | undefined;
+  getConstraintOfType(type: TsgoType): TsgoType | undefined;
+  isUnionType(type: TsgoType): boolean;
+  isIntersectionType(type: TsgoType): boolean;
 }
 
 export interface ParserServices {
