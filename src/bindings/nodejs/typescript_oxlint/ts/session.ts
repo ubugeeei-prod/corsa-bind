@@ -160,21 +160,13 @@ export class TsgoProjectSession {
   }
 
   getTypeOfSymbol(symbol: TsgoSymbol): TsgoType | undefined {
-    const type = this.rememberType(
-      this.client().getTypeOfSymbol(this.#snapshot!, this.projectId(), symbol.id) as
-        | TsgoType
-        | undefined,
-    );
+    const type = this.rememberType(this.tryGetSymbolType(symbol, "getTypeOfSymbol"));
     this.rememberTypeSource(type, symbol.valueDeclaration);
     return type;
   }
 
   getDeclaredTypeOfSymbol(symbol: TsgoSymbol): TsgoType | undefined {
-    const type = this.rememberType(
-      this.client().getDeclaredTypeOfSymbol(this.#snapshot!, this.projectId(), symbol.id) as
-        | TsgoType
-        | undefined,
-    );
+    const type = this.rememberType(this.tryGetSymbolType(symbol, "getDeclaredTypeOfSymbol"));
     this.rememberTypeSource(type, symbol.valueDeclaration);
     return type;
   }
@@ -379,6 +371,19 @@ export class TsgoProjectSession {
     );
   }
 
+  private tryGetSymbolType(
+    symbol: TsgoSymbol,
+    method: "getTypeOfSymbol" | "getDeclaredTypeOfSymbol",
+  ): TsgoType | undefined {
+    try {
+      return this.client()[method](this.#snapshot!, this.projectId(), symbol.id) as
+        | TsgoType
+        | undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private fallbackTypeArguments(type: TsgoType): readonly TsgoType[] {
     const source = this.sourceSliceForType(type);
     if (!source) {
@@ -495,7 +500,8 @@ export class TsgoProjectSession {
     const parameters = signature.declaration
       ? this.parameterInfosForDeclaration(signature.declaration)
       : [];
-    signature.parameters.forEach((id, index) => {
+    const parameterIds = Array.isArray(signature.parameters) ? signature.parameters : [];
+    parameterIds.forEach((id, index) => {
       this.rememberSyntheticSymbol(id, parameters[index]);
     });
     if (signature.thisParameter) {
