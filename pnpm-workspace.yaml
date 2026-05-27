@@ -2,3 +2,9 @@ packages:
   - examples
   - bench
   - src/bindings/nodejs/*
+autoInstallPeers: false
+peerDependencyRules:
+  ignoreMissing:
+    - "@types/markdown-it"
+    - markdown-it
+    - void
