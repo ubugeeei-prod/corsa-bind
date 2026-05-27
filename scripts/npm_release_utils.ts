@@ -135,12 +135,12 @@ interface NodeBindingBuildTargetConfig {
 const nodeBindingBuildTargetConfig: Record<string, NodeBindingBuildTargetConfig> = {
   "x86_64-pc-windows-msvc": {
     crossCompile: false,
-    os: "blacksmith-4vcpu-windows-2025",
+    os: "blacksmith-2vcpu-windows-2025",
     useNapiCross: false,
   },
   "aarch64-pc-windows-msvc": {
     crossCompile: false,
-    os: "blacksmith-4vcpu-windows-2025",
+    os: "blacksmith-2vcpu-windows-2025",
     useNapiCross: false,
   },
   "x86_64-apple-darwin": {
@@ -155,22 +155,22 @@ const nodeBindingBuildTargetConfig: Record<string, NodeBindingBuildTargetConfig>
   },
   "x86_64-unknown-linux-gnu": {
     crossCompile: false,
-    os: "blacksmith-4vcpu-ubuntu-2404",
+    os: "blacksmith-2vcpu-ubuntu-2404",
     useNapiCross: true,
   },
   "aarch64-unknown-linux-gnu": {
     crossCompile: false,
-    os: "blacksmith-4vcpu-ubuntu-2404",
+    os: "blacksmith-2vcpu-ubuntu-2404",
     useNapiCross: true,
   },
   "x86_64-unknown-linux-musl": {
     crossCompile: true,
-    os: "blacksmith-4vcpu-ubuntu-2404",
+    os: "blacksmith-2vcpu-ubuntu-2404",
     useNapiCross: false,
   },
   "aarch64-unknown-linux-musl": {
     crossCompile: true,
-    os: "blacksmith-4vcpu-ubuntu-2404",
+    os: "blacksmith-2vcpu-ubuntu-2404",
     useNapiCross: false,
   },
 };
