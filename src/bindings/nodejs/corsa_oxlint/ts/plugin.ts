@@ -9,8 +9,11 @@ import { resolveTypeAwareParserOptions } from "./context";
 import { getParserServices } from "./parser_services";
 import type { ContextWithParserOptions, ParserServices } from "./types";
 
-type PluginShape = OxlintPlugin;
-type RuleShape = OxlintRule;
+export type Plugin = Omit<OxlintPlugin, "rules"> & {
+  readonly rules: Record<string, Rule>;
+} & Record<string, unknown>;
+export type Rule = OxlintRule & Record<string, unknown>;
+
 const defineOxlintPlugin = oxlintPluginApi.definePlugin;
 const defineOxlintRule = oxlintPluginApi.defineRule;
 const baseCompatPlugin = Reflect.get(
@@ -18,7 +21,7 @@ const baseCompatPlugin = Reflect.get(
   ["es", "lintCompatPlugin"].join(""),
 ) as typeof oxlintPluginApi.definePlugin;
 
-export function definePlugin<Plugin extends PluginShape>(plugin: Plugin): Plugin {
+export function definePlugin(plugin: Plugin): Plugin {
   return defineOxlintPlugin({
     ...plugin,
     rules: wrapRules(plugin.rules ?? {}),
@@ -39,15 +42,15 @@ export function definePlugin<Plugin extends PluginShape>(plugin: Plugin): Plugin
  * });
  * ```
  */
-export function defineRule<Rule extends RuleShape>(rule: Rule): Rule {
+export function defineRule(rule: Rule): Rule {
   return defineOxlintRule(decorateRule(rule) as OxlintRule) as Rule;
 }
 
-export function compatPlugin<Plugin extends PluginShape>(plugin: Plugin): Plugin {
+export function compatPlugin(plugin: Plugin): Plugin {
   return baseCompatPlugin(definePlugin(plugin)) as Plugin;
 }
 
-export function decorateRule<Rule extends RuleShape>(rule: Rule): Rule {
+export function decorateRule(rule: Rule): Rule {
   if (rule.create) {
     return {
       ...rule,
@@ -67,7 +70,7 @@ export function decorateRule<Rule extends RuleShape>(rule: Rule): Rule {
   return rule;
 }
 
-function wrapRules(rules: Record<string, RuleShape>): Record<string, RuleShape> {
+function wrapRules(rules: Record<string, Rule>): Record<string, Rule> {
   return Object.fromEntries(
     Object.entries(rules).map(([name, rule]) => [name, decorateRule(rule)]),
   );
