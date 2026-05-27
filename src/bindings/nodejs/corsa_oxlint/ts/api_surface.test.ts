@@ -1,12 +1,5 @@
 import { execFileSync } from "node:child_process";
-import {
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -48,10 +41,12 @@ describe("api surface", () => {
   });
 
   it("emits declarations for inferred visitor callback node types", () => {
-    const workspace = realpathSync(mkdtempSync("/tmp/corsa-oxlint-declaration-"));
+    const declarationsRoot = resolve(workspaceRoot, ".cache");
+    mkdirSync(declarationsRoot, { recursive: true });
+    const workspace = mkdtempSync(resolve(declarationsRoot, "corsa-oxlint-declaration-"));
     const importPath = moduleSpecifierFor(
       workspace,
-      realpathSync(resolve(workspaceRoot, "src/bindings/nodejs/corsa_oxlint/ts/index.ts")),
+      resolve(workspaceRoot, "src/bindings/nodejs/corsa_oxlint/ts/index.ts"),
     );
     writeFileSync(
       resolve(workspace, "rule.ts"),
@@ -97,29 +92,40 @@ describe("api surface", () => {
         "",
       ].join("\n"),
     );
+    writeFileSync(
+      resolve(workspace, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            declaration: true,
+            emitDeclarationOnly: true,
+            outDir: resolve(workspace, "out"),
+            rootDir: workspaceRoot,
+            moduleResolution: "bundler",
+            module: "esnext",
+            target: "esnext",
+            strict: true,
+            skipLibCheck: true,
+            types: ["node"],
+            typeRoots: [resolve(workspaceRoot, "node_modules/@types")],
+            baseUrl: workspaceRoot,
+            paths: {
+              "@corsa-bind/napi": ["src/bindings/nodejs/corsa_node/ts/index.ts"],
+            },
+            ignoreDeprecations: "6.0",
+          },
+          files: [resolve(workspace, "rule.ts")],
+        },
+        null,
+        2,
+      ),
+    );
 
     try {
       try {
         execFileSync(
           resolve(workspaceRoot, "node_modules/.bin/tsc"),
-          [
-            "--ignoreConfig",
-            "--declaration",
-            "--emitDeclarationOnly",
-            "--outDir",
-            resolve(workspace, "out"),
-            "--moduleResolution",
-            "bundler",
-            "--module",
-            "esnext",
-            "--target",
-            "esnext",
-            "--strict",
-            "--skipLibCheck",
-            "--types",
-            "node",
-            resolve(workspace, "rule.ts"),
-          ],
+          ["-p", resolve(workspace, "tsconfig.json")],
           {
             cwd: workspaceRoot,
             stdio: "pipe",
