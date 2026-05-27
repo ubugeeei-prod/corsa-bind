@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { ESTree as OxlintESTree } from "@oxlint/plugins";
 
 import * as astUtilsEntry from "./ast_utils";
 import * as main from "./index";
@@ -24,6 +25,12 @@ describe("api surface", () => {
     );
     expect(main.TSESTree.AST_TOKEN_TYPES.Block).toBe("Block");
     expect(tsestreeEntry.AST_NODE_TYPES.Identifier).toBe("Identifier");
+  });
+
+  it("wires typed parameter identifiers to type annotations", () => {
+    expectTypeOf<OxlintESTree.BindingIdentifier["typeAnnotation"]>().toEqualTypeOf<
+      OxlintESTree.TSTypeAnnotation | null | undefined
+    >();
   });
 
   it("re-exports typescript-eslint-style utility namespaces", () => {
