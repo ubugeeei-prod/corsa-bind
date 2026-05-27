@@ -313,10 +313,14 @@ describe("corsa oxlint type locations", () => {
       valid: [
         {
           code: [
+            "interface Wrapper<T> {",
+            "  value: T;",
+            "}",
             "class Foo { value = 1; }",
             "interface Bag {",
             "  arr: Foo[];",
             "  tup: [Foo, number];",
+            "  wrapped: Wrapper<string>;",
             "  union: Foo | string;",
             "  intersection: Foo & { x: number };",
             "  mapped: Readonly<Foo>;",
@@ -340,6 +344,7 @@ describe("corsa oxlint type locations", () => {
     expect(seen.arr.args).toEqual(["Foo"]);
     expect(seen.arr.baseTypes).toEqual([]);
     expect(seen.tup.baseTypes).toEqual([]);
+    expect(seen.wrapped.baseTypes).toEqual([]);
     expect(seen.union.isUnion).toBe(true);
     expect(seen.union.parts).toEqual(expect.arrayContaining(["Foo", "string"]));
     expect(seen.intersection.isIntersection).toBe(true);
