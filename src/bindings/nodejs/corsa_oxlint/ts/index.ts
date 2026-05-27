@@ -1,7 +1,6 @@
-import "./oxlint_plugins";
+import type { ESTree as OxlintESTree } from "@oxlint/plugins";
 
 export { AST_NODE_TYPES, AST_TOKEN_TYPES, TSESTree } from "./compat";
-export type { ESTree } from "@oxlint/plugins";
 export * as ASTUtils from "./ast_utils";
 export * as JSONSchema from "./json_schema";
 export * as OxlintCompat from "./oxlint_compat";
@@ -15,6 +14,14 @@ export { RuleTester } from "./rule_tester";
 export { TSESLint } from "./ts_eslint";
 export * as rules from "./rules/index";
 export { oxlintCompat } from "./oxlint_compat";
+export type ESTree = {
+  NewExpression: OxlintESTree.NewExpression;
+  BindingIdentifier: Omit<OxlintESTree.BindingIdentifier, "typeAnnotation"> & {
+    typeAnnotation?: OxlintESTree.TSTypeAnnotation | null;
+  };
+  TSTypeAnnotation: OxlintESTree.TSTypeAnnotation;
+  [key: string]: unknown;
+};
 export type {
   CorsaNode,
   CorsaProgramShape,
