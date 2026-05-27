@@ -79,7 +79,11 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return sessionForContext(context).session.getDeclaredTypeOfSymbol(symbol);
     },
     getTypeOfSymbolAtLocation(symbol, node) {
-      return this.getTypeAtLocation(node) ?? this.getTypeOfSymbol(symbol);
+      return (
+        this.getTypeOfSymbol(symbol) ??
+        this.getDeclaredTypeOfSymbol(symbol) ??
+        this.getTypeAtLocation(node)
+      );
     },
     typeToString(type, enclosingDeclaration, flags) {
       void enclosingDeclaration;
