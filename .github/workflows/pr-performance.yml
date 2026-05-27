@@ -111,7 +111,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ matrix.ref-role }}" = "base" ]; then
-            cp .cache/tsgo .cache/corsa
+            if [ -f .cache/tsgo ]; then
+              cp .cache/tsgo .cache/corsa
+            fi
             ln -sfn typescript_oxlint src/bindings/nodejs/corsa_oxlint
           fi
 
