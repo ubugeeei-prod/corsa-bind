@@ -160,6 +160,64 @@ describe("corsa oxlint", () => {
     });
   });
 
+  it("reuses existing parserServices from sourceCode when ESLint provides type information there", () => {
+    const program = {
+      getTypeChecker() {
+        return {
+          getTypeAtLocation() {
+            return { kind: "type" };
+          },
+          getSymbolAtLocation() {
+            return { kind: "symbol" };
+          },
+        };
+      },
+    };
+    const tsNode = { kind: "ts-node" };
+    const parserServices = {
+      program,
+      esTreeNodeToTSNodeMap: {
+        get() {
+          return tsNode;
+        },
+        has() {
+          return true;
+        },
+      },
+      tsNodeToESTreeNodeMap: {
+        get() {
+          return { type: "Identifier" };
+        },
+        has() {
+          return true;
+        },
+      },
+    };
+
+    const services = getParserServices({
+      cwd: workspaceRoot,
+      filename: resolve(workspaceRoot, "fixture.ts"),
+      languageOptions: {
+        parserOptions: {},
+      },
+      report() {},
+      settings: {},
+      sourceCode: {
+        text: "const fixture = 1;",
+        parserServices: parserServices as never,
+      },
+    } as never);
+
+    expect(services.program).toBe(program);
+    expect(services.hasFullTypeInformation).toBe(true);
+    expect(services.getTypeAtLocation({ type: "Identifier" } as never)).toEqual({
+      kind: "type",
+    });
+    expect(services.getSymbolAtLocation({ type: "Identifier" } as never)).toEqual({
+      kind: "symbol",
+    });
+  });
+
   it("propagates corsaOxlint settings through RuleTester", () => {
     let seen: Record<string, unknown> | undefined;
     const tester = new RuleTester();

@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ESTree as RootESTree } from "./index";
+import type { ESTree as OxlintESTree } from "@oxlint/plugins";
 
 import * as astUtilsEntry from "./ast_utils";
 import * as main from "./index";
@@ -29,6 +30,12 @@ describe("api surface", () => {
 
   it("re-exports ESTree types from the root entry", () => {
     expectTypeOf<RootESTree.NewExpression>().toMatchTypeOf<{ type: "NewExpression" }>();
+  });
+
+  it("wires typed parameter identifiers to type annotations", () => {
+    expectTypeOf<OxlintESTree.BindingIdentifier["typeAnnotation"]>().toEqualTypeOf<
+      OxlintESTree.TSTypeAnnotation | null | undefined
+    >();
   });
 
   it("re-exports typescript-eslint-style utility namespaces", () => {

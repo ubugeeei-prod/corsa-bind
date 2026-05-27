@@ -174,6 +174,10 @@ export class CorsaProjectSession {
     return this.#nodesById.get(node) ?? this.rememberNode(node);
   }
 
+  getSourceTextForPath(path: string): string | undefined {
+    return this.sourceTextForPath(path);
+  }
+
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined {
     const type = this.rememberType(this.tryGetSymbolType(symbol, "getTypeOfSymbol"));
     this.rememberTypeSource(type, symbol.valueDeclaration);
@@ -268,13 +272,20 @@ export class CorsaProjectSession {
     if (isArrayOrTupleLikeType(this, type)) {
       return [];
     }
-    return this.rememberTypes(
-      this.client().callJson("getBaseTypes", {
-        snapshot: this.#snapshot,
-        project: this.projectId(),
-        type: type.id,
-      }) ?? [],
-    );
+    try {
+      return this.rememberTypes(
+        this.client().callJson("getBaseTypes", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          type: type.id,
+        }) ?? [],
+      );
+    } catch (error) {
+      if (isProtocolPanicError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   getTypeArguments(type: CorsaType): readonly CorsaType[] {
@@ -800,6 +811,11 @@ function overlayTextFor(fileName: string, sourceText?: string): string | undefin
   } catch {
     return sourceText;
   }
+}
+
+function isProtocolPanicError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("protocol error: panic:") || message.includes("panic: runtime error");
 }
 
 function statMtimeMs(fileName: string): number {
