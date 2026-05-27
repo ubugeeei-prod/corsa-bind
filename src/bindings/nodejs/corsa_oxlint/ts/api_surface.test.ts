@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { ESTree as RootESTree } from "./index";
 
 import * as astUtilsEntry from "./ast_utils";
 import * as main from "./index";
@@ -24,6 +25,10 @@ describe("api surface", () => {
     );
     expect(main.TSESTree.AST_TOKEN_TYPES.Block).toBe("Block");
     expect(tsestreeEntry.AST_NODE_TYPES.Identifier).toBe("Identifier");
+  });
+
+  it("re-exports ESTree types from the root entry", () => {
+    expectTypeOf<RootESTree.NewExpression>().toMatchTypeOf<{ type: "NewExpression" }>();
   });
 
   it("re-exports typescript-eslint-style utility namespaces", () => {
