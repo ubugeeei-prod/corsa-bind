@@ -56,8 +56,9 @@ describe("publish workflows", () => {
     expect(workflow).toContain('package: "typescript@^6"');
     expect(workflow).toContain('package: "typescript@next"');
     expect(workflow).toContain("Build corsa-oxlint package");
-    expect(workflow).toContain("Normalize benchmark Corsa path");
+    expect(workflow).toContain("Normalize benchmark paths");
     expect(workflow).toContain("cp .cache/tsgo .cache/corsa");
+    expect(workflow).toContain("ln -sfn typescript_oxlint src/bindings/nodejs/corsa_oxlint");
     expect(workflow).toContain("Checkout PR helper scripts");
     expect(workflow).toContain(
       "--manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml",
