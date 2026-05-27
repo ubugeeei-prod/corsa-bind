@@ -149,6 +149,80 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.byType).toEqual(["IChild"]);
   });
 
+  integrationCase("ignores braces in leading comments when resolving implemented types", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "implemented-types-leading-comment",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise implemented type lookup for classes with leading comments",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          NewExpression(node: any) {
+            const type = checker.getTypeAtLocation(node);
+            if (!type) {
+              return;
+            }
+            seen[checker.typeToString(type)] = checker
+              .getImplementedTypesOfType(type)
+              .map((implemented) => checker.typeToString(implemented));
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("implemented-types-leading-comment", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface IFoo {",
+            "  x: string;",
+            "}",
+            "/** No brace in this doc. */",
+            "class NoBrace implements IFoo {",
+            "  x = '';",
+            "}",
+            "/**",
+            " * Example usage:",
+            " *   new WithBrace({ a: 1 });",
+            " */",
+            "class WithBrace implements IFoo {",
+            "  x = '';",
+            "}",
+            "new NoBrace();",
+            "new WithBrace();",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.NoBrace).toEqual(["IFoo"]);
+    expect(seen.WithBrace).toEqual(["IFoo"]);
+  });
+
   integrationCase(
     "resolves implemented types from a declaration node recovered from type metadata",
     () => {
