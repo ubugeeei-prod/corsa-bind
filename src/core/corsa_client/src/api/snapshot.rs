@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::fast::CompactString;
 use log::warn;
 
@@ -51,7 +51,7 @@ impl SnapshotReleaseQueue {
                 }));
                 let _ = done_tx.send(result);
             })
-            .map_err(TsgoError::Io)?;
+            .map_err(CorsaError::Io)?;
         Ok(Self {
             driver,
             profiler,
@@ -64,7 +64,7 @@ impl SnapshotReleaseQueue {
     pub(crate) fn enqueue(&self, handle: SnapshotHandle) {
         let Some(sender) = lock_unpoisoned(&self.sender).as_ref().cloned() else {
             warn!(
-                "failed to release tsgo snapshot `{}`: release queue is closed",
+                "failed to release corsa snapshot `{}`: release queue is closed",
                 handle.as_str()
             );
             return;
@@ -80,7 +80,7 @@ impl SnapshotReleaseQueue {
             }
             Err(mpsc::TrySendError::Disconnected(handle)) => {
                 warn!(
-                    "failed to release tsgo snapshot `{}`: release queue is disconnected",
+                    "failed to release corsa snapshot `{}`: release queue is disconnected",
                     handle.as_str()
                 );
             }
@@ -100,7 +100,7 @@ fn release_handle(
 ) {
     if let Err(error) = corsa_runtime::block_on(driver.release_handle(handle.as_str(), profiler)) {
         warn!(
-            "failed to release tsgo snapshot `{}`: {error}",
+            "failed to release corsa snapshot `{}`: {error}",
             handle.as_str()
         );
     }
@@ -123,13 +123,13 @@ fn wait_for_worker(
                 let _ = worker.join();
             }
             result
-                .map_err(|_| TsgoError::Join(CompactString::from(format!("{operation} panicked"))))
+                .map_err(|_| CorsaError::Join(CompactString::from(format!("{operation} panicked"))))
         }
         Err(mpsc::RecvTimeoutError::Timeout) => {
             warn!("{operation} did not stop within {} ms", timeout.as_millis());
             Ok(())
         }
-        Err(mpsc::RecvTimeoutError::Disconnected) => Err(TsgoError::Closed(operation)),
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(CorsaError::Closed(operation)),
     }
 }
 

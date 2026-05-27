@@ -25,7 +25,7 @@
 
 /// Re-exports shared error types used by the client APIs.
 pub mod error {
-    pub use corsa_core::{Result, RpcResponseError, TsgoError};
+    pub use corsa_core::{CorsaError, Result, RpcResponseError};
 }
 
 /// Re-exports low-level JSON-RPC helpers used by the stdio client transport.
@@ -35,12 +35,12 @@ pub mod jsonrpc {
 
 /// Re-exports process-spawning primitives used to launch Corsa.
 pub mod process {
-    pub use corsa_core::{AsyncChildGuard, TsgoCommand};
+    pub use corsa_core::{AsyncChildGuard, CorsaCommand};
 }
 
 /// Re-exports structured operational events used by the client configs.
 pub mod observability {
-    pub use corsa_core::{SharedObserver, TsgoEvent, TsgoObserver};
+    pub use corsa_core::{CorsaEvent, CorsaObserver, SharedObserver};
 }
 
 /// Re-exports shared LSP model types used by editor-style API responses.
@@ -48,7 +48,7 @@ pub mod lsp_types {
     pub use ::lsp_types::*;
 }
 
-pub use corsa_core::{Result, SharedObserver, TsgoError, TsgoEvent, TsgoObserver};
+pub use corsa_core::{CorsaError, CorsaEvent, CorsaObserver, Result, SharedObserver};
 
 #[path = "api/mod.rs"]
 /// Typed bindings for the Corsa stdio API surface.

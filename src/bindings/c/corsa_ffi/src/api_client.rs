@@ -34,7 +34,7 @@ struct SnapshotState<'a> {
     changes: &'a Option<corsa_client::SnapshotChanges>,
 }
 
-pub struct CorsaTsgoApiClient {
+pub struct CorsaApiClient {
     inner: ApiClient,
     snapshots: Mutex<HashMap<String, ManagedSnapshot>>,
 }
@@ -142,7 +142,7 @@ where
     serde_json::to_string(value).map_err(|error| error.to_string())
 }
 
-unsafe fn client_ref<'a>(value: *const CorsaTsgoApiClient) -> Option<&'a CorsaTsgoApiClient> {
+unsafe fn client_ref<'a>(value: *const CorsaApiClient) -> Option<&'a CorsaApiClient> {
     let Some(value) = (unsafe { value.as_ref() }) else {
         set_last_error("corsa api client handle is null");
         return None;
@@ -150,7 +150,7 @@ unsafe fn client_ref<'a>(value: *const CorsaTsgoApiClient) -> Option<&'a CorsaTs
     Some(value)
 }
 
-unsafe fn client_mut<'a>(value: *mut CorsaTsgoApiClient) -> Option<&'a mut CorsaTsgoApiClient> {
+unsafe fn client_mut<'a>(value: *mut CorsaApiClient) -> Option<&'a mut CorsaApiClient> {
     let Some(value) = (unsafe { value.as_mut() }) else {
         set_last_error("corsa api client handle is null");
         return None;
@@ -158,7 +158,7 @@ unsafe fn client_mut<'a>(value: *mut CorsaTsgoApiClient) -> Option<&'a mut Corsa
     Some(value)
 }
 
-fn close_client(client: &CorsaTsgoApiClient) -> Result<(), String> {
+fn close_client(client: &CorsaApiClient) -> Result<(), String> {
     let snapshots = std::mem::take(
         &mut *client
             .snapshots
@@ -172,9 +172,7 @@ fn close_client(client: &CorsaTsgoApiClient) -> Result<(), String> {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_spawn(
-    options_json: CorsaStrRef,
-) -> *mut CorsaTsgoApiClient {
+pub unsafe extern "C" fn corsa_api_client_spawn(options_json: CorsaStrRef) -> *mut CorsaApiClient {
     let Some(options) = read_json::<SpawnOptions>(options_json, "options_json") else {
         return std::ptr::null_mut();
     };
@@ -188,7 +186,7 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_spawn(
     match block_on(ApiClient::spawn(config)) {
         Ok(inner) => {
             clear_last_error();
-            Box::into_raw(Box::new(CorsaTsgoApiClient {
+            Box::into_raw(Box::new(CorsaApiClient {
                 inner,
                 snapshots: Mutex::new(HashMap::new()),
             }))
@@ -201,8 +199,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_spawn(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_initialize_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_initialize_json(
+    value: *const CorsaApiClient,
 ) -> CorsaString {
     let Some(client) = (unsafe { client_ref(value) }) else {
         return CorsaString::default();
@@ -217,8 +215,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_initialize_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_parse_config_file_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_parse_config_file_json(
+    value: *const CorsaApiClient,
     file: CorsaStrRef,
 ) -> CorsaString {
     let Some(client) = (unsafe { client_ref(value) }) else {
@@ -237,8 +235,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_parse_config_file_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_update_snapshot_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_update_snapshot_json(
+    value: *const CorsaApiClient,
     params_json: CorsaStrRef,
 ) -> CorsaString {
     let Some(client) = (unsafe { client_ref(value) }) else {
@@ -279,8 +277,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_update_snapshot_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_get_source_file(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_get_source_file(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
     file: CorsaStrRef,
@@ -314,8 +312,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_get_source_file(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_get_string_type_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_get_string_type_json(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
 ) -> CorsaString {
@@ -341,8 +339,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_get_string_type_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_get_type_at_position_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_get_type_at_position_json(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
     file: CorsaStrRef,
@@ -375,8 +373,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_get_type_at_position_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_get_symbol_at_position_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_get_symbol_at_position_json(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
     file: CorsaStrRef,
@@ -409,8 +407,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_get_symbol_at_position_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_get_type_arguments_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_get_type_arguments_json(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
     type_handle: CorsaStrRef,
@@ -445,8 +443,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_get_type_arguments_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_get_type_of_symbol_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_get_type_of_symbol_json(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
     symbol: CorsaStrRef,
@@ -477,8 +475,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_get_type_of_symbol_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_get_declared_type_of_symbol_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_get_declared_type_of_symbol_json(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
     symbol: CorsaStrRef,
@@ -509,8 +507,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_get_declared_type_of_symbol_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_type_to_string(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_type_to_string(
+    value: *const CorsaApiClient,
     snapshot: CorsaStrRef,
     project: CorsaStrRef,
     type_handle: CorsaStrRef,
@@ -551,8 +549,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_type_to_string(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_call_json(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_call_json(
+    value: *const CorsaApiClient,
     method: CorsaStrRef,
     params_json: CorsaStrRef,
 ) -> CorsaString {
@@ -577,8 +575,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_call_json(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_call_binary(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_call_binary(
+    value: *const CorsaApiClient,
     method: CorsaStrRef,
     params_json: CorsaStrRef,
 ) -> CorsaBytes {
@@ -606,8 +604,8 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_call_binary(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_release_handle(
-    value: *const CorsaTsgoApiClient,
+pub unsafe extern "C" fn corsa_api_client_release_handle(
+    value: *const CorsaApiClient,
     handle: CorsaStrRef,
 ) -> bool {
     let Some(client) = (unsafe { client_ref(value) }) else {
@@ -652,7 +650,7 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_release_handle(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_close(value: *mut CorsaTsgoApiClient) -> bool {
+pub unsafe extern "C" fn corsa_api_client_close(value: *mut CorsaApiClient) -> bool {
     let Some(client) = (unsafe { client_mut(value) }) else {
         return false;
     };
@@ -669,7 +667,7 @@ pub unsafe extern "C" fn corsa_tsgo_api_client_close(value: *mut CorsaTsgoApiCli
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn corsa_tsgo_api_client_free(value: *mut CorsaTsgoApiClient) {
+pub unsafe extern "C" fn corsa_api_client_free(value: *mut CorsaApiClient) {
     if value.is_null() {
         return;
     }

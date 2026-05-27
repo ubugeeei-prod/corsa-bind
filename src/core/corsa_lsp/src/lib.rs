@@ -21,15 +21,15 @@ pub mod jsonrpc {
 
 /// Re-exports child-process helpers used to launch Corsa over LSP stdio.
 pub mod process {
-    pub use corsa_core::{AsyncChildGuard, TsgoCommand};
+    pub use corsa_core::{AsyncChildGuard, CorsaCommand};
 }
 
 /// Re-exports structured operational events used by the LSP configs.
 pub mod observability {
-    pub use corsa_core::{SharedObserver, TsgoEvent, TsgoObserver};
+    pub use corsa_core::{CorsaEvent, CorsaObserver, SharedObserver};
 }
 
-pub use corsa_core::{Result, SharedObserver, TsgoError, TsgoEvent, TsgoObserver};
+pub use corsa_core::{CorsaError, CorsaEvent, CorsaObserver, Result, SharedObserver};
 
 #[path = "lsp/mod.rs"]
 /// LSP client, overlay, and custom-request types.

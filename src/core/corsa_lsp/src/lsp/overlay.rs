@@ -1,5 +1,5 @@
 use super::{LspClient, VirtualChange, VirtualDocument};
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::fast::{CompactString, FastMap, SmallVec, compact_format};
 use lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, Uri,
@@ -51,7 +51,7 @@ impl LspOverlay {
     pub fn open(&self, document: VirtualDocument) -> Result<VirtualDocument> {
         let key = document.key();
         if self.documents.read().contains_key(key.as_str()) {
-            return Err(TsgoError::Protocol(compact_format(format_args!(
+            return Err(CorsaError::Protocol(compact_format(format_args!(
                 "virtual document is already open: {key}"
             ))));
         }
@@ -85,7 +85,7 @@ impl LspOverlay {
             .collect::<SmallVec<[VirtualChange; 4]>>();
         let mut documents = self.documents.write();
         let document = documents.get_mut(uri.as_str()).ok_or_else(|| {
-            TsgoError::Protocol(compact_format(format_args!(
+            CorsaError::Protocol(compact_format(format_args!(
                 "unknown virtual document: {}",
                 uri.as_str()
             )))

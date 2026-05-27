@@ -3,7 +3,7 @@ use super::{
     OverlayChanges, ProjectHandle, ProjectResponse, SignatureHandle, SignatureResponse,
     SymbolHandle, SymbolResponse, TypeHandle, TypeResponse, UpdateSnapshotParams,
 };
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 
 /// Snapshot-backed project session for repeated checker queries.
 ///
@@ -258,5 +258,5 @@ async fn resolve_project(
         .projects
         .first()
         .cloned()
-        .ok_or_else(|| TsgoError::Protocol("project session did not resolve a project".into()))
+        .ok_or_else(|| CorsaError::Protocol("project session did not resolve a project".into()))
 }

@@ -95,12 +95,12 @@ export const nodeBindingPackage: PublishablePackage = {
   access: "public",
 };
 
-export const typescriptOxlintPackage: PublishablePackage = {
+export const corsaOxlintPackage: PublishablePackage = {
   name: "corsa-oxlint",
-  path: resolve(rootDir, "src/bindings/nodejs/typescript_oxlint"),
+  path: resolve(rootDir, "src/bindings/nodejs/corsa_oxlint"),
 };
 
-export const npmPackages = [nodeBindingPackage, typescriptOxlintPackage];
+export const npmPackages = [nodeBindingPackage, corsaOxlintPackage];
 
 const defaultTargetTriples = [
   "x86_64-pc-windows-msvc",

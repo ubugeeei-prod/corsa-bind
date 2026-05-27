@@ -11,11 +11,11 @@
 
 /// Re-exports structured operational events used by transport configs.
 pub mod observability {
-    pub use corsa_core::{SharedObserver, TsgoEvent, TsgoObserver};
+    pub use corsa_core::{CorsaEvent, CorsaObserver, SharedObserver};
 }
 
 pub use corsa_core::{
-    Result, RpcResponseError, SharedObserver, TsgoError, TsgoEvent, TsgoObserver,
+    CorsaError, CorsaEvent, CorsaObserver, Result, RpcResponseError, SharedObserver,
 };
 
 #[path = "jsonrpc/mod.rs"]

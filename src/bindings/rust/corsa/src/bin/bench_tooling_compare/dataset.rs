@@ -5,7 +5,7 @@ use std::{
 };
 
 use corsa::{
-    Result, TsgoError,
+    CorsaError, Result,
     api::{ApiClient, ApiMode, ApiSpawnConfig},
     fast::{CompactString, SmallVec},
 };
@@ -26,7 +26,7 @@ pub struct DatasetCase {
 
 pub async fn load(cli: &Cli) -> Result<SmallVec<[DatasetCase; 4]>> {
     let client = ApiClient::spawn(
-        ApiSpawnConfig::new(&cli.tsgo_path)
+        ApiSpawnConfig::new(&cli.corsa_path)
             .with_cwd(&cli.root_dir)
             .with_mode(ApiMode::SyncMsgpackStdio),
     )
@@ -40,7 +40,7 @@ pub async fn load(cli: &Cli) -> Result<SmallVec<[DatasetCase; 4]>> {
             source_files.push(CompactString::from(file_name.as_str()));
         }
         let primary_file = pick_primary_file(&source_files).ok_or_else(|| {
-            TsgoError::Protocol(CompactString::from(
+            CorsaError::Protocol(CompactString::from(
                 "dataset does not contain any source files",
             ))
         })?;

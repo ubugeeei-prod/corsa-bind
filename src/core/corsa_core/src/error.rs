@@ -6,7 +6,7 @@ use std::{io, time::Duration};
 
 /// Workspace-wide error type for process, transport, and protocol failures.
 #[derive(Debug, thiserror::Error)]
-pub enum TsgoError {
+pub enum CorsaError {
     /// Underlying OS or process I/O failure.
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -43,9 +43,9 @@ pub enum TsgoError {
 }
 
 /// Standard result alias used across the workspace.
-pub type Result<T, E = TsgoError> = std::result::Result<T, E>;
+pub type Result<T, E = CorsaError> = std::result::Result<T, E>;
 
-impl TsgoError {
+impl CorsaError {
     /// Formats the error for command-line tools with a short recovery hint.
     pub fn diagnostic(&self) -> CompactString {
         let mut message = compact_format(format_args!("error: {self}"));
@@ -66,15 +66,15 @@ impl TsgoError {
                 Some("check the JSON payload shape and ensure the peer is returning valid JSON")
             }
             Self::Base64(_) => Some("check that binary JSON fields are valid base64"),
-            Self::Closed(_) => Some("retry after starting a fresh tsgo process or client session"),
+            Self::Closed(_) => Some("retry after starting a fresh corsa process or client session"),
             Self::Unsupported(_) => {
-                Some("use a compatible tsgo build or disable the unsupported feature for this run")
+                Some("use a compatible corsa build or disable the unsupported feature for this run")
             }
             Self::Join(_) => Some(
                 "retry the operation; if it repeats, inspect the worker thread or child-process logs above this message",
             ),
             Self::Timeout(_) => Some(
-                "increase the request timeout or check whether the tsgo process is still responsive",
+                "increase the request timeout or check whether the corsa process is still responsive",
             ),
             Self::Rpc(_)
             | Self::Protocol(_)

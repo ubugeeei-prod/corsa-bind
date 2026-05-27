@@ -1,4 +1,4 @@
-use super::{MAX_BIN_BYTES, MSG_CALL, MSG_RESPONSE, TsgoError, read_tuple, write_tuple};
+use super::{CorsaError, MAX_BIN_BYTES, MSG_CALL, MSG_RESPONSE, read_tuple, write_tuple};
 use std::io::Cursor;
 
 #[test]
@@ -36,7 +36,7 @@ fn reads_uint8_encoded_kind() {
 fn rejects_non_tuple_marker() {
     let err = read_tuple(&mut Cursor::new([0x92_u8])).unwrap_err();
     assert!(
-        matches!(err, TsgoError::Protocol(message) if message.contains("expected tuple marker"))
+        matches!(err, CorsaError::Protocol(message) if message.contains("expected tuple marker"))
     );
 }
 
@@ -45,7 +45,7 @@ fn rejects_invalid_uint_marker() {
     let bytes = [0x93_u8, 0xcd, 0, 1, 0xc4, 0, 0xc4, 0];
     let err = read_tuple(&mut Cursor::new(bytes)).unwrap_err();
     assert!(
-        matches!(err, TsgoError::Protocol(message) if message.contains("expected uint8 marker"))
+        matches!(err, CorsaError::Protocol(message) if message.contains("expected uint8 marker"))
     );
 }
 
@@ -53,7 +53,9 @@ fn rejects_invalid_uint_marker() {
 fn rejects_invalid_bin_marker() {
     let bytes = [0x93_u8, MSG_CALL, 0xa1, b'x', 0xc4, 0];
     let err = read_tuple(&mut Cursor::new(bytes)).unwrap_err();
-    assert!(matches!(err, TsgoError::Protocol(message) if message.contains("expected bin marker")));
+    assert!(
+        matches!(err, CorsaError::Protocol(message) if message.contains("expected bin marker"))
+    );
 }
 
 #[test]
@@ -61,7 +63,7 @@ fn rejects_oversized_bin_length_before_allocation() {
     let len = ((MAX_BIN_BYTES as u32) + 1).to_be_bytes();
     let bytes = [&[0x93_u8, MSG_CALL, 0xc4, 0, 0xc6][..], &len, &[][..]].concat();
     let err = read_tuple(&mut Cursor::new(bytes)).unwrap_err();
-    assert!(matches!(err, TsgoError::Protocol(message) if message.contains("too large")));
+    assert!(matches!(err, CorsaError::Protocol(message) if message.contains("too large")));
 }
 
 #[test]

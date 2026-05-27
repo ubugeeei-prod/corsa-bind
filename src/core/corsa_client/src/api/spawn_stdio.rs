@@ -10,9 +10,9 @@ use super::{
     driver::ClientDriver,
 };
 use crate::{
-    Result, TsgoError,
+    CorsaError, Result,
     jsonrpc::{JsonRpcConnection, JsonRpcConnectionOptions},
-    process::{AsyncChildGuard, TsgoCommand},
+    process::{AsyncChildGuard, CorsaCommand},
 };
 use corsa_core::fast::{CompactString, SmallVec};
 use std::{
@@ -21,7 +21,7 @@ use std::{
 };
 
 pub(super) async fn spawn_jsonrpc_stdio(
-    command: &TsgoCommand,
+    command: &CorsaCommand,
     filesystem: Option<Arc<dyn super::ApiFileSystem>>,
     request_timeout: Option<std::time::Duration>,
     shutdown_timeout: std::time::Duration,
@@ -33,8 +33,11 @@ pub(super) async fn spawn_jsonrpc_stdio(
     // always reaps the child.
     let args = stdio_args(command, filesystem.as_deref(), true);
     let mut child = command.spawn_async(args.iter().map(CompactString::as_str))?;
-    let stdin = child.stdin.take().ok_or(TsgoError::Closed("api stdin"))?;
-    let stdout = child.stdout.take().ok_or(TsgoError::Closed("api stdout"))?;
+    let stdin = child.stdin.take().ok_or(CorsaError::Closed("api stdin"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(CorsaError::Closed("api stdout"))?;
     let handlers = filesystem.map(jsonrpc_handlers).unwrap_or_default();
     let rpc = JsonRpcConnection::try_spawn_with_options(
         BufReader::new(stdout),
@@ -53,7 +56,7 @@ pub(super) async fn spawn_jsonrpc_stdio(
 }
 
 pub(super) fn spawn_msgpack_stdio(
-    command: &TsgoCommand,
+    command: &CorsaCommand,
     filesystem: Option<Arc<dyn super::ApiFileSystem>>,
     request_timeout: Option<std::time::Duration>,
     outbound_capacity: usize,
@@ -76,7 +79,7 @@ pub(super) fn spawn_msgpack_stdio(
 }
 
 fn stdio_args(
-    command: &TsgoCommand,
+    command: &CorsaCommand,
     filesystem: Option<&dyn super::ApiFileSystem>,
     async_mode: bool,
 ) -> SmallVec<[CompactString; 6]> {

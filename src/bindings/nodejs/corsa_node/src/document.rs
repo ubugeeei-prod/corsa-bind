@@ -6,12 +6,12 @@ use crate::util::{into_napi_error, parse_json, to_json};
 
 /// Mutable virtual document mirrored through the LSP overlay layer.
 #[napi]
-pub struct TsgoVirtualDocument {
+pub struct CorsaVirtualDocument {
     inner: VirtualDocument,
 }
 
 #[napi]
-impl TsgoVirtualDocument {
+impl CorsaVirtualDocument {
     /// Creates an `untitled:` document.
     #[napi(factory)]
     pub fn untitled(path: String, language_id: String, text: String) -> Result<Self> {

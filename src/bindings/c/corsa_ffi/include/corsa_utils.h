@@ -38,7 +38,7 @@ typedef struct CorsaStringList {
 } CorsaStringList;
 
 typedef struct CorsaVirtualDocument CorsaVirtualDocument;
-typedef struct CorsaTsgoApiClient CorsaTsgoApiClient;
+typedef struct CorsaApiClient CorsaApiClient;
 
 CorsaString corsa_error_message_take(void);
 
@@ -115,81 +115,81 @@ bool corsa_virtual_document_splice(
 );
 void corsa_virtual_document_free(CorsaVirtualDocument *value);
 
-CorsaTsgoApiClient *corsa_tsgo_api_client_spawn(CorsaStrRef options_json);
-CorsaString corsa_tsgo_api_client_initialize_json(const CorsaTsgoApiClient *value);
-CorsaString corsa_tsgo_api_client_parse_config_file_json(
-    const CorsaTsgoApiClient *value,
+CorsaApiClient *corsa_api_client_spawn(CorsaStrRef options_json);
+CorsaString corsa_api_client_initialize_json(const CorsaApiClient *value);
+CorsaString corsa_api_client_parse_config_file_json(
+    const CorsaApiClient *value,
     CorsaStrRef file
 );
-CorsaString corsa_tsgo_api_client_update_snapshot_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_update_snapshot_json(
+    const CorsaApiClient *value,
     CorsaStrRef params_json
 );
-CorsaBytes corsa_tsgo_api_client_get_source_file(
-    const CorsaTsgoApiClient *value,
+CorsaBytes corsa_api_client_get_source_file(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project,
     CorsaStrRef file
 );
-CorsaString corsa_tsgo_api_client_get_string_type_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_get_string_type_json(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project
 );
-CorsaString corsa_tsgo_api_client_get_type_at_position_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_get_type_at_position_json(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project,
     CorsaStrRef file,
     uint32_t position
 );
-CorsaString corsa_tsgo_api_client_get_symbol_at_position_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_get_symbol_at_position_json(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project,
     CorsaStrRef file,
     uint32_t position
 );
-CorsaString corsa_tsgo_api_client_get_type_arguments_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_get_type_arguments_json(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project,
     CorsaStrRef type_handle,
     uint32_t object_flags
 );
-CorsaString corsa_tsgo_api_client_get_type_of_symbol_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_get_type_of_symbol_json(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project,
     CorsaStrRef symbol
 );
-CorsaString corsa_tsgo_api_client_get_declared_type_of_symbol_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_get_declared_type_of_symbol_json(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project,
     CorsaStrRef symbol
 );
-CorsaString corsa_tsgo_api_client_type_to_string(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_type_to_string(
+    const CorsaApiClient *value,
     CorsaStrRef snapshot,
     CorsaStrRef project,
     CorsaStrRef type_handle,
     CorsaStrRef location,
     int32_t flags
 );
-CorsaString corsa_tsgo_api_client_call_json(
-    const CorsaTsgoApiClient *value,
+CorsaString corsa_api_client_call_json(
+    const CorsaApiClient *value,
     CorsaStrRef method,
     CorsaStrRef params_json
 );
-CorsaBytes corsa_tsgo_api_client_call_binary(
-    const CorsaTsgoApiClient *value,
+CorsaBytes corsa_api_client_call_binary(
+    const CorsaApiClient *value,
     CorsaStrRef method,
     CorsaStrRef params_json
 );
-bool corsa_tsgo_api_client_release_handle(const CorsaTsgoApiClient *value, CorsaStrRef handle);
-bool corsa_tsgo_api_client_close(CorsaTsgoApiClient *value);
-void corsa_tsgo_api_client_free(CorsaTsgoApiClient *value);
+bool corsa_api_client_release_handle(const CorsaApiClient *value, CorsaStrRef handle);
+bool corsa_api_client_close(CorsaApiClient *value);
+void corsa_api_client_free(CorsaApiClient *value);
 
 void corsa_bytes_free(CorsaBytes value);
 void corsa_utils_string_free(CorsaString value);

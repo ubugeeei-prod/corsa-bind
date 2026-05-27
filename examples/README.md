@@ -4,7 +4,7 @@ These examples are split into three groups:
 
 - `examples/nodejs/*`: executable `@corsa-bind/napi` samples
 - `examples/rust/*`: executable Rust samples
-- `examples/typescript_oxlint/*`: reusable `corsa-oxlint` rule/plugin/config samples
+- `examples/corsa_oxlint/*`: reusable `corsa-oxlint` rule/plugin/config samples
 
 If you are picking a first example, use this quick map:
 
@@ -15,7 +15,7 @@ If you are picking a first example, use this quick map:
 | drive snapshot queries with a mock server    | `mock_client.ts`, `raw_calls.ts`          | `mock_client.rs`                              |
 | exercise orchestration and observability     | `distributed_orchestrator.ts`             | `orchestrator_cache.rs`, `observer_events.rs` |
 | use upstream-only printer APIs intentionally | -                                         | `print_node_opt_in.rs`                        |
-| author type-aware Oxlint rules               | `typescript_oxlint/*`                     | -                                             |
+| author type-aware Oxlint rules               | `corsa_oxlint/*`                          | -                                             |
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ Build the real pinned Corsa binary before running the real-snapshot examples:
 ```bash
 vp run -w sync_ref
 vp run -w verify_ref
-vp run -w build_tsgo
+vp run -w build_corsa
 vp run -w examples_real
 ```
 
@@ -116,7 +116,7 @@ cargo run -p corsa --example print_node_opt_in
 
 ## Real Pinned Corsa
 
-These examples hit the exact upstream-pinned checkout under `ref/typescript-go`.
+These examples hit the exact upstream-pinned checkout under `ref/corsa-upstream`.
 
 - `examples/nodejs/real_snapshot.ts`: opens the pinned project through `@corsa-bind/napi` and fetches a real source file snapshot
 - `examples/rust/real_snapshot.rs`: the Rust-side equivalent using the msgpack-first API client
@@ -142,9 +142,9 @@ cargo run -p corsa --features experimental-distributed --example distributed_orc
 
 ## `corsa-oxlint` Examples
 
-- `examples/typescript_oxlint/custom_rule.ts`: custom type-aware rule using `OxlintUtils.getParserServices()`
-- `examples/typescript_oxlint/custom_plugin.ts`: plugin wrapper around the custom rule
-- `examples/typescript_oxlint/custom_rules_config.ts`: flat config using the custom plugin
-- `examples/typescript_oxlint/native_rules_config.ts`: flat config using the built-in native rules
-- `examples/typescript_oxlint/rule_tester.ts`: executable `RuleTester` example against the real pinned Corsa binary
-- `examples/typescript_oxlint/native_rule_tester.ts`: executable `RuleTester` example for the built-in Rust-backed and TS-native rules
+- `examples/corsa_oxlint/custom_rule.ts`: custom type-aware rule using `OxlintUtils.getParserServices()`
+- `examples/corsa_oxlint/custom_plugin.ts`: plugin wrapper around the custom rule
+- `examples/corsa_oxlint/custom_rules_config.ts`: flat config using the custom plugin
+- `examples/corsa_oxlint/native_rules_config.ts`: flat config using the built-in native rules
+- `examples/corsa_oxlint/rule_tester.ts`: executable `RuleTester` example against the real pinned Corsa binary
+- `examples/corsa_oxlint/native_rule_tester.ts`: executable `RuleTester` example for the built-in Rust-backed and TS-native rules

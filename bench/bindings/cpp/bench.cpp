@@ -3,7 +3,7 @@
 #include <iostream>
 #include <string_view>
 
-#include "../../../src/bindings/cpp/corsa_tsgo_api.hpp"
+#include "../../../src/bindings/cpp/corsa_api.hpp"
 
 int main(int argc, char **argv) {
   if (argc < 3) {
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     }
     const std::string_view options_json = argv[3];
     for (int index = 0; index < iterations; ++index) {
-      auto client = corsa::api::tsgo_api_client::spawn(options_json);
+      auto client = corsa::api::corsa_api_client::spawn(options_json);
       if (!client) {
         std::cerr << "spawn failed: " << corsa::api::take_last_error() << '\n';
         return 1;

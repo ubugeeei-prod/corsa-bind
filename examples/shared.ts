@@ -6,11 +6,11 @@ const examplesDir = dirname(fileURLToPath(import.meta.url));
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 
 export const workspaceRoot = resolve(examplesDir, "..");
-export const mockBinary = resolve(workspaceRoot, `target/debug/mock_tsgo${executableSuffix}`);
-export const realBinary = resolve(workspaceRoot, `.cache/tsgo${executableSuffix}`);
+export const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
+export const realBinary = resolve(workspaceRoot, `.cache/corsa${executableSuffix}`);
 const realDatasetCandidates = [
-  "ref/typescript-go/_packages/native-preview/tsconfig.json",
-  "ref/typescript-go/_packages/api/tsconfig.json",
+  "ref/corsa-upstream/_packages/native-preview/tsconfig.json",
+  "ref/corsa-upstream/_packages/api/tsconfig.json",
 ].map((path) => resolve(workspaceRoot, path));
 export const realDataset =
   realDatasetCandidates.find((candidate) => existsSync(candidate)) ?? realDatasetCandidates[0];

@@ -5,7 +5,7 @@
 //! bytes. The helpers in this module focus on that framing layer only; they do
 //! not parse or validate the JSON payload itself.
 
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::fast::{SmallVec, memchr, memmem};
 use std::io::{BufRead, Write};
 
@@ -21,8 +21,8 @@ const MAX_BODY_BYTES: usize = 512 * 1024 * 1024;
 ///
 /// # Errors
 ///
-/// Returns [`TsgoError::Protocol`] when the header is malformed or exceeds the
-/// maximum allowed size, and [`TsgoError::Closed`] when EOF is reached before a
+/// Returns [`CorsaError::Protocol`] when the header is malformed or exceeds the
+/// maximum allowed size, and [`CorsaError::Closed`] when EOF is reached before a
 /// complete header can be read.
 ///
 /// # Examples
@@ -35,7 +35,7 @@ const MAX_BODY_BYTES: usize = 512 * 1024 * 1024;
 /// let mut reader = BufReader::new(Cursor::new(bytes.as_slice()));
 /// let payload = read_frame(&mut reader)?;
 /// assert_eq!(payload, br#"{"jsonrpc":"2.0"}"#);
-/// # Ok::<(), corsa_jsonrpc::TsgoError>(())
+/// # Ok::<(), corsa_jsonrpc::CorsaError>(())
 /// ```
 pub fn read_frame<R>(reader: &mut R) -> Result<Vec<u8>>
 where
@@ -43,7 +43,7 @@ where
 {
     let content_length = read_content_length(reader)?;
     if content_length > MAX_BODY_BYTES {
-        return Err(TsgoError::Protocol(
+        return Err(CorsaError::Protocol(
             format!(
                 "jsonrpc body is too large: {content_length} bytes exceeds {MAX_BODY_BYTES} byte safety limit"
             )
@@ -52,7 +52,7 @@ where
     }
     let mut payload = Vec::new();
     payload.try_reserve_exact(content_length).map_err(|err| {
-        TsgoError::Protocol(
+        CorsaError::Protocol(
             format!("failed to reserve jsonrpc body buffer for {content_length} bytes: {err}")
                 .into(),
         )
@@ -81,7 +81,7 @@ where
 /// write_frame(&mut buffer, br#"{"jsonrpc":"2.0"}"#)?;
 /// assert!(buffer.starts_with(b"Content-Length: "));
 /// assert!(buffer.ends_with(br#"{"jsonrpc":"2.0"}"#));
-/// # Ok::<(), corsa_jsonrpc::TsgoError>(())
+/// # Ok::<(), corsa_jsonrpc::CorsaError>(())
 /// ```
 pub fn write_frame<W>(writer: &mut W, body: &[u8]) -> Result<()>
 where
@@ -105,7 +105,7 @@ where
     loop {
         let chunk = reader.fill_buf()?;
         if chunk.is_empty() {
-            return Err(TsgoError::Closed("jsonrpc reader"));
+            return Err(CorsaError::Closed("jsonrpc reader"));
         }
         if let Some(index) = memmem::find(chunk, HEADER_END) {
             // Copy only the current frame's header bytes so downstream parsing
@@ -116,7 +116,7 @@ where
         }
         header.extend_from_slice(chunk);
         if header.len() > MAX_HEADER_BYTES {
-            return Err(TsgoError::Protocol("jsonrpc header is too large".into()));
+            return Err(CorsaError::Protocol("jsonrpc header is too large".into()));
         }
         let consumed = chunk.len();
         reader.consume(consumed);
@@ -139,7 +139,7 @@ fn parse_content_length(header: &[u8]) -> Result<usize> {
             return parse_ascii_usize(value);
         }
     }
-    Err(TsgoError::Protocol("missing Content-Length".into()))
+    Err(CorsaError::Protocol("missing Content-Length".into()))
 }
 
 /// Removes a trailing carriage return left over from splitting on `\n`.
@@ -163,17 +163,17 @@ fn trim_ascii(bytes: &[u8]) -> &[u8] {
 /// Parses a non-empty ASCII decimal integer into `usize`.
 fn parse_ascii_usize(bytes: &[u8]) -> Result<usize> {
     if bytes.is_empty() {
-        return Err(TsgoError::Protocol("empty Content-Length".into()));
+        return Err(CorsaError::Protocol("empty Content-Length".into()));
     }
     let mut value = 0_usize;
     for byte in bytes {
         if !byte.is_ascii_digit() {
-            return Err(TsgoError::Protocol("invalid Content-Length".into()));
+            return Err(CorsaError::Protocol("invalid Content-Length".into()));
         }
         value = value
             .checked_mul(10)
             .and_then(|value| value.checked_add((byte - b'0') as usize))
-            .ok_or_else(|| TsgoError::Protocol("Content-Length overflow".into()))?;
+            .ok_or_else(|| CorsaError::Protocol("Content-Length overflow".into()))?;
     }
     Ok(value)
 }

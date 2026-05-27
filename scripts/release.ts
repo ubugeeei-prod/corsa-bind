@@ -2,7 +2,7 @@ import {
   getNodeBindingBinaryPackageNames,
   doesNpmPackageExist,
   nodeBindingPackage,
-  typescriptOxlintPackage,
+  corsaOxlintPackage,
 } from "./npm_release_utils.ts";
 import {
   assertReleaseTagMatchesWorkspace,
@@ -174,11 +174,9 @@ async function assertBootstrapComplete(): Promise<void> {
 
   const missingNpmPackages = (
     await Promise.all(
-      [
-        ...getNodeBindingBinaryPackageNames(),
-        nodeBindingPackage.name,
-        typescriptOxlintPackage.name,
-      ].map(async (packageName) => ((await doesNpmPackageExist(packageName)) ? null : packageName)),
+      [...getNodeBindingBinaryPackageNames(), nodeBindingPackage.name, corsaOxlintPackage.name].map(
+        async (packageName) => ((await doesNpmPackageExist(packageName)) ? null : packageName),
+      ),
     )
   ).filter(isPresent);
 

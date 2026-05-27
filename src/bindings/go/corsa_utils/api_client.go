@@ -30,7 +30,7 @@ type ApiClientOptions struct {
 }
 
 type ApiClient struct {
-	ptr *C.CorsaTsgoApiClient
+	ptr *C.CorsaApiClient
 }
 
 func NewApiClient(options ApiClientOptions) (*ApiClient, error) {
@@ -44,7 +44,7 @@ func NewApiClient(options ApiClientOptions) (*ApiClient, error) {
 func NewApiClientFromJSON(optionsJSON string) (*ApiClient, error) {
 	value := newBorrowedString(optionsJSON)
 	defer value.free()
-	ptr := C.corsa_tsgo_api_client_spawn(value.ref)
+	ptr := C.corsa_api_client_spawn(value.ref)
 	if ptr == nil {
 		return nil, takeError()
 	}
@@ -57,8 +57,8 @@ func (value *ApiClient) Close() error {
 	}
 	ptr := value.ptr
 	value.ptr = nil
-	ok := bool(C.corsa_tsgo_api_client_close(ptr))
-	C.corsa_tsgo_api_client_free(ptr)
+	ok := bool(C.corsa_api_client_close(ptr))
+	C.corsa_api_client_free(ptr)
 	if !ok {
 		return takeError()
 	}
@@ -66,19 +66,19 @@ func (value *ApiClient) Close() error {
 }
 
 func (value *ApiClient) InitializeJSON() (string, error) {
-	return takeCheckedString(C.corsa_tsgo_api_client_initialize_json(value.ptr))
+	return takeCheckedString(C.corsa_api_client_initialize_json(value.ptr))
 }
 
 func (value *ApiClient) ParseConfigFileJSON(file string) (string, error) {
 	fileValue := newBorrowedString(file)
 	defer fileValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_parse_config_file_json(value.ptr, fileValue.ref))
+	return takeCheckedString(C.corsa_api_client_parse_config_file_json(value.ptr, fileValue.ref))
 }
 
 func (value *ApiClient) UpdateSnapshotJSON(paramsJSON string) (string, error) {
 	paramsValue := newBorrowedString(paramsJSON)
 	defer paramsValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_update_snapshot_json(value.ptr, paramsValue.ref))
+	return takeCheckedString(C.corsa_api_client_update_snapshot_json(value.ptr, paramsValue.ref))
 }
 
 func (value *ApiClient) GetSourceFile(snapshot string, project string, file string) ([]byte, error) {
@@ -88,7 +88,7 @@ func (value *ApiClient) GetSourceFile(snapshot string, project string, file stri
 	defer projectValue.free()
 	fileValue := newBorrowedString(file)
 	defer fileValue.free()
-	payload, status := takeBytes(C.corsa_tsgo_api_client_get_source_file(
+	payload, status := takeBytes(C.corsa_api_client_get_source_file(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
@@ -109,7 +109,7 @@ func (value *ApiClient) GetStringTypeJSON(snapshot string, project string) (stri
 	defer snapshotValue.free()
 	projectValue := newBorrowedString(project)
 	defer projectValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_get_string_type_json(value.ptr, snapshotValue.ref, projectValue.ref))
+	return takeCheckedString(C.corsa_api_client_get_string_type_json(value.ptr, snapshotValue.ref, projectValue.ref))
 }
 
 func (value *ApiClient) GetTypeAtPositionJSON(snapshot string, project string, file string, position uint32) (string, error) {
@@ -119,7 +119,7 @@ func (value *ApiClient) GetTypeAtPositionJSON(snapshot string, project string, f
 	defer projectValue.free()
 	fileValue := newBorrowedString(file)
 	defer fileValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_get_type_at_position_json(
+	return takeCheckedString(C.corsa_api_client_get_type_at_position_json(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
@@ -135,7 +135,7 @@ func (value *ApiClient) GetSymbolAtPositionJSON(snapshot string, project string,
 	defer projectValue.free()
 	fileValue := newBorrowedString(file)
 	defer fileValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_get_symbol_at_position_json(
+	return takeCheckedString(C.corsa_api_client_get_symbol_at_position_json(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
@@ -151,7 +151,7 @@ func (value *ApiClient) GetTypeArgumentsJSON(snapshot string, project string, ty
 	defer projectValue.free()
 	typeValue := newBorrowedString(typeHandle)
 	defer typeValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_get_type_arguments_json(
+	return takeCheckedString(C.corsa_api_client_get_type_arguments_json(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
@@ -167,7 +167,7 @@ func (value *ApiClient) GetTypeOfSymbolJSON(snapshot string, project string, sym
 	defer projectValue.free()
 	symbolValue := newBorrowedString(symbol)
 	defer symbolValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_get_type_of_symbol_json(
+	return takeCheckedString(C.corsa_api_client_get_type_of_symbol_json(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
@@ -182,7 +182,7 @@ func (value *ApiClient) GetDeclaredTypeOfSymbolJSON(snapshot string, project str
 	defer projectValue.free()
 	symbolValue := newBorrowedString(symbol)
 	defer symbolValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_get_declared_type_of_symbol_json(
+	return takeCheckedString(C.corsa_api_client_get_declared_type_of_symbol_json(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
@@ -203,7 +203,7 @@ func (value *ApiClient) TypeToString(snapshot string, project string, typeHandle
 	if flags != nil {
 		nativeFlags = C.int32_t(*flags)
 	}
-	return takeCheckedString(C.corsa_tsgo_api_client_type_to_string(
+	return takeCheckedString(C.corsa_api_client_type_to_string(
 		value.ptr,
 		snapshotValue.ref,
 		projectValue.ref,
@@ -218,7 +218,7 @@ func (value *ApiClient) CallJSON(method string, paramsJSON string) (string, erro
 	defer methodValue.free()
 	paramsValue := newBorrowedString(paramsJSON)
 	defer paramsValue.free()
-	return takeCheckedString(C.corsa_tsgo_api_client_call_json(value.ptr, methodValue.ref, paramsValue.ref))
+	return takeCheckedString(C.corsa_api_client_call_json(value.ptr, methodValue.ref, paramsValue.ref))
 }
 
 func (value *ApiClient) CallBinary(method string, paramsJSON string) ([]byte, error) {
@@ -226,7 +226,7 @@ func (value *ApiClient) CallBinary(method string, paramsJSON string) ([]byte, er
 	defer methodValue.free()
 	paramsValue := newBorrowedString(paramsJSON)
 	defer paramsValue.free()
-	payload, status := takeBytes(C.corsa_tsgo_api_client_call_binary(value.ptr, methodValue.ref, paramsValue.ref))
+	payload, status := takeBytes(C.corsa_api_client_call_binary(value.ptr, methodValue.ref, paramsValue.ref))
 	switch status {
 	case C.CORSA_RESULT_SOME:
 		return payload, nil
@@ -240,7 +240,7 @@ func (value *ApiClient) CallBinary(method string, paramsJSON string) ([]byte, er
 func (value *ApiClient) ReleaseHandle(handle string) error {
 	handleValue := newBorrowedString(handle)
 	defer handleValue.free()
-	if !bool(C.corsa_tsgo_api_client_release_handle(value.ptr, handleValue.ref)) {
+	if !bool(C.corsa_api_client_release_handle(value.ptr, handleValue.ref)) {
 		return takeError()
 	}
 	return nil

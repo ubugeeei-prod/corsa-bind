@@ -76,10 +76,10 @@ The goal of this layer is different from `bench_tooling_compare`: it is meant to
 
 ## Native Runner
 
-The native benchmark runner is the `bench_real_tsgo` binary:
+The native benchmark runner is the `bench_real_corsa` binary:
 
 ```bash
-cargo run --release -p corsa --bin bench_real_tsgo -- \
+cargo run --release -p corsa --bin bench_real_corsa -- \
   --cold-iterations 5 \
   --warm-iterations 20 \
   --json-output .cache/bench_native.json
@@ -88,7 +88,7 @@ cargo run --release -p corsa --bin bench_real_tsgo -- \
 For a heavier pass that is better suited to before/after comparisons, use:
 
 ```bash
-cargo run --release -p corsa --bin bench_real_tsgo -- \
+cargo run --release -p corsa --bin bench_real_corsa -- \
   --cold-iterations 10 \
   --warm-iterations 80 \
   --json-output .cache/bench_native_deep.json
@@ -97,7 +97,7 @@ cargo run --release -p corsa --bin bench_real_tsgo -- \
 For a detailed breakdown of request encode / transport / decode phases on the default fast path, use:
 
 ```bash
-cargo run --release -p corsa --bin bench_real_tsgo -- \
+cargo run --release -p corsa --bin bench_real_corsa -- \
   --profile \
   --transport msgpack \
   --cold-iterations 5 \
@@ -126,11 +126,11 @@ Default native scenarios now cover both transport and type-query hot paths:
 
 ## Datasets
 
-| dataset          | files |   bytes |  lines | config                                                     |
-| ---------------- | ----: | ------: | -----: | ---------------------------------------------------------- |
-| `ast`            |    29 | 630,429 | 14,653 | `ref/typescript-go/_packages/ast/tsconfig.json`            |
-| `native-preview` |    71 | 939,501 | 21,144 | `ref/typescript-go/_packages/native-preview/tsconfig.json` |
-| `_extension`     |    13 |  78,255 |  2,022 | `ref/typescript-go/_extension/tsconfig.json`               |
+| dataset          | files |   bytes |  lines | config                                                      |
+| ---------------- | ----: | ------: | -----: | ----------------------------------------------------------- |
+| `ast`            |    29 | 630,429 | 14,653 | `ref/corsa-upstream/_packages/ast/tsconfig.json`            |
+| `native-preview` |    71 | 939,501 | 21,144 | `ref/corsa-upstream/_packages/native-preview/tsconfig.json` |
+| `_extension`     |    13 |  78,255 |  2,022 | `ref/corsa-upstream/_extension/tsconfig.json`               |
 
 ## 2026-03-31 Tooling Compare
 
@@ -192,5 +192,5 @@ The current Vitest bench summary is useful for relative ranking but the JSON fil
 - `ApiSpawnConfig::new()` defaults to `SyncMsgpackStdio`, because it is still consistently ahead on the measured real-Corsa paths.
 - `getSourceFile` benefits strongly from msgpack because async JSON-RPC has to carry binary payloads through JSON framing.
 - `bench/src/report_guard.test.ts` fails when benchmark samples go missing or when the measured hot paths drift past the configured budget.
-- `src/bindings/rust/corsa/tests/real_tsgo_baseline.rs` pins the real upstream API summary for the locked Corsa upstream commit.
+- `src/bindings/rust/corsa/tests/real_corsa_baseline.rs` pins the real upstream API summary for the locked Corsa upstream commit.
 - `printNode` is intentionally excluded from the default native suite at the pinned upstream commit because the real Corsa server can still panic inside `internal/printer` on real project data.

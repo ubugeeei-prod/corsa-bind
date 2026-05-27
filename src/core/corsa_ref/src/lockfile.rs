@@ -1,5 +1,5 @@
 use corsa_core::{
-    Result, TsgoError,
+    CorsaError, Result,
     fast::{CompactString, compact_format},
 };
 use serde::{Deserialize, Serialize};
@@ -7,14 +7,14 @@ use std::{fs, path::Path};
 
 /// Lockfile describing the pinned Corsa upstream repository.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct TsgoRefLock {
+pub struct CorsaRefLock {
     /// Lockfile schema version.
     pub version: u32,
     /// Pinned upstream repository entry.
-    pub typescript_go: LockedRepository,
+    pub corsa_upstream: LockedRepository,
 }
 
-/// Repository pin stored inside [`TsgoRefLock`].
+/// Repository pin stored inside [`CorsaRefLock`].
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct LockedRepository {
     /// Relative path to the managed checkout.
@@ -33,19 +33,19 @@ pub struct LockedRepository {
     pub subject: CompactString,
 }
 
-impl TsgoRefLock {
+impl CorsaRefLock {
     /// Loads and parses the lockfile from disk.
     pub fn load(path: &Path) -> Result<Self> {
         let body = fs::read_to_string(path)?;
         toml::from_str(&body).map_err(|err| {
-            TsgoError::Protocol(compact_format(format_args!("invalid lockfile: {err}")))
+            CorsaError::Protocol(compact_format(format_args!("invalid lockfile: {err}")))
         })
     }
 
     /// Serializes and writes the lockfile to disk.
     pub fn save(&self, path: &Path) -> Result<()> {
         let body = toml::to_string_pretty(self).map_err(|err| {
-            TsgoError::Protocol(compact_format(format_args!(
+            CorsaError::Protocol(compact_format(format_args!(
                 "failed to serialize lockfile: {err}"
             )))
         })?;
@@ -55,7 +55,7 @@ impl TsgoRefLock {
 
     /// Returns the primary managed repository entry.
     pub fn root(&self) -> &LockedRepository {
-        &self.typescript_go
+        &self.corsa_upstream
     }
 }
 
@@ -65,10 +65,10 @@ mod tests {
 
     #[test]
     fn lockfile_roundtrips() {
-        let lock = TsgoRefLock {
+        let lock = CorsaRefLock {
             version: 1,
-            typescript_go: LockedRepository {
-                path: "ref/typescript-go".into(),
+            corsa_upstream: LockedRepository {
+                path: "ref/corsa-upstream".into(),
                 repository: "https://github.com/microsoft/typescript-go.git".into(),
                 commit: "abc".into(),
                 tree: "def".into(),
@@ -78,7 +78,7 @@ mod tests {
             },
         };
         let encoded = toml::to_string(&lock).unwrap();
-        let decoded: TsgoRefLock = toml::from_str(&encoded).unwrap();
+        let decoded: CorsaRefLock = toml::from_str(&encoded).unwrap();
         assert_eq!(decoded, lock);
     }
 }

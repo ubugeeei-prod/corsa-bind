@@ -12,7 +12,7 @@ use corsa::{
 use corsa_core::fast::{CompactString, FastMap, SmallVec};
 
 pub fn mock_binary() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_mock_tsgo"))
+    PathBuf::from(env!("CARGO_BIN_EXE_mock_corsa"))
 }
 
 pub fn workspace_root() -> PathBuf {
@@ -49,49 +49,49 @@ pub fn lsp_config() -> LspSpawnConfig {
     LspSpawnConfig::new(mock_binary()).with_cwd(test_cwd())
 }
 
-pub fn resolved_real_tsgo_binary() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("TSGO_EXECUTABLE") {
+pub fn resolved_real_corsa_binary() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("CORSA_EXECUTABLE") {
         let path = PathBuf::from(path);
         if path.exists() {
             return Some(path);
         }
     }
     [
-        workspace_root().join(".cache/tsgo"),
-        workspace_root().join(".cache/tsgo.exe"),
-        workspace_root().join("ref/typescript-go/.cache/tsgo"),
-        workspace_root().join("ref/typescript-go/.cache/tsgo.exe"),
-        workspace_root().join("ref/typescript-go/built/local/tsgo"),
-        workspace_root().join("ref/typescript-go/built/local/tsgo.exe"),
+        workspace_root().join(".cache/corsa"),
+        workspace_root().join(".cache/corsa.exe"),
+        workspace_root().join("ref/corsa-upstream/.cache/corsa"),
+        workspace_root().join("ref/corsa-upstream/.cache/corsa.exe"),
+        workspace_root().join("ref/corsa-upstream/built/local/corsa"),
+        workspace_root().join("ref/corsa-upstream/built/local/corsa.exe"),
     ]
     .into_iter()
     .find(|path| path.exists())
 }
 
-pub fn real_tsgo_binary() -> PathBuf {
-    resolved_real_tsgo_binary().unwrap_or_else(|| {
+pub fn real_corsa_binary() -> PathBuf {
+    resolved_real_corsa_binary().unwrap_or_else(|| {
         workspace_root().join(if cfg!(windows) {
-            ".cache/tsgo.exe"
+            ".cache/corsa.exe"
         } else {
-            ".cache/tsgo"
+            ".cache/corsa"
         })
     })
 }
 
 pub fn real_dataset() -> PathBuf {
     [
-        workspace_root().join("ref/typescript-go/_packages/native-preview/tsconfig.json"),
-        workspace_root().join("ref/typescript-go/_packages/api/tsconfig.json"),
+        workspace_root().join("ref/corsa-upstream/_packages/native-preview/tsconfig.json"),
+        workspace_root().join("ref/corsa-upstream/_packages/api/tsconfig.json"),
     ]
     .into_iter()
     .find(|path| path.exists())
     .unwrap_or_else(|| {
-        workspace_root().join("ref/typescript-go/_packages/native-preview/tsconfig.json")
+        workspace_root().join("ref/corsa-upstream/_packages/native-preview/tsconfig.json")
     })
 }
 
 pub fn real_api_config(mode: ApiMode) -> Option<ApiSpawnConfig> {
-    let binary = resolved_real_tsgo_binary()?;
+    let binary = resolved_real_corsa_binary()?;
     let dataset = real_dataset();
     if !dataset.exists() {
         return None;

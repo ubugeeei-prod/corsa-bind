@@ -117,13 +117,13 @@ mod tests {
     #[test]
     fn fallback_keeps_runtime_identity_and_disables_features() {
         let response = CapabilitiesResponse::fallback(RuntimeCapabilities {
-            kind: Some(CompactString::from("tsgo")),
-            executable: Some(CompactString::from("/tmp/tsgo")),
+            kind: Some(CompactString::from("corsa")),
+            executable: Some(CompactString::from("/tmp/corsa")),
             transport: Some(CompactString::from("msgpack")),
             capability_endpoint: false,
         });
 
-        assert_eq!(response.runtime.kind.as_deref(), Some("tsgo"));
+        assert_eq!(response.runtime.kind.as_deref(), Some("corsa"));
         assert!(!response.overlay.update_snapshot_overlay_changes);
         assert!(!response.diagnostics.snapshot);
         assert!(!response.editor.hover);

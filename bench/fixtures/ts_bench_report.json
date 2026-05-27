@@ -3,7 +3,7 @@
     {
       "groups": [
         {
-          "fullName": "bench/src/api_client.bench.ts > TsgoApiClient msgpack",
+          "fullName": "bench/src/api_client.bench.ts > CorsaApiClient msgpack",
           "benchmarks": [
             {
               "name": "spawn+initialize",
@@ -15,7 +15,7 @@
           ]
         },
         {
-          "fullName": "bench/src/api_client.bench.ts > TsgoApiClient jsonrpc",
+          "fullName": "bench/src/api_client.bench.ts > CorsaApiClient jsonrpc",
           "benchmarks": [
             {
               "name": "spawn+initialize",

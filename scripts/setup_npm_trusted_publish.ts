@@ -1,7 +1,7 @@
 import {
   getNodeBindingTargets,
   nodeBindingPackage,
-  typescriptOxlintPackage,
+  corsaOxlintPackage,
 } from "./npm_release_utils.ts";
 import { fail, runCommand } from "./shared.ts";
 
@@ -58,7 +58,7 @@ function getTrustedPublishPackages(): string[] {
       (target) => `${nodeBindingPackage.name}-${target.platformArchABI}`,
     ),
     nodeBindingPackage.name,
-    typescriptOxlintPackage.name,
+    corsaOxlintPackage.name,
   ];
 }
 

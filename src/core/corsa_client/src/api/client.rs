@@ -1,4 +1,4 @@
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::fast::CompactString;
 use parking_lot::Mutex;
 use serde::{Serialize, de::DeserializeOwned};
@@ -55,7 +55,7 @@ use super::{
 /// ```no_run
 /// use corsa_client::{ApiClient, ApiSpawnConfig};
 ///
-/// # async fn demo() -> Result<(), corsa_client::TsgoError> {
+/// # async fn demo() -> Result<(), corsa_client::CorsaError> {
 /// let client = ApiClient::spawn(ApiSpawnConfig::new("/opt/bin/corsa")).await?;
 /// let _initialize = client.initialize().await?;
 /// client.close().await?;
@@ -184,7 +184,7 @@ where
         if !state.spawned {
             state.spawned = true;
             let Some(receiver) = state.receiver.take() else {
-                return Poll::Ready(Err(TsgoError::Closed(self.closed_name)));
+                return Poll::Ready(Err(CorsaError::Closed(self.closed_name)));
             };
             let shared = Arc::clone(&self.state);
             let closed_name = self.closed_name;
@@ -193,7 +193,7 @@ where
                 .spawn(move || {
                     let result = receiver
                         .recv()
-                        .map_err(|_| TsgoError::Closed(closed_name))
+                        .map_err(|_| CorsaError::Closed(closed_name))
                         .and_then(|result| result);
                     let waker = {
                         let mut state = shared.lock();
@@ -205,7 +205,7 @@ where
                     }
                 })
             {
-                return Poll::Ready(Err(TsgoError::Io(error)));
+                return Poll::Ready(Err(CorsaError::Io(error)));
             }
         }
         Poll::Pending
@@ -312,13 +312,13 @@ impl ApiClient {
                             parsed.runtime.capability_endpoint = true;
                             parsed
                         }
-                        Err(TsgoError::Rpc(error))
+                        Err(CorsaError::Rpc(error))
                             if error.code == -32601
                                 || is_unknown_api_method_message(&error.message) =>
                         {
                             CapabilitiesResponse::fallback(self.runtime_capabilities.clone())
                         }
-                        Err(TsgoError::Protocol(message))
+                        Err(CorsaError::Protocol(message))
                             if is_unknown_api_method_message(&message) =>
                         {
                             CapabilitiesResponse::fallback(self.runtime_capabilities.clone())
@@ -413,7 +413,7 @@ impl ApiClient {
     /// Closes the client and shuts down the underlying worker process.
     ///
     /// This is idempotent. After closing, further requests return
-    /// [`TsgoError::Closed`].
+    /// [`CorsaError::Closed`].
     pub async fn close(&self) -> Result<()> {
         self.release_queue
             .close(self.driver.shutdown_timeout())
@@ -509,23 +509,23 @@ impl ApiClient {
         if capabilities.overlay.update_snapshot_overlay_changes {
             return Ok(());
         }
-        Err(TsgoError::Unsupported(
+        Err(CorsaError::Unsupported(
             "updateSnapshot.overlayChanges is not supported by this runtime; check describeCapabilities before sending in-memory overlays",
         ))
     }
 
     pub(crate) fn map_missing_method(
-        error: TsgoError,
+        error: CorsaError,
         unsupported_message: &'static str,
-    ) -> TsgoError {
+    ) -> CorsaError {
         match error {
-            TsgoError::Rpc(rpc)
+            CorsaError::Rpc(rpc)
                 if rpc.code == -32601 || is_unknown_api_method_message(&rpc.message) =>
             {
-                TsgoError::Unsupported(unsupported_message)
+                CorsaError::Unsupported(unsupported_message)
             }
-            TsgoError::Protocol(message) if is_unknown_api_method_message(&message) => {
-                TsgoError::Unsupported(unsupported_message)
+            CorsaError::Protocol(message) if is_unknown_api_method_message(&message) => {
+                CorsaError::Unsupported(unsupported_message)
             }
             other => other,
         }
@@ -619,16 +619,16 @@ impl RuntimeCapabilities {
 
 fn infer_runtime_kind(path: &Path) -> Option<CompactString> {
     let normalized = path.to_string_lossy().to_ascii_lowercase();
-    let kind = if normalized.contains("mock_tsgo") {
+    let kind = if normalized.contains("mock_corsa") {
         "mock-corsa"
     } else if normalized.contains("native-preview") {
         "native-preview"
-    } else if normalized.ends_with("/tsgo")
-        || normalized.ends_with("\\tsgo.exe")
-        || normalized.ends_with("\\tsgo")
-        || normalized.ends_with("/tsgo.exe")
+    } else if normalized.ends_with("/corsa")
+        || normalized.ends_with("\\corsa.exe")
+        || normalized.ends_with("\\corsa")
+        || normalized.ends_with("/corsa.exe")
     {
-        "tsgo"
+        "corsa"
     } else {
         "custom"
     };
@@ -642,7 +642,7 @@ fn is_unknown_api_method_message(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{ApiClient, is_unknown_api_method_message};
-    use crate::TsgoError;
+    use crate::CorsaError;
     use corsa_core::{RpcResponseError, fast::CompactString};
 
     #[test]
@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn missing_msgpack_api_method_maps_to_unsupported() {
         let error = ApiClient::map_missing_method(
-            TsgoError::Protocol(CompactString::from(
+            CorsaError::Protocol(CompactString::from(
                 "api: invalid request: unknown API method \"getDiagnosticsForFile\"",
             )),
             "file diagnostics are not supported",
@@ -663,14 +663,14 @@ mod tests {
 
         assert!(matches!(
             error,
-            TsgoError::Unsupported("file diagnostics are not supported")
+            CorsaError::Unsupported("file diagnostics are not supported")
         ));
     }
 
     #[test]
     fn missing_jsonrpc_api_method_maps_to_unsupported() {
         let error = ApiClient::map_missing_method(
-            TsgoError::Rpc(RpcResponseError {
+            CorsaError::Rpc(RpcResponseError {
                 code: -32603,
                 message: CompactString::from(
                     "api: invalid request: unknown API method \"getDiagnosticsForFile\"",
@@ -682,7 +682,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            TsgoError::Unsupported("file diagnostics are not supported")
+            CorsaError::Unsupported("file diagnostics are not supported")
         ));
     }
 }

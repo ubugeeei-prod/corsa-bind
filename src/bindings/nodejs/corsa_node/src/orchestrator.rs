@@ -10,12 +10,12 @@ use crate::util::{into_napi_error, parse_json, to_json};
 
 /// N-API wrapper for the distributed orchestration layer.
 #[napi]
-pub struct TsgoDistributedOrchestrator {
+pub struct CorsaDistributedOrchestrator {
     inner: DistributedApiOrchestrator,
 }
 
 #[napi]
-impl TsgoDistributedOrchestrator {
+impl CorsaDistributedOrchestrator {
     /// Creates a new in-process Raft cluster.
     #[napi(constructor)]
     pub fn new(node_ids: Vec<String>) -> Self {

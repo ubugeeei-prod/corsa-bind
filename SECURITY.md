@@ -29,7 +29,7 @@ Please include:
 
 The project treats the following as security-relevant reliability controls:
 
-- exact upstream pin verification for `ref/typescript-go`
+- exact upstream pin verification for `ref/corsa-upstream`
 - bounded transport queues and request timeouts
 - subprocess cleanup and forced reap on shutdown
 - explicit opt-in for upstream endpoints with known instability

@@ -1,0 +1,110 @@
+{
+  "name": "corsa-oxlint",
+  "version": "0.13.0",
+  "description": "Type-aware Oxlint helpers powered by Corsa",
+  "homepage": "https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/corsa_oxlint",
+  "bugs": {
+    "url": "https://github.com/ubugeeei/corsa-bind/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ubugeeei/corsa-bind.git",
+    "directory": "src/bindings/nodejs/corsa_oxlint"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "deno": "./dist/index.js",
+      "bun": "./dist/index.js",
+      "import": "./dist/index.js"
+    },
+    "./ast-utils": {
+      "types": "./dist/ast_utils.d.ts",
+      "deno": "./dist/ast_utils.js",
+      "bun": "./dist/ast_utils.js",
+      "import": "./dist/ast_utils.js"
+    },
+    "./eslint-utils": {
+      "types": "./dist/oxlint_utils.d.ts",
+      "deno": "./dist/oxlint_utils.js",
+      "bun": "./dist/oxlint_utils.js",
+      "import": "./dist/oxlint_utils.js"
+    },
+    "./oxlint-utils": {
+      "types": "./dist/oxlint_utils.d.ts",
+      "deno": "./dist/oxlint_utils.js",
+      "bun": "./dist/oxlint_utils.js",
+      "import": "./dist/oxlint_utils.js"
+    },
+    "./json-schema": {
+      "types": "./dist/json_schema.d.ts",
+      "deno": "./dist/json_schema.js",
+      "bun": "./dist/json_schema.js",
+      "import": "./dist/json_schema.js"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "deno": "./dist/utils.js",
+      "bun": "./dist/utils.js",
+      "import": "./dist/utils.js"
+    },
+    "./rule-tester": {
+      "types": "./dist/rule_tester.d.ts",
+      "deno": "./dist/rule_tester.js",
+      "bun": "./dist/rule_tester.js",
+      "import": "./dist/rule_tester.js"
+    },
+    "./rules": {
+      "types": "./dist/rules/index.d.ts",
+      "deno": "./dist/rules/index.js",
+      "bun": "./dist/rules/index.js",
+      "import": "./dist/rules/index.js"
+    },
+    "./compat": {
+      "types": "./dist/oxlint_compat.d.ts",
+      "deno": "./dist/oxlint_compat.js",
+      "bun": "./dist/oxlint_compat.js",
+      "import": "./dist/oxlint_compat.js"
+    },
+    "./ts-estree": {
+      "types": "./dist/ts_estree.d.ts",
+      "deno": "./dist/ts_estree.js",
+      "bun": "./dist/ts_estree.js",
+      "import": "./dist/ts_estree.js"
+    },
+    "./ts-eslint": {
+      "types": "./dist/ts_eslint.d.ts",
+      "deno": "./dist/ts_eslint.js",
+      "bun": "./dist/ts_eslint.js",
+      "import": "./dist/ts_eslint.js"
+    },
+    "./ts-utils": {
+      "types": "./dist/ts_utils.d.ts",
+      "deno": "./dist/ts_utils.js",
+      "bun": "./dist/ts_utils.js",
+      "import": "./dist/ts_utils.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@corsa-bind/napi": "workspace:*",
+    "@oxlint/plugins": "1.66.0",
+    "oxlint": "1.66.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/utils": "8.59.3"
+  },
+  "engines": {
+    "bun": ">=1.2",
+    "deno": ">=2.0",
+    "node": ">=22"
+  }
+}

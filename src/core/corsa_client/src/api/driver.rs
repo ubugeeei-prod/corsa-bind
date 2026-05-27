@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{Result, error::TsgoError, jsonrpc::JsonRpcConnection, process::AsyncChildGuard};
+use crate::{Result, error::CorsaError, jsonrpc::JsonRpcConnection, process::AsyncChildGuard};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use corsa_core::fast::compact_format;
 use serde::{Serialize, de::DeserializeOwned};
@@ -156,7 +156,7 @@ impl ClientDriver {
                     return Ok(None);
                 }
                 let data = value.get("data").and_then(Value::as_str).ok_or_else(|| {
-                    TsgoError::Protocol(compact_format(format_args!(
+                    CorsaError::Protocol(compact_format(format_args!(
                         "missing binary data for {method}"
                     )))
                 })?;
@@ -231,7 +231,7 @@ impl ClientDriver {
                     return Ok(None);
                 }
                 let data = value.get("data").and_then(Value::as_str).ok_or_else(|| {
-                    TsgoError::Protocol(compact_format(format_args!(
+                    CorsaError::Protocol(compact_format(format_args!(
                         "missing binary data for {method}"
                     )))
                 })?;

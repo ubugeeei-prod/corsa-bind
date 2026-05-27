@@ -4,10 +4,10 @@ import { dirname, resolve } from "node:path";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 
-const tsconfig = process.env.TSGO_RS_BENCH_TSCONFIG;
+const tsconfig = process.env.CORSA_RS_BENCH_TSCONFIG;
 
 if (!tsconfig) {
-  throw new Error("TSGO_RS_BENCH_TSCONFIG is required");
+  throw new Error("CORSA_RS_BENCH_TSCONFIG is required");
 }
 
 const tsconfigPath = resolve(tsconfig);

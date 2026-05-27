@@ -60,53 +60,53 @@ extern "c" fn virtual_document_splice_native(
 extern "c" fn virtual_document_free_native(handle : Int64) -> Unit = "corsa_virtual_document_free_mbt"
 
 #borrow(options_json)
-extern "c" fn tsgo_api_client_spawn_native(options_json : Bytes) -> Int64 = "corsa_tsgo_api_client_spawn_mbt"
+extern "c" fn corsa_api_client_spawn_native(options_json : Bytes) -> Int64 = "corsa_api_client_spawn_mbt"
 
-extern "c" fn tsgo_api_client_initialize_json_native(handle : Int64) -> Bytes = "corsa_tsgo_api_client_initialize_json_mbt"
+extern "c" fn corsa_api_client_initialize_json_native(handle : Int64) -> Bytes = "corsa_api_client_initialize_json_mbt"
 
 #borrow(file)
-extern "c" fn tsgo_api_client_parse_config_file_json_native(handle : Int64, file : Bytes) -> Bytes = "corsa_tsgo_api_client_parse_config_file_json_mbt"
+extern "c" fn corsa_api_client_parse_config_file_json_native(handle : Int64, file : Bytes) -> Bytes = "corsa_api_client_parse_config_file_json_mbt"
 
 #borrow(params_json)
-extern "c" fn tsgo_api_client_update_snapshot_json_native(handle : Int64, params_json : Bytes) -> Bytes = "corsa_tsgo_api_client_update_snapshot_json_mbt"
+extern "c" fn corsa_api_client_update_snapshot_json_native(handle : Int64, params_json : Bytes) -> Bytes = "corsa_api_client_update_snapshot_json_mbt"
 
 #borrow(snapshot, project, file)
-extern "c" fn tsgo_api_client_get_source_file_native(
+extern "c" fn corsa_api_client_get_source_file_native(
   handle : Int64,
   snapshot : Bytes,
   project : Bytes,
   file : Bytes
-) -> Bytes = "corsa_tsgo_api_client_get_source_file_mbt"
+) -> Bytes = "corsa_api_client_get_source_file_mbt"
 
 #borrow(snapshot, project)
-extern "c" fn tsgo_api_client_get_string_type_json_native(
+extern "c" fn corsa_api_client_get_string_type_json_native(
   handle : Int64,
   snapshot : Bytes,
   project : Bytes
-) -> Bytes = "corsa_tsgo_api_client_get_string_type_json_mbt"
+) -> Bytes = "corsa_api_client_get_string_type_json_mbt"
 
 #borrow(snapshot, project, type_handle, location)
-extern "c" fn tsgo_api_client_type_to_string_native(
+extern "c" fn corsa_api_client_type_to_string_native(
   handle : Int64,
   snapshot : Bytes,
   project : Bytes,
   type_handle : Bytes,
   location : Bytes,
   flags : Int
-) -> Bytes = "corsa_tsgo_api_client_type_to_string_mbt"
+) -> Bytes = "corsa_api_client_type_to_string_mbt"
 
 #borrow(method, params_json)
-extern "c" fn tsgo_api_client_call_json_native(handle : Int64, method : Bytes, params_json : Bytes) -> Bytes = "corsa_tsgo_api_client_call_json_mbt"
+extern "c" fn corsa_api_client_call_json_native(handle : Int64, method : Bytes, params_json : Bytes) -> Bytes = "corsa_api_client_call_json_mbt"
 
 #borrow(method, params_json)
-extern "c" fn tsgo_api_client_call_binary_native(handle : Int64, method : Bytes, params_json : Bytes) -> Bytes = "corsa_tsgo_api_client_call_binary_mbt"
+extern "c" fn corsa_api_client_call_binary_native(handle : Int64, method : Bytes, params_json : Bytes) -> Bytes = "corsa_api_client_call_binary_mbt"
 
 #borrow(value)
-extern "c" fn tsgo_api_client_release_handle_native(handle : Int64, value : Bytes) -> Bool = "corsa_tsgo_api_client_release_handle_mbt"
+extern "c" fn corsa_api_client_release_handle_native(handle : Int64, value : Bytes) -> Bool = "corsa_api_client_release_handle_mbt"
 
-extern "c" fn tsgo_api_client_close_native(handle : Int64) -> Bool = "corsa_tsgo_api_client_close_mbt"
+extern "c" fn corsa_api_client_close_native(handle : Int64) -> Bool = "corsa_api_client_close_mbt"
 
-extern "c" fn tsgo_api_client_free_native(handle : Int64) -> Unit = "corsa_tsgo_api_client_free_mbt"
+extern "c" fn corsa_api_client_free_native(handle : Int64) -> Unit = "corsa_api_client_free_mbt"
 
 fn string_to_bytes(text : String) -> Bytes {
   let bytes = @utf8.encode(text).to_array()
@@ -119,7 +119,7 @@ fn bytes_to_string(bytes : Bytes) -> String {
 }
 
 pub type VirtualDocumentHandle = Int64
-pub type TsgoApiClientHandle = Int64
+pub type CorsaApiClientHandle = Int64
 
 pub fn classify_type_text(text : String) -> String {
   bytes_to_string(classify_type_text_native(string_to_bytes(text)))
@@ -215,24 +215,24 @@ pub fn virtual_document_free(handle : VirtualDocumentHandle) -> Unit {
   virtual_document_free_native(handle)
 }
 
-pub fn tsgo_api_client_spawn(options_json : String) -> TsgoApiClientHandle {
-  tsgo_api_client_spawn_native(string_to_bytes(options_json))
+pub fn corsa_api_client_spawn(options_json : String) -> CorsaApiClientHandle {
+  corsa_api_client_spawn_native(string_to_bytes(options_json))
 }
 
-pub fn tsgo_api_client_initialize_json(handle : TsgoApiClientHandle) -> String {
-  bytes_to_string(tsgo_api_client_initialize_json_native(handle))
+pub fn corsa_api_client_initialize_json(handle : CorsaApiClientHandle) -> String {
+  bytes_to_string(corsa_api_client_initialize_json_native(handle))
 }
 
-pub fn tsgo_api_client_parse_config_file_json(handle : TsgoApiClientHandle, file : String) -> String {
-  bytes_to_string(tsgo_api_client_parse_config_file_json_native(handle, string_to_bytes(file)))
+pub fn corsa_api_client_parse_config_file_json(handle : CorsaApiClientHandle, file : String) -> String {
+  bytes_to_string(corsa_api_client_parse_config_file_json_native(handle, string_to_bytes(file)))
 }
 
-pub fn tsgo_api_client_update_snapshot_json(handle : TsgoApiClientHandle, params_json : String) -> String {
-  bytes_to_string(tsgo_api_client_update_snapshot_json_native(handle, string_to_bytes(params_json)))
+pub fn corsa_api_client_update_snapshot_json(handle : CorsaApiClientHandle, params_json : String) -> String {
+  bytes_to_string(corsa_api_client_update_snapshot_json_native(handle, string_to_bytes(params_json)))
 }
 
-pub fn tsgo_api_client_get_source_file(handle : TsgoApiClientHandle, snapshot : String, project : String, file : String) -> Bytes {
-  tsgo_api_client_get_source_file_native(
+pub fn corsa_api_client_get_source_file(handle : CorsaApiClientHandle, snapshot : String, project : String, file : String) -> Bytes {
+  corsa_api_client_get_source_file_native(
     handle,
     string_to_bytes(snapshot),
     string_to_bytes(project),
@@ -240,9 +240,9 @@ pub fn tsgo_api_client_get_source_file(handle : TsgoApiClientHandle, snapshot : 
   )
 }
 
-pub fn tsgo_api_client_get_string_type_json(handle : TsgoApiClientHandle, snapshot : String, project : String) -> String {
+pub fn corsa_api_client_get_string_type_json(handle : CorsaApiClientHandle, snapshot : String, project : String) -> String {
   bytes_to_string(
-    tsgo_api_client_get_string_type_json_native(
+    corsa_api_client_get_string_type_json_native(
       handle,
       string_to_bytes(snapshot),
       string_to_bytes(project),
@@ -250,8 +250,8 @@ pub fn tsgo_api_client_get_string_type_json(handle : TsgoApiClientHandle, snapsh
   )
 }
 
-pub fn tsgo_api_client_type_to_string(
-  handle : TsgoApiClientHandle,
+pub fn corsa_api_client_type_to_string(
+  handle : CorsaApiClientHandle,
   snapshot : String,
   project : String,
   type_handle : String,
@@ -259,7 +259,7 @@ pub fn tsgo_api_client_type_to_string(
   flags : Int
 ) -> String {
   bytes_to_string(
-    tsgo_api_client_type_to_string_native(
+    corsa_api_client_type_to_string_native(
       handle,
       string_to_bytes(snapshot),
       string_to_bytes(project),
@@ -270,9 +270,9 @@ pub fn tsgo_api_client_type_to_string(
   )
 }
 
-pub fn tsgo_api_client_call_json(handle : TsgoApiClientHandle, method : String, params_json : String) -> String {
+pub fn corsa_api_client_call_json(handle : CorsaApiClientHandle, method : String, params_json : String) -> String {
   bytes_to_string(
-    tsgo_api_client_call_json_native(
+    corsa_api_client_call_json_native(
       handle,
       string_to_bytes(method),
       string_to_bytes(params_json),
@@ -280,22 +280,22 @@ pub fn tsgo_api_client_call_json(handle : TsgoApiClientHandle, method : String, 
   )
 }
 
-pub fn tsgo_api_client_call_binary(handle : TsgoApiClientHandle, method : String, params_json : String) -> Bytes {
-  tsgo_api_client_call_binary_native(
+pub fn corsa_api_client_call_binary(handle : CorsaApiClientHandle, method : String, params_json : String) -> Bytes {
+  corsa_api_client_call_binary_native(
     handle,
     string_to_bytes(method),
     string_to_bytes(params_json),
   )
 }
 
-pub fn tsgo_api_client_release_handle(handle : TsgoApiClientHandle, value : String) -> Bool {
-  tsgo_api_client_release_handle_native(handle, string_to_bytes(value))
+pub fn corsa_api_client_release_handle(handle : CorsaApiClientHandle, value : String) -> Bool {
+  corsa_api_client_release_handle_native(handle, string_to_bytes(value))
 }
 
-pub fn tsgo_api_client_close(handle : TsgoApiClientHandle) -> Bool {
-  tsgo_api_client_close_native(handle)
+pub fn corsa_api_client_close(handle : CorsaApiClientHandle) -> Bool {
+  corsa_api_client_close_native(handle)
 }
 
-pub fn tsgo_api_client_free(handle : TsgoApiClientHandle) -> Unit {
-  tsgo_api_client_free_native(handle)
+pub fn corsa_api_client_free(handle : CorsaApiClientHandle) -> Unit {
+  corsa_api_client_free_native(handle)
 }

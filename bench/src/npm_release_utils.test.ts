@@ -28,7 +28,7 @@ describe("npm release utils", () => {
       nodeBindingManifest,
       JSON.parse(
         readFileSync(
-          resolve(process.cwd(), "src/bindings/nodejs/typescript_oxlint/package.json"),
+          resolve(process.cwd(), "src/bindings/nodejs/corsa_oxlint/package.json"),
           "utf8",
         ),
       ) as { engines: Record<string, string>; exports: Record<string, unknown> },

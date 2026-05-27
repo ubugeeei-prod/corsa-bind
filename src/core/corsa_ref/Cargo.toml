@@ -16,7 +16,7 @@ name = "corsa_ref"
 path = "src/lib.rs"
 
 [[bin]]
-name = "tsgo_ref"
+name = "corsa_ref"
 path = "src/main.rs"
 
 [dependencies]

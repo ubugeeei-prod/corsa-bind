@@ -110,7 +110,7 @@ fn async_api_rejects_unstable_print_node_by_default() {
             .unwrap_err();
         assert!(matches!(
             error,
-            corsa::TsgoError::Unsupported(message) if message.contains("printNode is disabled by default")
+            corsa::CorsaError::Unsupported(message) if message.contains("printNode is disabled by default")
         ));
         client.close().await.unwrap();
     });
@@ -141,10 +141,10 @@ fn concurrent_initialize_and_capability_calls_share_one_wire_request() {
         let client = ApiClient::spawn(
             support::api_config(ApiMode::AsyncJsonRpcStdio)
                 .with_env(
-                    "CORSA_MOCK_TSGO_COUNT_DIR",
+                    "CORSA_MOCK_COUNT_DIR",
                     count_dir.path().display().to_string(),
                 )
-                .with_env("CORSA_MOCK_TSGO_DELAY_MS", "25"),
+                .with_env("CORSA_MOCK_DELAY_MS", "25"),
         )
         .await
         .unwrap();
@@ -188,7 +188,7 @@ fn dropping_many_snapshots_uses_bounded_release_queue() {
         let client = ApiClient::spawn(
             support::api_config(ApiMode::AsyncJsonRpcStdio)
                 .with_env(
-                    "CORSA_MOCK_TSGO_COUNT_DIR",
+                    "CORSA_MOCK_COUNT_DIR",
                     count_dir.path().display().to_string(),
                 )
                 .with_request_timeout(Some(Duration::from_secs(1)))

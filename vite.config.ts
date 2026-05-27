@@ -5,8 +5,8 @@ import { defineConfig } from "vite-plus";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const nodePackageDir = resolve(rootDir, "src/bindings/nodejs/corsa_node");
-const typescriptOxlintDir = resolve(rootDir, "src/bindings/nodejs/typescript_oxlint");
-const typescriptOxlintSourceDir = resolve(typescriptOxlintDir, "ts");
+const corsaOxlintDir = resolve(rootDir, "src/bindings/nodejs/corsa_oxlint");
+const corsaOxlintSourceDir = resolve(corsaOxlintDir, "ts");
 const generatedNodeArtifacts = [
   "src/bindings/nodejs/corsa_node/index.d.ts",
   "src/bindings/nodejs/corsa_node/index.js",
@@ -35,32 +35,32 @@ export default defineConfig({
     },
     dts: true,
     entry: [
-      "src/bindings/nodejs/typescript_oxlint/ts/**/*.ts",
-      "!src/bindings/nodejs/typescript_oxlint/ts/**/*.test.ts",
+      "src/bindings/nodejs/corsa_oxlint/ts/**/*.ts",
+      "!src/bindings/nodejs/corsa_oxlint/ts/**/*.test.ts",
     ],
     fixedExtension: false,
     format: "esm",
-    outDir: resolve(typescriptOxlintDir, "dist"),
-    root: typescriptOxlintSourceDir,
+    outDir: resolve(corsaOxlintDir, "dist"),
+    root: corsaOxlintSourceDir,
     sourcemap: true,
-    tsconfig: resolve(typescriptOxlintDir, "tsconfig.json"),
+    tsconfig: resolve(corsaOxlintDir, "tsconfig.json"),
     unbundle: true,
   },
   resolve: {
     alias: {
       "@corsa-bind/napi": resolve(nodePackageDir, "ts/index.ts"),
-      "corsa-oxlint/ast-utils": resolve(typescriptOxlintDir, "ts/ast_utils.ts"),
-      "corsa-oxlint/compat": resolve(typescriptOxlintDir, "ts/oxlint_compat.ts"),
-      "corsa-oxlint/eslint-utils": resolve(typescriptOxlintDir, "ts/oxlint_utils.ts"),
-      "corsa-oxlint/json-schema": resolve(typescriptOxlintDir, "ts/json_schema.ts"),
-      "corsa-oxlint/oxlint-utils": resolve(typescriptOxlintDir, "ts/oxlint_utils.ts"),
-      "corsa-oxlint/utils": resolve(typescriptOxlintDir, "ts/utils.ts"),
-      "corsa-oxlint/rule-tester": resolve(typescriptOxlintDir, "ts/rule_tester.ts"),
-      "corsa-oxlint/rules": resolve(typescriptOxlintDir, "ts/rules/index.ts"),
-      "corsa-oxlint/ts-estree": resolve(typescriptOxlintDir, "ts/ts_estree.ts"),
-      "corsa-oxlint/ts-eslint": resolve(typescriptOxlintDir, "ts/ts_eslint.ts"),
-      "corsa-oxlint/ts-utils": resolve(typescriptOxlintDir, "ts/ts_utils.ts"),
-      "corsa-oxlint": resolve(typescriptOxlintDir, "ts/index.ts"),
+      "corsa-oxlint/ast-utils": resolve(corsaOxlintDir, "ts/ast_utils.ts"),
+      "corsa-oxlint/compat": resolve(corsaOxlintDir, "ts/oxlint_compat.ts"),
+      "corsa-oxlint/eslint-utils": resolve(corsaOxlintDir, "ts/oxlint_utils.ts"),
+      "corsa-oxlint/json-schema": resolve(corsaOxlintDir, "ts/json_schema.ts"),
+      "corsa-oxlint/oxlint-utils": resolve(corsaOxlintDir, "ts/oxlint_utils.ts"),
+      "corsa-oxlint/utils": resolve(corsaOxlintDir, "ts/utils.ts"),
+      "corsa-oxlint/rule-tester": resolve(corsaOxlintDir, "ts/rule_tester.ts"),
+      "corsa-oxlint/rules": resolve(corsaOxlintDir, "ts/rules/index.ts"),
+      "corsa-oxlint/ts-estree": resolve(corsaOxlintDir, "ts/ts_estree.ts"),
+      "corsa-oxlint/ts-eslint": resolve(corsaOxlintDir, "ts/ts_eslint.ts"),
+      "corsa-oxlint/ts-utils": resolve(corsaOxlintDir, "ts/ts_utils.ts"),
+      "corsa-oxlint": resolve(corsaOxlintDir, "ts/index.ts"),
     },
   },
   lint: {
@@ -82,22 +82,22 @@ export default defineConfig({
       },
       build: {
         command: noopCommand,
-        dependsOn: ["build_mock", "build_wrapper", "build_typescript_oxlint"],
+        dependsOn: ["build_mock", "build_wrapper", "build_corsa_oxlint"],
       },
       build_ci: {
         command: noopCommand,
-        dependsOn: ["build_mock", "build_wrapper_ci", "build_typescript_oxlint_ci"],
+        dependsOn: ["build_mock", "build_wrapper_ci", "build_corsa_oxlint_ci"],
       },
       build_rust: {
         command: "cargo build --workspace",
       },
       build_mock: {
         cache: false,
-        command: "cargo build -p corsa --bin mock_tsgo",
+        command: "cargo build -p corsa --bin mock_corsa",
       },
-      build_tsgo: {
+      build_corsa: {
         cache: false,
-        command: "node --strip-types ./scripts/build_tsgo.ts",
+        command: "node --strip-types ./scripts/build_corsa.ts",
         dependsOn: ["verify_ref"],
       },
       build_node_debug: {
@@ -112,12 +112,12 @@ export default defineConfig({
         cwd: "src/bindings/nodejs/corsa_node",
         dependsOn: ["build_rust"],
       },
-      build_typescript_oxlint: {
+      build_corsa_oxlint: {
         cache: false,
         command: "vp pack",
         dependsOn: ["build_wrapper"],
       },
-      build_typescript_oxlint_ci: {
+      build_corsa_oxlint_ci: {
         cache: false,
         command: "vp pack",
         dependsOn: ["build_wrapper_ci"],
@@ -187,18 +187,18 @@ export default defineConfig({
       },
       bench_native: {
         command:
-          "cargo run --release -p corsa --bin bench_real_tsgo -- --cold-iterations 5 --warm-iterations 20 --json-output .cache/bench_native.json",
-        dependsOn: ["build_tsgo"],
+          "cargo run --release -p corsa --bin bench_real_corsa -- --cold-iterations 5 --warm-iterations 20 --json-output .cache/bench_native.json",
+        dependsOn: ["build_corsa"],
       },
       bench_native_deep: {
         command:
-          "cargo run --release -p corsa --bin bench_real_tsgo -- --cold-iterations 10 --warm-iterations 80 --json-output .cache/bench_native_deep.json",
-        dependsOn: ["build_tsgo"],
+          "cargo run --release -p corsa --bin bench_real_corsa -- --cold-iterations 10 --warm-iterations 80 --json-output .cache/bench_native_deep.json",
+        dependsOn: ["build_corsa"],
       },
       bench_native_profile: {
         command:
-          "cargo run --release -p corsa --bin bench_real_tsgo -- --profile --transport msgpack --cold-iterations 5 --warm-iterations 40 --json-output .cache/bench_native_profile.json",
-        dependsOn: ["build_tsgo"],
+          "cargo run --release -p corsa --bin bench_real_corsa -- --profile --transport msgpack --cold-iterations 5 --warm-iterations 40 --json-output .cache/bench_native_profile.json",
+        dependsOn: ["build_corsa"],
       },
       bench_tooling_setup: {
         command: noopCommand,
@@ -207,7 +207,7 @@ export default defineConfig({
       bench_tooling_setup_ref: {
         cache: false,
         command: "npm ci --no-fund --no-audit",
-        cwd: "ref/typescript-go",
+        cwd: "ref/corsa-upstream",
       },
       bench_tooling_setup_cli_compare: {
         cache: false,
@@ -217,19 +217,19 @@ export default defineConfig({
       bench_tooling_compare: {
         command:
           "cargo run --release -p corsa --bin bench_tooling_compare -- --iterations 10 --warmup-iterations 2 --json-output .cache/bench_tooling_compare.json",
-        dependsOn: ["build_tsgo", "build_typescript_oxlint", "bench_tooling_setup"],
+        dependsOn: ["build_corsa", "build_corsa_oxlint", "bench_tooling_setup"],
       },
       bench_bindings: {
         command: "node --strip-types ./scripts/bench_bindings.ts",
-        dependsOn: ["build_tsgo"],
+        dependsOn: ["build_corsa"],
       },
       bench_ts: {
         command: "vp test bench --config ./vite.config.ts --outputJson .cache/bench_ts.json",
-        dependsOn: ["build_tsgo", "build_node_release"],
+        dependsOn: ["build_corsa", "build_node_release"],
       },
       bench_verify: {
         command:
-          "TSGO_REQUIRE_BENCH_REPORTS=1 vp test run --config ./vite.config.ts bench/src/report_guard.test.ts",
+          "CORSA_REQUIRE_BENCH_REPORTS=1 vp test run --config ./vite.config.ts bench/src/report_guard.test.ts",
         dependsOn: ["bench_native", "bench_ts"],
       },
       release_dry_run: {
@@ -253,7 +253,7 @@ export default defineConfig({
       examples_node_real: {
         command: "pnpm run real",
         cwd: "examples",
-        dependsOn: ["build", "sync_ref", "verify_ref", "build_tsgo"],
+        dependsOn: ["build", "sync_ref", "verify_ref", "build_corsa"],
       },
       examples_rust_smoke: {
         command: "node --strip-types ./scripts/run_rust_examples.ts smoke",
@@ -261,7 +261,7 @@ export default defineConfig({
       },
       examples_rust_real: {
         command: "node --strip-types ./scripts/run_rust_examples.ts real",
-        dependsOn: ["sync_ref", "verify_ref", "build_tsgo"],
+        dependsOn: ["sync_ref", "verify_ref", "build_corsa"],
       },
       examples_rust_experimental: {
         command: "node --strip-types ./scripts/run_rust_examples.ts experimental",

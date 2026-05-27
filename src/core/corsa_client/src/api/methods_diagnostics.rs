@@ -5,7 +5,7 @@ use super::{
     SnapshotDiagnosticsResponse,
     requests_core::{SnapshotFileRequest, SnapshotProjectRequest},
 };
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 
 impl ApiClient {
     /// Returns diagnostics for every project in a snapshot.
@@ -26,7 +26,7 @@ impl ApiClient {
                 )
             })?;
         if value.is_null() {
-            return Err(TsgoError::Unsupported(
+            return Err(CorsaError::Unsupported(
                 "snapshot diagnostics returned no data; check describeCapabilities before requesting diagnostics",
             ));
         }
@@ -52,7 +52,7 @@ impl ApiClient {
                 )
             })?;
         if value.is_null() {
-            return Err(TsgoError::Unsupported(
+            return Err(CorsaError::Unsupported(
                 "project diagnostics returned no data; check describeCapabilities before requesting diagnostics",
             ));
         }
@@ -71,7 +71,7 @@ impl ApiClient {
             file: file.into(),
         })?;
         let Some(params) = params_value.as_object_mut() else {
-            return Err(TsgoError::Protocol(
+            return Err(CorsaError::Protocol(
                 "file diagnostics request must serialize to an object".into(),
             ));
         };
@@ -86,7 +86,7 @@ impl ApiClient {
                 )
             })?;
         if value.is_null() {
-            return Err(TsgoError::Unsupported(
+            return Err(CorsaError::Unsupported(
                 "file diagnostics returned no data; check describeCapabilities before requesting diagnostics",
             ));
         }

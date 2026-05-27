@@ -1,7 +1,7 @@
 use crate::{
-    Result, TsgoError,
+    CorsaError, Result,
     jsonrpc::{InboundEvent, JsonRpcConnection, JsonRpcConnectionOptions, RequestId},
-    process::{AsyncChildGuard, TsgoCommand},
+    process::{AsyncChildGuard, CorsaCommand},
 };
 use corsa_core::{
     SharedObserver,
@@ -45,7 +45,7 @@ pub struct LspClient {
 #[derive(Clone)]
 pub struct LspSpawnConfig {
     /// Reusable command template used to launch Corsa over LSP stdio.
-    pub command: TsgoCommand,
+    pub command: CorsaCommand,
     /// Additional CLI flags appended after `--lsp --stdio`.
     pub extra_args: SmallVec<[CompactString; 4]>,
     /// Maximum time to wait for a single request before surfacing a timeout.
@@ -76,7 +76,7 @@ impl LspSpawnConfig {
     /// Creates a new LSP spawn configuration.
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {
-            command: TsgoCommand::new(executable),
+            command: CorsaCommand::new(executable),
             extra_args: SmallVec::new(),
             request_timeout: Some(Duration::from_secs(30)),
             shutdown_timeout: Duration::from_secs(2),
@@ -135,8 +135,11 @@ impl LspClient {
         let mut child = config
             .command
             .spawn_async(args.iter().map(CompactString::as_str))?;
-        let stdin = child.stdin.take().ok_or(TsgoError::Closed("lsp stdin"))?;
-        let stdout = child.stdout.take().ok_or(TsgoError::Closed("lsp stdout"))?;
+        let stdin = child.stdin.take().ok_or(CorsaError::Closed("lsp stdin"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or(CorsaError::Closed("lsp stdout"))?;
         Ok(Self {
             rpc: JsonRpcConnection::try_spawn_with_options(
                 BufReader::new(stdout),

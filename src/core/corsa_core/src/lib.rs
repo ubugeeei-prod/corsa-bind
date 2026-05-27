@@ -19,8 +19,8 @@ mod rpc;
 /// Shared pure helpers for type-text classification and unsafe-flow checks.
 pub mod utils;
 
-pub use error::{Result, TsgoError};
-pub use observability::{SharedObserver, TsgoEvent, TsgoObserver, observe};
+pub use error::{CorsaError, Result};
+pub use observability::{CorsaEvent, CorsaObserver, SharedObserver, observe};
 /// Child-process guard and reusable command template for Corsa.
-pub use process::{AsyncChildGuard, TsgoCommand, terminate_child_process, wait_for_child_exit};
+pub use process::{AsyncChildGuard, CorsaCommand, terminate_child_process, wait_for_child_exit};
 pub use rpc::RpcResponseError;

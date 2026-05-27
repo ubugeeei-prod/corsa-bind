@@ -58,7 +58,7 @@ fn inverted_ranges_fail_without_mutating_the_document() {
         )])
         .unwrap_err();
     assert!(
-        matches!(err, corsa_core::TsgoError::Protocol(message) if message.contains("inverted range"))
+        matches!(err, corsa_core::CorsaError::Protocol(message) if message.contains("inverted range"))
     );
     assert_eq!(document.version, 1);
     assert_eq!(document.text, "abc");
@@ -74,7 +74,7 @@ fn out_of_bounds_ranges_fail_without_mutating_the_document() {
         )])
         .unwrap_err();
     assert!(
-        matches!(err, corsa_core::TsgoError::Protocol(message) if message.contains("out of bounds"))
+        matches!(err, corsa_core::CorsaError::Protocol(message) if message.contains("out of bounds"))
     );
     assert_eq!(document.version, 1);
     assert_eq!(document.text, "abc");
@@ -90,7 +90,7 @@ fn splitting_a_code_point_is_rejected() {
         )])
         .unwrap_err();
     assert!(
-        matches!(err, corsa_core::TsgoError::Protocol(message) if message.contains("splits a code point"))
+        matches!(err, corsa_core::CorsaError::Protocol(message) if message.contains("splits a code point"))
     );
     assert_eq!(document.version, 1);
     assert_eq!(document.text, "😀");

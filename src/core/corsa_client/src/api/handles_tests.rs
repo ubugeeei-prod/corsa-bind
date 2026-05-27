@@ -1,5 +1,5 @@
 use super::NodeHandle;
-use crate::TsgoError;
+use crate::CorsaError;
 
 #[test]
 fn parse_preserves_dots_in_path_segment() {
@@ -12,7 +12,7 @@ fn parse_preserves_dots_in_path_segment() {
 #[test]
 fn parse_rejects_missing_segments() {
     let err = NodeHandle::from("1.5.123").parse().unwrap_err();
-    assert!(matches!(err, TsgoError::InvalidHandle(handle) if handle == "1.5.123"));
+    assert!(matches!(err, CorsaError::InvalidHandle(handle) if handle == "1.5.123"));
 }
 
 #[test]
@@ -21,7 +21,7 @@ fn parse_rejects_non_numeric_offsets() {
         .parse()
         .unwrap_err();
     assert!(
-        matches!(err, TsgoError::InvalidHandle(handle) if handle == "x.5.123./workspace/main.ts")
+        matches!(err, CorsaError::InvalidHandle(handle) if handle == "x.5.123./workspace/main.ts")
     );
 }
 
@@ -31,14 +31,14 @@ fn parse_rejects_non_numeric_kind() {
         .parse()
         .unwrap_err();
     assert!(
-        matches!(err, TsgoError::InvalidHandle(handle) if handle == "1.5.kind./workspace/main.ts")
+        matches!(err, CorsaError::InvalidHandle(handle) if handle == "1.5.kind./workspace/main.ts")
     );
 }
 
 #[test]
 fn parse_rejects_empty_path_segment() {
     let err = NodeHandle::from("1.5.123.").parse().unwrap_err();
-    assert!(matches!(err, TsgoError::InvalidHandle(handle) if handle == "1.5.123."));
+    assert!(matches!(err, CorsaError::InvalidHandle(handle) if handle == "1.5.123."));
 }
 
 #[test]
@@ -47,6 +47,6 @@ fn parse_rejects_inverted_offsets() {
         .parse()
         .unwrap_err();
     assert!(
-        matches!(err, TsgoError::InvalidHandle(handle) if handle == "5.1.123./workspace/main.ts")
+        matches!(err, CorsaError::InvalidHandle(handle) if handle == "5.1.123./workspace/main.ts")
     );
 }

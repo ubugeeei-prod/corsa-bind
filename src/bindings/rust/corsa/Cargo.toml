@@ -20,12 +20,12 @@ default = []
 experimental-distributed = ["corsa_orchestrator/experimental-distributed"]
 
 [[bin]]
-name = "mock_tsgo"
-path = "src/bin/mock_tsgo/main.rs"
+name = "mock_corsa"
+path = "src/bin/mock_corsa/main.rs"
 
 [[bin]]
-name = "bench_real_tsgo"
-path = "src/bin/bench_real_tsgo/main.rs"
+name = "bench_real_corsa"
+path = "src/bin/bench_real_corsa/main.rs"
 
 [[bin]]
 name = "bench_tooling_compare"

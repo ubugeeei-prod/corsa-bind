@@ -24,12 +24,12 @@ const workspaceRoot = resolve(import.meta.dirname, "..");
 const cacheRoot = resolve(workspaceRoot, ".cache/bench_bindings");
 const binRoot = resolve(cacheRoot, "bin");
 const ffiLibDir = resolve(workspaceRoot, "target/debug");
-const tsgoPath = resolve(
+const corsaPath = resolve(
   workspaceRoot,
-  process.platform === "win32" ? ".cache/tsgo.exe" : ".cache/tsgo",
+  process.platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa",
 );
 const optionsJson = JSON.stringify({
-  executable: tsgoPath,
+  executable: corsaPath,
   cwd: workspaceRoot,
   mode: "msgpack",
 });
@@ -44,7 +44,7 @@ const scenarios = [
 main();
 
 function main(): void {
-  ensureExists(tsgoPath, "missing built tsgo binary; run `vp run -w build_tsgo` first");
+  ensureExists(corsaPath, "missing built corsa binary; run `vp run -w build_corsa` first");
   mkdirSync(binRoot, { recursive: true });
 
   run("cargo", ["build", "-p", "corsa_ffi"], { cwd: workspaceRoot });
@@ -84,7 +84,7 @@ function main(): void {
     outputPath,
     JSON.stringify(
       {
-        tsgoPath,
+        corsaPath,
         ffiLibDir,
         warmupRuns,
         timedRuns,

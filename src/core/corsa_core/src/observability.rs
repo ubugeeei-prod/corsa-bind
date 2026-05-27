@@ -8,7 +8,7 @@ use std::{sync::Arc, time::Duration};
 /// added over time as the workspace exposes more subsystems.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
-pub enum TsgoEvent {
+pub enum CorsaEvent {
     /// A JSON-RPC request exceeded its configured timeout.
     JsonRpcRequestTimedOut {
         /// JSON-RPC method name that timed out.
@@ -55,16 +55,16 @@ pub enum TsgoEvent {
 }
 
 /// Sink for structured operational events emitted by the workspace.
-pub trait TsgoObserver: Send + Sync + 'static {
+pub trait CorsaObserver: Send + Sync + 'static {
     /// Receives a single event.
-    fn on_event(&self, event: &TsgoEvent);
+    fn on_event(&self, event: &CorsaEvent);
 }
 
 /// Shared observer handle used across configs and transports.
-pub type SharedObserver = Arc<dyn TsgoObserver>;
+pub type SharedObserver = Arc<dyn CorsaObserver>;
 
 /// Emits an event when an observer is configured.
-pub fn observe(observer: Option<&SharedObserver>, event: TsgoEvent) {
+pub fn observe(observer: Option<&SharedObserver>, event: CorsaEvent) {
     if let Some(observer) = observer {
         observer.on_event(&event);
     }

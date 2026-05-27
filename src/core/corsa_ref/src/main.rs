@@ -1,10 +1,10 @@
 use std::{env, path::PathBuf, process::ExitCode};
 
 use corsa_core::fast::{CompactString, SmallVec, compact_format};
-use corsa_ref::TsgoRefManager;
+use corsa_ref::CorsaRefManager;
 
 const HELP: &str = "\
-usage: tsgo_ref [status|verify|sync|pin-current] [LOCKFILE]
+usage: corsa_ref [status|verify|sync|pin-current] [LOCKFILE]
 
 commands:
   status        print the current managed-ref status
@@ -36,8 +36,8 @@ fn run() -> corsa_core::Result<()> {
     let lock_path = args
         .get(1)
         .map(|path| PathBuf::from(path.as_str()))
-        .unwrap_or_else(|| PathBuf::from("tsgo_ref.lock.toml"));
-    let manager = TsgoRefManager::new(lock_path);
+        .unwrap_or_else(|| PathBuf::from("corsa_ref.lock.toml"));
+    let manager = CorsaRefManager::new(lock_path);
     match command {
         "status" => {
             let status = manager.status()?;
@@ -47,9 +47,9 @@ fn run() -> corsa_core::Result<()> {
         "verify" => manager.verify(),
         "sync" => manager.sync(),
         "pin-current" => manager.pin_current(),
-        other => Err(corsa_core::TsgoError::Protocol(compact_format(
+        other => Err(corsa_core::CorsaError::Protocol(compact_format(
             format_args!(
-                "unknown tsgo_ref command: {other}\nhelp: valid commands are status, verify, sync, and pin-current"
+                "unknown corsa_ref command: {other}\nhelp: valid commands are status, verify, sync, and pin-current"
             ),
         ))),
     }

@@ -44,22 +44,22 @@ pub fn write(path: &Path, cli: &Cli, datasets: &[DatasetCase], rows: &[ToolRow])
     fs::write(
         path,
         serde_json::to_vec_pretty(&json!({
-            "tsgoPath": cli.tsgo_path,
+            "corsaPath": cli.corsa_path,
             "nodeCommand": cli.node_command.as_str(),
             "iterations": cli.iterations,
             "warmupIterations": cli.warmup_iterations,
             "timeoutMs": cli.timeout_ms,
             "datasets": datasets,
             "rows": rows_json,
-            "projectCheckVsTsgo": project_check_vs_tsgo_json(rows),
-            "workflowVsTsgoCli": workflow_vs_tsgo_json(rows),
+            "projectCheckVsCorsa": project_check_vs_corsa_json(rows),
+            "workflowVsCorsaCli": workflow_vs_corsa_json(rows),
         }))?,
     )?;
     Ok(())
 }
 
-pub fn project_check_vs_tsgo_lines(rows: &[ToolRow]) -> Vec<String> {
-    project_check_vs_tsgo(rows)
+pub fn project_check_vs_corsa_lines(rows: &[ToolRow]) -> Vec<String> {
+    project_check_vs_corsa(rows)
         .into_iter()
         .map(|comparison| {
             format!(
@@ -74,8 +74,8 @@ pub fn project_check_vs_tsgo_lines(rows: &[ToolRow]) -> Vec<String> {
         .collect()
 }
 
-pub fn workflow_vs_tsgo_lines(rows: &[ToolRow]) -> Vec<String> {
-    workflow_vs_tsgo(rows)
+pub fn workflow_vs_corsa_lines(rows: &[ToolRow]) -> Vec<String> {
+    workflow_vs_corsa(rows)
         .into_iter()
         .map(|comparison| {
             format!(
@@ -90,8 +90,8 @@ pub fn workflow_vs_tsgo_lines(rows: &[ToolRow]) -> Vec<String> {
         .collect()
 }
 
-fn project_check_vs_tsgo_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
-    project_check_vs_tsgo(rows)
+fn project_check_vs_corsa_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
+    project_check_vs_corsa(rows)
         .into_iter()
         .map(|comparison| {
             json!({
@@ -106,8 +106,8 @@ fn project_check_vs_tsgo_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
         .collect()
 }
 
-fn workflow_vs_tsgo_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
-    workflow_vs_tsgo(rows)
+fn workflow_vs_corsa_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
+    workflow_vs_corsa(rows)
         .into_iter()
         .map(|comparison| {
             json!({
@@ -131,52 +131,52 @@ struct Comparison<'a> {
     vs_baseline_x: f64,
 }
 
-fn project_check_vs_tsgo(rows: &[ToolRow]) -> Vec<Comparison<'_>> {
+fn project_check_vs_corsa(rows: &[ToolRow]) -> Vec<Comparison<'_>> {
     let mut items = Vec::new();
     for row in rows
         .iter()
         .filter(|row| row.workload.as_str() == "project_check")
     {
-        let Some(tsgo) = rows.iter().find(|candidate| {
+        let Some(corsa) = rows.iter().find(|candidate| {
             candidate.workload.as_str() == "project_check"
                 && candidate.dataset == row.dataset
-                && candidate.tool.as_str() == "tsgo"
+                && candidate.tool.as_str() == "corsa"
         }) else {
             continue;
         };
         items.push(Comparison {
             dataset: row.dataset.as_str(),
             tool: row.tool.as_str(),
-            baseline_tool: "tsgo",
+            baseline_tool: "corsa",
             median_ms: row.stats.median_ms(),
-            baseline_median_ms: tsgo.stats.median_ms(),
-            vs_baseline_x: tsgo.stats.median_ms() / row.stats.median_ms(),
+            baseline_median_ms: corsa.stats.median_ms(),
+            vs_baseline_x: corsa.stats.median_ms() / row.stats.median_ms(),
         });
     }
     sort_comparisons(&mut items);
     items
 }
 
-fn workflow_vs_tsgo(rows: &[ToolRow]) -> Vec<Comparison<'_>> {
+fn workflow_vs_corsa(rows: &[ToolRow]) -> Vec<Comparison<'_>> {
     let mut items = Vec::new();
     for row in rows
         .iter()
         .filter(|row| row.workload.as_str() == "editor_workflow")
     {
-        let Some(tsgo) = rows.iter().find(|candidate| {
+        let Some(corsa) = rows.iter().find(|candidate| {
             candidate.workload.as_str() == "project_check"
                 && candidate.dataset == row.dataset
-                && candidate.tool.as_str() == "tsgo"
+                && candidate.tool.as_str() == "corsa"
         }) else {
             continue;
         };
         items.push(Comparison {
             dataset: row.dataset.as_str(),
             tool: row.tool.as_str(),
-            baseline_tool: "tsgo-cli-project-check",
+            baseline_tool: "corsa-cli-project-check",
             median_ms: row.stats.median_ms(),
-            baseline_median_ms: tsgo.stats.median_ms(),
-            vs_baseline_x: tsgo.stats.median_ms() / row.stats.median_ms(),
+            baseline_median_ms: corsa.stats.median_ms(),
+            vs_baseline_x: corsa.stats.median_ms() / row.stats.median_ms(),
         });
     }
     sort_comparisons(&mut items);

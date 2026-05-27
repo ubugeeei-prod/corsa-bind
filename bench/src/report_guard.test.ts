@@ -7,7 +7,7 @@ import {
   readTsBenchEntries,
 } from "./report";
 
-const benchCase = process.env.TSGO_REQUIRE_BENCH_REPORTS === "1" ? it : it.skip;
+const benchCase = process.env.CORSA_REQUIRE_BENCH_REPORTS === "1" ? it : it.skip;
 
 const tsScenarios = [
   "spawn+initialize",
