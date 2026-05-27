@@ -251,6 +251,80 @@ describe("corsa oxlint type locations", () => {
     expect(seen.declarationText).toContain("class Construct");
   });
 
+  integrationCase("resolves the symbol type at a location instead of the node type", () => {
+    const seen: Record<string, string | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "symbol-type-at-location",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise getTypeOfSymbolAtLocation",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassDeclaration(node: any) {
+            const type = checker.getTypeAtLocation(node);
+            if (!type) {
+              return;
+            }
+            const property = checker
+              .getPropertiesOfType(type)
+              .find((symbol) => symbol.name === "myProp");
+            if (!property) {
+              return;
+            }
+            const atLocation = checker.getTypeOfSymbolAtLocation(property, node);
+            const ofSymbol = checker.getTypeOfSymbol(property);
+            if (!atLocation || !ofSymbol) {
+              return;
+            }
+            seen.atLocation = checker.typeToString(atLocation);
+            seen.ofSymbol = checker.typeToString(ofSymbol);
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("symbol-type-at-location", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface MyPropType {",
+            "  x: string;",
+            "}",
+            "class SomeClass {",
+            "  myProp: MyPropType = { x: \"\" };",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.atLocation).toBe("MyPropType");
+    expect(seen.ofSymbol).toBe("MyPropType");
+  });
+
   integrationCase("exposes constituent and mapped type traversal helpers", () => {
     const seen: Record<
       string,
