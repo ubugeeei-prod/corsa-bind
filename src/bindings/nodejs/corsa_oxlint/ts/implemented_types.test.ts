@@ -103,13 +103,13 @@ describe("corsa oxlint implemented types", () => {
               return;
             }
             const type = checker.getTypeAtLocation(node);
-            seen.byNode = checker.getImplementedTypes(node).map((implemented) =>
-              checker.typeToString(implemented),
-            );
+            seen.byNode = checker
+              .getImplementedTypes(node)
+              .map((implemented) => checker.typeToString(implemented));
             seen.byType = type
-              ? checker.getImplementedTypesOfType(type).map((implemented) =>
-                  checker.typeToString(implemented),
-                )
+              ? checker
+                  .getImplementedTypesOfType(type)
+                  .map((implemented) => checker.typeToString(implemented))
               : undefined;
           },
         };

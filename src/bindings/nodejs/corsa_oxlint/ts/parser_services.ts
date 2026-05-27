@@ -101,9 +101,7 @@ function resolveEslintParserServices(
   return undefined;
 }
 
-function hasEslintParserServices(
-  value: unknown,
-): value is ParserServices {
+function hasEslintParserServices(value: unknown): value is ParserServices {
   return Boolean(
     value &&
     typeof value === "object" &&

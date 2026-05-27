@@ -304,7 +304,7 @@ describe("corsa oxlint type locations", () => {
             "  x: string;",
             "}",
             "class SomeClass {",
-            "  myProp: MyPropType = { x: \"\" };",
+            '  myProp: MyPropType = { x: "" };',
             "}",
           ].join("\n"),
           settings: {
