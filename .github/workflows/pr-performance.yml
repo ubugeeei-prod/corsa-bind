@@ -72,6 +72,23 @@ jobs:
       - name: Sync pinned Corsa ref
         run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
 
+      - name: Resolve benchmark compatibility
+        id: compat
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d ref/corsa-upstream ]; then
+            echo "build_corsa_task=build_corsa" >> "$GITHUB_OUTPUT"
+            echo "build_oxlint_task=build_corsa_oxlint" >> "$GITHUB_OUTPUT"
+          elif [ -d ref/typescript-go ]; then
+            ln -s typescript-go ref/corsa-upstream
+            echo "build_corsa_task=build_tsgo" >> "$GITHUB_OUTPUT"
+            echo "build_oxlint_task=build_typescript_oxlint" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing upstream checkout" >&2
+            exit 1
+          fi
+
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -86,10 +103,10 @@ jobs:
           run-install: true
 
       - name: Build pinned Corsa binary
-        run: vp run -w build_corsa
+        run: vp run -w ${{ steps.compat.outputs.build_corsa_task }}
 
       - name: Build corsa-oxlint package
-        run: vp run -w build_typescript_oxlint
+        run: vp run -w ${{ steps.compat.outputs.build_oxlint_task }}
 
       - name: Install benchmark comparison dependencies
         run: vp run -w bench_tooling_setup
