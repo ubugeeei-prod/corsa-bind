@@ -27,8 +27,9 @@ export function getParserServices(
     return current;
   }
   const parserOptions = resolveTypeAwareParserOptions(context);
-  if (!parserOptions.corsa && hasEslintParserServices(context.parserServices)) {
-    const services = createEslintParserServices(context);
+  const eslintParserServices = resolveEslintParserServices(context);
+  if (!parserOptions.corsa && eslintParserServices) {
+    const services = createEslintParserServices(eslintParserServices);
     parserServices.set(context, services);
     return services;
   }
@@ -69,9 +70,8 @@ export function getParserServices(
 }
 
 function createEslintParserServices(
-  context: ContextWithParserOptions,
+  parserServices: ParserServices,
 ): ParserServicesWithTypeInformation {
-  const parserServices = context.parserServices!;
   const checker = parserServices.program.getTypeChecker();
   return {
     program: parserServices.program,
@@ -89,8 +89,20 @@ function createEslintParserServices(
   };
 }
 
+function resolveEslintParserServices(
+  context: ContextWithParserOptions,
+): ParserServices | undefined {
+  const candidates = [context.parserServices, context.sourceCode.parserServices] as const;
+  for (const candidate of candidates) {
+    if (hasEslintParserServices(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 function hasEslintParserServices(
-  value: ContextWithParserOptions["parserServices"],
+  value: unknown,
 ): value is ParserServices {
   return Boolean(
     value &&
