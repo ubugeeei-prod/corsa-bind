@@ -19,30 +19,15 @@ env:
 
 jobs:
   js-format:
-    name: JS/TS Format (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: JS/TS Format
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     if: ${{ github.event_name != 'pull_request' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Restore Cargo cache
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
@@ -55,17 +40,10 @@ jobs:
         run: vp fmt --check
 
   js-lint-types:
-    name: JS/TS Lint and Types (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: JS/TS Lint and Types
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     if: ${{ github.event_name != 'pull_request' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -83,17 +61,10 @@ jobs:
         run: vp check --no-fmt
 
   rust-format:
-    name: Rust Format (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Rust Format
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     if: ${{ github.event_name != 'pull_request' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -109,17 +80,10 @@ jobs:
         run: cargo fmt --all --check
 
   rust-lint:
-    name: Rust Lint (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Rust Lint
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     if: ${{ github.event_name != 'pull_request' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -144,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["blacksmith-4vcpu-ubuntu-2404"]' || '["blacksmith-4vcpu-ubuntu-2404","blacksmith-6vcpu-macos-15","blacksmith-4vcpu-windows-2025"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -189,9 +153,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+          - blacksmith-4vcpu-ubuntu-2404
+          - blacksmith-6vcpu-macos-15
+          - blacksmith-4vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -215,17 +179,10 @@ jobs:
         run: vp run -w test
 
   public-facade:
-    name: Public Facade (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Public Facade
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     if: ${{ github.event_name != 'pull_request' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -246,7 +203,7 @@ jobs:
 
   non-node-bindings:
     name: Non-Node Bindings
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     if: ${{ github.event_name != 'pull_request' }}
     steps:
@@ -299,7 +256,7 @@ jobs:
 
   quality:
     name: Quality
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     needs:
       - js-format
@@ -351,9 +308,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+          - blacksmith-4vcpu-ubuntu-2404
+          - blacksmith-6vcpu-macos-15
+          - blacksmith-4vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -395,7 +352,7 @@ jobs:
 
   bench-corsa-ref:
     name: Corsa Ref Bench
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 60
     if: ${{ github.event_name != 'pull_request' }}
     steps:

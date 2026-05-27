@@ -30,7 +30,7 @@ jobs:
   github-release:
     if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v') && github.event.workflow_run.conclusion == 'success') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'github-release') }}
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 60
     environment: release
     steps:
