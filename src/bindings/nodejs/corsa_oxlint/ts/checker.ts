@@ -292,13 +292,16 @@ function implementedTypesFromSourceText(
     return [];
   }
   const classText = sourceText.slice(node.pos, node.end);
-  const bodyOpen = classText.indexOf("{");
-  const headerText = bodyOpen >= 0 ? classText.slice(0, bodyOpen) : classText;
-  const implementsIndex = headerText.indexOf("implements");
+  const classStart = findKeywordOutsideTrivia(classText, "class");
+  const headerStart = classStart >= 0 ? classStart : 0;
+  const bodyOpen = findClassBodyOpen(classText, headerStart);
+  const headerText = classText.slice(headerStart, bodyOpen >= 0 ? bodyOpen : classText.length);
+  const implementsIndex = findKeywordOutsideTrivia(headerText, "implements");
   if (implementsIndex < 0) {
     return [];
   }
   const clauseText = headerText.slice(implementsIndex + "implements".length);
+  const clauseStart = node.pos + headerStart + implementsIndex + "implements".length;
   return splitTopLevelRanges(clauseText, ",")
     .map((range) => {
       const raw = clauseText.slice(range.start, range.end);
@@ -307,8 +310,8 @@ function implementedTypesFromSourceText(
         return undefined;
       }
       const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
-      const pos = node.pos + implementsIndex + "implements".length + range.start + leading;
-      const end = node.pos + implementsIndex + "implements".length + range.end - trailing;
+      const pos = clauseStart + range.start + leading;
+      const end = clauseStart + range.end - trailing;
       const lookupNode: CorsaNode = {
         fileName: node.fileName,
         pos,
@@ -321,6 +324,66 @@ function implementedTypesFromSourceText(
         : checker.getTypeAtLocation(lookupNode);
     })
     .filter((type): type is CorsaType => type !== undefined);
+}
+
+function findClassBodyOpen(text: string, start: number): number {
+  const scanner = createScanner();
+  let angleDepth = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  for (let index = start; index < text.length; index += 1) {
+    const nextIndex = scanner.skip(text, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    const char = text[index];
+    if (char === "<") angleDepth += 1;
+    else if (char === ">") angleDepth = Math.max(0, angleDepth - 1);
+    else if (char === "(") parenDepth += 1;
+    else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
+    else if (char === "[") bracketDepth += 1;
+    else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+    else if (
+      char === "{" &&
+      angleDepth === 0 &&
+      parenDepth === 0 &&
+      bracketDepth === 0 &&
+      braceDepth === 0
+    ) {
+      return index;
+    } else if (char === "{") braceDepth += 1;
+    else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
+  }
+  return -1;
+}
+
+function findKeywordOutsideTrivia(text: string, keyword: string): number {
+  const scanner = createScanner();
+  for (let index = 0; index < text.length; index += 1) {
+    const nextIndex = scanner.skip(text, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    if (matchesKeyword(text, keyword, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function matchesKeyword(text: string, keyword: string, index: number): boolean {
+  return (
+    text.startsWith(keyword, index) &&
+    !isIdentifierPart(text[index - 1]) &&
+    !isIdentifierPart(text[index + keyword.length])
+  );
+}
+
+function isIdentifierPart(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9_$]/.test(char);
 }
 
 function splitTopLevelRanges(
@@ -336,7 +399,9 @@ function splitTopLevelRanges(
   let braceDepth = 0;
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
-    if (scanner.inQuote(char)) {
+    const nextIndex = scanner.skip(text, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
       continue;
     }
     if (char === "<") angleDepth += 1;
@@ -363,12 +428,29 @@ function splitTopLevelRanges(
 }
 
 function createScanner(): {
-  inQuote(char: string): boolean;
+  skip(text: string, index: number): number;
 } {
   let quote: string | undefined;
   let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
   return {
-    inQuote(char) {
+    skip(text, index) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (inLineComment) {
+        if (char === "\n" || char === "\r") {
+          inLineComment = false;
+        }
+        return index + 1;
+      }
+      if (inBlockComment) {
+        if (char === "*" && next === "/") {
+          inBlockComment = false;
+          return index + 2;
+        }
+        return index + 1;
+      }
       if (quote) {
         if (escaped) {
           escaped = false;
@@ -377,13 +459,21 @@ function createScanner(): {
         } else if (char === quote) {
           quote = undefined;
         }
-        return true;
+        return index + 1;
+      }
+      if (char === "/" && next === "/") {
+        inLineComment = true;
+        return index + 2;
+      }
+      if (char === "/" && next === "*") {
+        inBlockComment = true;
+        return index + 2;
       }
       if (char === '"' || char === "'" || char === "`") {
         quote = char;
-        return true;
+        return index + 1;
       }
-      return false;
+      return index;
     },
   };
 }
