@@ -530,10 +530,10 @@ export class CorsaProjectSession {
     if (signature.declaration) {
       this.rememberNode(signature.declaration);
     }
-    const parameters = signature.declaration
-      ? this.parameterInfosForDeclaration(signature.declaration)
-      : [];
     const parameterIds = Array.isArray(signature.parameters) ? signature.parameters : [];
+    const parameters = signature.declaration
+      ? this.parameterInfosForDeclaration(signature.declaration, parameterIds.length)
+      : [];
     parameterIds.forEach((id, index) => {
       this.rememberSyntheticSymbol(id, parameters[index]);
     });
@@ -587,35 +587,51 @@ export class CorsaProjectSession {
     this.#typeSourceById.clear();
   }
 
-  private parameterInfosForDeclaration(handle: string): readonly ParameterInfo[] {
+  private parameterInfosForDeclaration(
+    handle: string,
+    expectedCount: number,
+  ): readonly ParameterInfo[] {
     const source = this.sourceSliceForHandle(handle);
     if (!source) {
-      return [];
+      return this.parameterInfosForUtf8ByteDeclaration(handle);
     }
-    const open = findConstructorParameterOpen(source.text);
-    if (open < 0) {
-      return [];
+    const parameters = parameterInfosForSource(source);
+    if (parameters.length >= expectedCount || expectedCount === 0) {
+      return parameters;
     }
-    const close = matchingCloseParen(source.text, open);
-    if (close < 0) {
-      return [];
-    }
-    const parametersText = source.text.slice(open + 1, close);
-    return splitTopLevelRanges(parametersText, ",")
-      .map((range) => parameterInfoForText(source.node, parametersText, range, open + 1))
-      .filter((parameter): parameter is ParameterInfo => parameter !== undefined);
+    const utf8Parameters = this.parameterInfosForUtf8ByteDeclaration(handle);
+    return utf8Parameters.length > parameters.length ? utf8Parameters : parameters;
   }
 
-  private sourceSliceForHandle(handle: string): SourceSlice | undefined {
+  private parameterInfosForUtf8ByteDeclaration(handle: string): readonly ParameterInfo[] {
+    const source = this.sourceSliceForHandle(handle, "utf8-byte");
+    return source ? parameterInfosForSource(source) : [];
+  }
+
+  private sourceSliceForHandle(
+    handle: string,
+    offsetUnit: "utf16" | "utf8-byte" = "utf16",
+  ): SourceSlice | undefined {
     const node = this.getNode(handle);
     if (!node) {
       return undefined;
     }
     const sourceText = this.sourceTextForPath(node.fileName);
-    if (!sourceText || node.pos < 0 || node.end > sourceText.length || node.pos >= node.end) {
+    const normalizedNode =
+      offsetUnit === "utf8-byte" ? nodeFromUtf8ByteOffsets(node, sourceText) : node;
+    if (
+      !sourceText ||
+      !normalizedNode ||
+      normalizedNode.pos < 0 ||
+      normalizedNode.end > sourceText.length ||
+      normalizedNode.pos >= normalizedNode.end
+    ) {
       return undefined;
     }
-    return { node, text: sourceText.slice(node.pos, node.end) };
+    return {
+      node: normalizedNode,
+      text: sourceText.slice(normalizedNode.pos, normalizedNode.end),
+    };
   }
 
   private sourceTextForPath(path: string): string | undefined {
@@ -778,6 +794,21 @@ export class CorsaProjectSession {
   }
 }
 
+function parameterInfosForSource(source: SourceSlice): readonly ParameterInfo[] {
+  const open = findConstructorParameterOpen(source.text);
+  if (open < 0) {
+    return [];
+  }
+  const close = matchingCloseParen(source.text, open);
+  if (close < 0) {
+    return [];
+  }
+  const parametersText = source.text.slice(open + 1, close);
+  return splitTopLevelRanges(parametersText, ",")
+    .map((range) => parameterInfoForText(source.node, parametersText, range, open + 1))
+    .filter((parameter): parameter is ParameterInfo => parameter !== undefined);
+}
+
 function isArrayOrTupleLikeType(session: CorsaProjectSession, type: CorsaType): boolean {
   const texts =
     Array.isArray(type.texts) && type.texts.length > 0 ? type.texts : [session.typeToString(type)];
@@ -848,6 +879,62 @@ function parseNodeHandle(value: string): CorsaNode | undefined {
     return undefined;
   }
   return { id: value, fileName, pos, end, range: [pos, end] };
+}
+
+function nodeFromUtf8ByteOffsets(
+  node: CorsaNode,
+  sourceText: string | undefined,
+): CorsaNode | undefined {
+  if (sourceText === undefined) {
+    return undefined;
+  }
+  const pos = utf16IndexFromUtf8ByteOffset(sourceText, node.pos);
+  const end = utf16IndexFromUtf8ByteOffset(sourceText, node.end);
+  if (pos === undefined || end === undefined || end < pos) {
+    return undefined;
+  }
+  return {
+    ...node,
+    pos,
+    end,
+    range: [pos, end],
+  };
+}
+
+function utf16IndexFromUtf8ByteOffset(text: string, byteOffset: number): number | undefined {
+  if (!Number.isInteger(byteOffset) || byteOffset < 0) {
+    return undefined;
+  }
+  let bytes = 0;
+  for (let index = 0; index < text.length; ) {
+    if (bytes === byteOffset) {
+      return index;
+    }
+    const codePoint = text.codePointAt(index);
+    if (codePoint === undefined) {
+      break;
+    }
+    const nextBytes = bytes + utf8ByteLengthOfCodePoint(codePoint);
+    if (nextBytes > byteOffset) {
+      return undefined;
+    }
+    bytes = nextBytes;
+    index += codePoint > 0xffff ? 2 : 1;
+  }
+  return bytes === byteOffset ? text.length : undefined;
+}
+
+function utf8ByteLengthOfCodePoint(codePoint: number): number {
+  if (codePoint <= 0x7f) {
+    return 1;
+  }
+  if (codePoint <= 0x7ff) {
+    return 2;
+  }
+  if (codePoint <= 0xffff) {
+    return 3;
+  }
+  return 4;
 }
 
 function parameterInfoForText(
