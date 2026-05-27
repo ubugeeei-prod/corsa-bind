@@ -118,7 +118,16 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
         .filter((type): type is CorsaType => type !== undefined);
     },
     getImplementedTypesOfType(type) {
-      return sessionForContext(context).session.getBaseTypes(type);
+      const session = sessionForContext(context).session;
+      const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
+      const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+      const declarationNode = declaration ? session.getNode(declaration) : undefined;
+      const sourceText = declarationNode
+        ? sourceTextForPath(context, declarationNode.fileName)
+        : undefined;
+      return declarationNode && sourceText
+        ? implementedTypesFromSourceText(declarationNode, sourceText, this)
+        : [];
     },
     getTypeArguments(type) {
       return sessionForContext(context).session.getTypeArguments(type);
@@ -174,14 +183,20 @@ function sourceTextFor(
   context: ContextWithParserOptions,
   node: Node | CorsaNode | CorsaType | CorsaSymbol | CorsaSignature,
 ): string | undefined {
-  const fileName = filenameFor(context, node);
+  return sourceTextForPath(context, filenameFor(context, node));
+}
+
+function sourceTextForPath(
+  context: ContextWithParserOptions,
+  fileName: string,
+): string | undefined {
   const normalizedFileName = fileName.toLowerCase();
   const normalizedContextFilename = context.filename.toLowerCase();
   return normalizedFileName === normalizedContextFilename ||
     normalizedFileName.endsWith(normalizedContextFilename) ||
     normalizedContextFilename.endsWith(normalizedFileName)
     ? context.sourceCode.text
-    : undefined;
+    : sessionForContext(context).session.getSourceTextForPath(fileName);
 }
 
 function typeOfNewExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaType | undefined {
@@ -258,39 +273,50 @@ function implementedTypesFromCorsaNode(
   }
   const sourceText = sourceTextFor(context, node);
   if (sourceText) {
-    const classText = sourceText.slice(node.pos, node.end);
-    const bodyOpen = classText.indexOf("{");
-    const headerText = bodyOpen >= 0 ? classText.slice(0, bodyOpen) : classText;
-    const implementsIndex = headerText.indexOf("implements");
-    if (implementsIndex >= 0) {
-      const clauseText = headerText.slice(implementsIndex + "implements".length);
-      const implemented = splitTopLevelRanges(clauseText, ",")
-        .map((range) => {
-          const raw = clauseText.slice(range.start, range.end);
-          const leading = raw.search(/\S/);
-          if (leading < 0) {
-            return undefined;
-          }
-          const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
-          const pos = node.pos + implementsIndex + "implements".length + range.start + leading;
-          const end = node.pos + implementsIndex + "implements".length + range.end - trailing;
-          const lookupNode: CorsaNode = {
-            fileName: node.fileName,
-            pos,
-            end,
-            range: [pos, end] as const,
-          };
-          const symbol = checker.getSymbolAtLocation(lookupNode);
-          return symbol
-            ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
-            : checker.getTypeAtLocation(lookupNode);
-        })
-        .filter((type): type is CorsaType => type !== undefined);
-      return implemented;
-    }
+    return implementedTypesFromSourceText(node, sourceText, checker);
   }
   const type = checker.getTypeAtLocation(node);
   return type ? checker.getImplementedTypesOfType(type) : [];
+}
+
+function implementedTypesFromSourceText(
+  node: CorsaNode,
+  sourceText: string,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  if (node.pos < 0 || node.end > sourceText.length || node.pos >= node.end) {
+    return [];
+  }
+  const classText = sourceText.slice(node.pos, node.end);
+  const bodyOpen = classText.indexOf("{");
+  const headerText = bodyOpen >= 0 ? classText.slice(0, bodyOpen) : classText;
+  const implementsIndex = headerText.indexOf("implements");
+  if (implementsIndex < 0) {
+    return [];
+  }
+  const clauseText = headerText.slice(implementsIndex + "implements".length);
+  return splitTopLevelRanges(clauseText, ",")
+    .map((range) => {
+      const raw = clauseText.slice(range.start, range.end);
+      const leading = raw.search(/\S/);
+      if (leading < 0) {
+        return undefined;
+      }
+      const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
+      const pos = node.pos + implementsIndex + "implements".length + range.start + leading;
+      const end = node.pos + implementsIndex + "implements".length + range.end - trailing;
+      const lookupNode: CorsaNode = {
+        fileName: node.fileName,
+        pos,
+        end,
+        range: [pos, end] as const,
+      };
+      const symbol = checker.getSymbolAtLocation(lookupNode);
+      return symbol
+        ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
+        : checker.getTypeAtLocation(lookupNode);
+    })
+    .filter((type): type is CorsaType => type !== undefined);
 }
 
 function splitTopLevelRanges(

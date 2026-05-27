@@ -77,6 +77,76 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.PlainClass).toEqual([]);
   });
 
+  integrationCase("returns implemented interfaces from class types", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "implemented-types-of-type",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise implemented types resolved from a class type",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassDeclaration(node: any) {
+            if (node.id?.name !== "ChildClass") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.byNode = checker.getImplementedTypes(node).map((implemented) =>
+              checker.typeToString(implemented),
+            );
+            seen.byType = type
+              ? checker.getImplementedTypesOfType(type).map((implemented) =>
+                  checker.typeToString(implemented),
+                )
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("implemented-types-of-type", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface IChild {",
+            "  x: string;",
+            "}",
+            "class Parent {}",
+            "class ChildClass extends Parent implements IChild {",
+            "  x = '';",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.byNode).toEqual(["IChild"]);
+    expect(seen.byType).toEqual(["IChild"]);
+  });
+
   integrationCase(
     "resolves implemented types from a declaration node recovered from type metadata",
     () => {

@@ -174,6 +174,10 @@ export class CorsaProjectSession {
     return this.#nodesById.get(node) ?? this.rememberNode(node);
   }
 
+  getSourceTextForPath(path: string): string | undefined {
+    return this.sourceTextForPath(path);
+  }
+
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined {
     const type = this.rememberType(this.tryGetSymbolType(symbol, "getTypeOfSymbol"));
     this.rememberTypeSource(type, symbol.valueDeclaration);
