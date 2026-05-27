@@ -39,6 +39,9 @@ export function createProgram(
 export function createTypeChecker(context: ContextWithParserOptions): TsgoTypeCheckerShape {
   return {
     getTypeAtLocation(node) {
+      if ((node as { readonly type?: string }).type === "NewExpression") {
+        return typeOfNewExpression(node as Node, this);
+      }
       const lookupNode = nodeForTypeLookup(node);
       return sessionForContext(context).session.getTypeAtPosition(
         filenameFor(context, lookupNode),
@@ -179,6 +182,21 @@ function sourceTextFor(
     normalizedContextFilename.endsWith(normalizedFileName)
     ? context.sourceCode.text
     : undefined;
+}
+
+function typeOfNewExpression(node: Node, checker: TsgoTypeCheckerShape): TsgoType | undefined {
+  const callee = childNode(node, "callee");
+  if (!callee) {
+    return undefined;
+  }
+  const calleeType = checker.getTypeAtLocation(callee);
+  if (!calleeType) {
+    return undefined;
+  }
+  const constructSignature = checker.getSignaturesOfType(calleeType, 1)[0];
+  return constructSignature
+    ? (checker.getReturnTypeOfSignature(constructSignature) ?? calleeType)
+    : calleeType;
 }
 
 function nodeForTypeLookup(node: Node | TsgoNode): Node | TsgoNode {
