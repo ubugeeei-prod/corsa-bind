@@ -75,6 +75,11 @@ Corsa upstream snapshot at the time of writing:
 - Lock file: [`corsa_ref.lock.toml`](./corsa_ref.lock.toml), which is the
   source of truth for the exact upstream ref and tree.
 
+## Sponsors
+
+CI/CD runners for this project are supported by
+[Blacksmith](https://www.blacksmith.sh/).
+
 ## Workspace Layout
 
 - `corsa_core`: shared errors, process handles, and fast-path primitives

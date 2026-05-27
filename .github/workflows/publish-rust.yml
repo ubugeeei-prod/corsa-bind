@@ -33,7 +33,7 @@ jobs:
   release-gates:
     if: ${{ (github.event_name == 'push' || inputs.confirm == 'publish-rust') && github.ref_type == 'tag' }}
     name: Release Gates
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -98,7 +98,7 @@ jobs:
     name: Publish Rust Crates
     needs:
       - release-gates
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     environment: release
     permissions:
