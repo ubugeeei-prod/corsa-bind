@@ -1,8 +1,10 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { createTypeChecker } from "./checker";
 import { defaultCorsaExecutable } from "./context";
 import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
@@ -220,4 +222,83 @@ describe("corsa oxlint implemented types", () => {
       expect(seen.foo).toEqual(["IFoo"]);
     },
   );
+
+  integrationCase("returns implemented interfaces from external declaration class types", () => {
+    const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-external-implements-"));
+    const depDir = resolve(workspace, "node_modules", "external-dep");
+    const srcDir = resolve(workspace, "src");
+    mkdirSync(depDir, { recursive: true });
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(
+      resolve(depDir, "package.json"),
+      JSON.stringify({ name: "external-dep", version: "1.0.0", types: "index.d.ts" }),
+    );
+    writeFileSync(
+      resolve(depDir, "index.d.ts"),
+      [
+        "export interface IFoo {",
+        "  readonly foo: string;",
+        "}",
+        "export declare class Base implements IFoo {",
+        "  readonly foo: string;",
+        "}",
+        "export declare class Foo extends Base {}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      resolve(workspace, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: "esnext",
+            moduleResolution: "node",
+            target: "es2022",
+            strict: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      ),
+    );
+    const filename = resolve(srcDir, "index.ts");
+    const sourceText = ['import { Foo } from "external-dep";', "new Foo();"].join("\n");
+    writeFileSync(filename, sourceText);
+    const checker = createTypeChecker({
+      cwd: workspace,
+      filename,
+      sourceCode: { text: sourceText },
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            project: "tsconfig.json",
+            corsa: {
+              executable: realCorsaBinary,
+              cwd: workspace,
+              mode: "jsonrpc",
+            },
+          },
+        },
+      },
+    } as any);
+    const newExpressionIndex = sourceText.indexOf("new Foo()");
+    const calleeIndex = sourceText.indexOf("Foo()", newExpressionIndex);
+    const instanceType = checker.getTypeAtLocation({
+      type: "NewExpression",
+      range: [newExpressionIndex, newExpressionIndex + "new Foo()".length] as const,
+      callee: {
+        type: "Identifier",
+        name: "Foo",
+        range: [calleeIndex, calleeIndex + "Foo".length] as const,
+      },
+    } as any);
+    const baseType = instanceType ? checker.getBaseTypes(instanceType)[0] : undefined;
+
+    expect(baseType ? checker.typeToString(baseType) : undefined).toBe("Base");
+    expect(
+      baseType
+        ? checker.getImplementedTypesOfType(baseType).map((type) => checker.typeToString(type))
+        : undefined,
+    ).toEqual(["IFoo"]);
+  });
 });
