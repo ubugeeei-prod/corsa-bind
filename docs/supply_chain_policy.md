@@ -1,7 +1,7 @@
 # Supply Chain Policy
 
 This document defines the minimum dependency and release-hardening policy for
-`corsa`.
+`corsa-bind`.
 
 ## Rust Dependency Gates
 
