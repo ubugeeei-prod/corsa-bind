@@ -767,6 +767,25 @@ fn allows_restricted_template_expression_default_primitives() {
 }
 
 #[test]
+fn rejects_promise_wrapped_nullish_template_expression() {
+    let diagnostics = registry()
+        .run_rule(
+            "restrict-template-expressions",
+            &template_node(vec![typed_node(
+                "Identifier",
+                TextRange::new(9, 31),
+                "Promise<string | null>",
+            )]),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].rule_name, "restrict-template-expressions");
+    assert_eq!(diagnostics[0].message_id, "invalidType");
+    assert_eq!(diagnostics[0].range, TextRange::new(9, 31));
+}
+
+#[test]
 fn reports_dot_notation_for_literal_property() {
     let diagnostics = registry()
         .run_rule(
