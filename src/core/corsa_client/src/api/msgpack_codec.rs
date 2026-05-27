@@ -1,4 +1,4 @@
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::fast::compact_format;
 use std::io::{Read, Write};
 
@@ -21,7 +21,7 @@ pub(crate) fn read_tuple<R: Read>(reader: &mut R) -> Result<MsgpackTuple> {
     let mut tag = [0_u8; 1];
     reader.read_exact(&mut tag)?;
     if tag[0] != 0x93 {
-        return Err(TsgoError::Protocol(compact_format(format_args!(
+        return Err(CorsaError::Protocol(compact_format(format_args!(
             "expected tuple marker, got {:x}",
             tag[0]
         ))));
@@ -56,7 +56,7 @@ fn read_int<R: Read>(reader: &mut R) -> Result<u8> {
         return Ok(buf[0]);
     }
     if buf[0] != 0xcc {
-        return Err(TsgoError::Protocol(compact_format(format_args!(
+        return Err(CorsaError::Protocol(compact_format(format_args!(
             "expected uint8 marker, got {:x}",
             buf[0]
         ))));
@@ -73,20 +73,20 @@ fn read_bin<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
         0xc5 => read_len::<2, _>(reader)?,
         0xc6 => read_len::<4, _>(reader)?,
         other => {
-            return Err(TsgoError::Protocol(compact_format(format_args!(
+            return Err(CorsaError::Protocol(compact_format(format_args!(
                 "expected bin marker, got {:x}",
                 other
             ))));
         }
     };
     if len > MAX_BIN_BYTES {
-        return Err(TsgoError::Protocol(compact_format(format_args!(
+        return Err(CorsaError::Protocol(compact_format(format_args!(
             "msgpack bin is too large: {len} bytes exceeds {MAX_BIN_BYTES} byte safety limit"
         ))));
     }
     let mut buf = Vec::new();
     buf.try_reserve_exact(len).map_err(|err| {
-        TsgoError::Protocol(compact_format(format_args!(
+        CorsaError::Protocol(compact_format(format_args!(
             "failed to reserve msgpack bin buffer for {len} bytes: {err}"
         )))
     })?;
@@ -112,7 +112,7 @@ fn read_len<const N: usize, R: Read>(reader: &mut R) -> Result<usize> {
             reader.read_exact(&mut buf)?;
             Ok(u32::from_be_bytes(buf) as usize)
         }
-        _ => Err(TsgoError::Protocol(compact_format(format_args!(
+        _ => Err(CorsaError::Protocol(compact_format(format_args!(
             "unsupported msgpack length width: {N}"
         )))),
     }
@@ -120,7 +120,7 @@ fn read_len<const N: usize, R: Read>(reader: &mut R) -> Result<usize> {
 
 fn write_bin<W: Write>(writer: &mut W, bytes: &[u8]) -> Result<()> {
     if bytes.len() > MAX_BIN_BYTES {
-        return Err(TsgoError::Protocol(compact_format(format_args!(
+        return Err(CorsaError::Protocol(compact_format(format_args!(
             "msgpack bin is too large: {} bytes exceeds {MAX_BIN_BYTES} byte safety limit",
             bytes.len()
         ))));

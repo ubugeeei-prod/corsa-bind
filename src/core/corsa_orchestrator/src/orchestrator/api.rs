@@ -2,7 +2,7 @@ use super::panic_payload::panic_payload_message;
 use crate::Result;
 use crate::api::{ApiClient, ApiProfile, ManagedSnapshot, UpdateSnapshotParams};
 use corsa_core::{
-    SharedObserver, TsgoEvent,
+    CorsaEvent, SharedObserver,
     fast::{CompactString, FastMap, SmallVec, compact_format},
     observe,
 };
@@ -164,7 +164,7 @@ impl ApiOrchestrator {
     /// startup cost ahead of the first user request.
     pub async fn prewarm(&self, profile: &ApiProfile, replicas: usize) -> Result<()> {
         if replicas > self.config.max_workers_per_profile {
-            return Err(crate::TsgoError::Protocol(compact_format(format_args!(
+            return Err(crate::CorsaError::Protocol(compact_format(format_args!(
                 "requested {replicas} workers for profile `{}` exceeds the configured maximum of {}",
                 profile.id, self.config.max_workers_per_profile
             ))));
@@ -304,7 +304,7 @@ impl ApiOrchestrator {
                         let job = match work_rx.lock() {
                             Ok(work_rx) => work_rx.recv(),
                             Err(_) => {
-                                let _ = result_tx.send(Err(crate::TsgoError::Join(
+                                let _ = result_tx.send(Err(crate::CorsaError::Join(
                                     CompactString::from("orchestrator work queue lock poisoned"),
                                 )));
                                 break;
@@ -316,7 +316,7 @@ impl ApiOrchestrator {
                         let output = catch_unwind(AssertUnwindSafe(|| {
                             block_on(async {
                                 let client = self.lease(&profile).await?;
-                                Ok::<_, crate::TsgoError>((index, task(client, input).await?))
+                                Ok::<_, crate::CorsaError>((index, task(client, input).await?))
                             })
                         }))
                         .unwrap_or_else(|panic| Err(batch_worker_panic(panic)));
@@ -330,17 +330,17 @@ impl ApiOrchestrator {
             for (index, input) in inputs.into_iter().enumerate() {
                 work_tx
                     .send((index, input))
-                    .map_err(|_| crate::TsgoError::Closed("orchestrator work"))?;
+                    .map_err(|_| crate::CorsaError::Closed("orchestrator work"))?;
             }
             drop(work_tx);
-            Ok::<_, crate::TsgoError>(())
+            Ok::<_, crate::CorsaError>(())
         })?;
         let mut values = SmallVec::<[(usize, R); 8]>::new();
         for _ in 0..work_count {
             values.push(
                 result_rx
                     .recv()
-                    .map_err(|_| crate::TsgoError::Closed("orchestrator result"))??,
+                    .map_err(|_| crate::CorsaError::Closed("orchestrator result"))??,
             );
         }
         values.sort_by_key(|(index, _)| *index);
@@ -372,7 +372,7 @@ impl ApiOrchestrator {
             if self.snapshots.write().remove(evicted.as_str()).is_some() {
                 observe(
                     self.config.observer.as_ref(),
-                    TsgoEvent::OrchestratorSnapshotEvicted {
+                    CorsaEvent::OrchestratorSnapshotEvicted {
                         key: evicted.clone(),
                     },
                 );
@@ -392,7 +392,7 @@ impl ApiOrchestrator {
             if self.cached.write().remove(evicted.as_str()).is_some() {
                 observe(
                     self.config.observer.as_ref(),
-                    TsgoEvent::OrchestratorResultEvicted {
+                    CorsaEvent::OrchestratorResultEvicted {
                         key: evicted.clone(),
                     },
                 );
@@ -402,9 +402,9 @@ impl ApiOrchestrator {
     }
 }
 
-fn batch_worker_panic(panic: Box<dyn Any + Send>) -> crate::TsgoError {
+fn batch_worker_panic(panic: Box<dyn Any + Send>) -> crate::CorsaError {
     let message = panic_payload_message(panic.as_ref());
-    crate::TsgoError::Join(compact_format(format_args!(
+    crate::CorsaError::Join(compact_format(format_args!(
         "orchestrator batch worker panicked: {message}"
     )))
 }

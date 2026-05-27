@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { nodeBindingPackage, npmPackages, typescriptOxlintPackage } from "./npm_release_utils.ts";
+import { nodeBindingPackage, npmPackages, corsaOxlintPackage } from "./npm_release_utils.ts";
 import { rootDir, runCommand } from "./shared.ts";
 
 export type ReleaseBump = "major" | "minor" | "patch";
@@ -245,7 +245,7 @@ export function readWorkspaceVersion(): string {
     versions.add(getCargoPackageVersion(resolve(rootDir, relativePath)));
   }
 
-  for (const pkg of [nodeBindingPackage, typescriptOxlintPackage]) {
+  for (const pkg of [nodeBindingPackage, corsaOxlintPackage]) {
     versions.add(JSON.parse(readText(resolve(pkg.path, "package.json"))).version);
   }
 
@@ -308,7 +308,7 @@ export function updateWorkspaceVersion(nextVersion: string): string[] {
     }
   }
 
-  for (const pkg of [nodeBindingPackage, typescriptOxlintPackage]) {
+  for (const pkg of [nodeBindingPackage, corsaOxlintPackage]) {
     const manifestPath = resolve(pkg.path, "package.json");
     if (updatePackageManifest(manifestPath, nextVersion)) {
       changedPaths.push(manifestPath);

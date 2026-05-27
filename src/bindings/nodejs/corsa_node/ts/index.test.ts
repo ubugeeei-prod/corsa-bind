@@ -7,9 +7,6 @@ import {
   CorsaApiClient,
   CorsaDistributedOrchestrator,
   CorsaVirtualDocument,
-  TsgoApiClient,
-  TsgoDistributedOrchestrator,
-  TsgoVirtualDocument,
   classifyTypeText,
   isAnyLikeTypeTexts,
   isArrayLikeTypeTexts,
@@ -26,21 +23,21 @@ import {
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
-const mockBinary = resolve(workspaceRoot, `target/debug/mock_tsgo${executableSuffix}`);
-const realBinary = resolve(workspaceRoot, `.cache/tsgo${executableSuffix}`);
+const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
+const realBinary = resolve(workspaceRoot, `.cache/corsa${executableSuffix}`);
 const realDatasetCandidates = [
-  "ref/typescript-go/_packages/native-preview/tsconfig.json",
-  "ref/typescript-go/_packages/api/tsconfig.json",
+  "ref/corsa-upstream/_packages/native-preview/tsconfig.json",
+  "ref/corsa-upstream/_packages/api/tsconfig.json",
 ].map((path) => resolve(workspaceRoot, path));
 const realDataset =
   realDatasetCandidates.find((candidate) => existsSync(candidate)) ?? realDatasetCandidates[0];
-const realTsgoReady = existsSync(realBinary) && existsSync(realDataset);
+const realCorsaReady = existsSync(realBinary) && existsSync(realDataset);
 
 describe("CorsaApiClient", () => {
-  it("keeps Tsgo aliases wired to the Corsa wrapper classes", () => {
-    expect(TsgoApiClient).toBe(CorsaApiClient);
-    expect(TsgoVirtualDocument).toBe(CorsaVirtualDocument);
-    expect(TsgoDistributedOrchestrator).toBe(CorsaDistributedOrchestrator);
+  it("exports the Corsa wrapper classes", () => {
+    expect(CorsaApiClient).toBeTypeOf("function");
+    expect(CorsaVirtualDocument).toBeTypeOf("function");
+    expect(CorsaDistributedOrchestrator).toBeTypeOf("function");
   });
 
   it("evaluates Rust-backed unsafe type flow predicates", () => {
@@ -182,7 +179,7 @@ describe("CorsaApiClient", () => {
     ]);
   });
 
-  it("roundtrips through the mock tsgo binary", () => {
+  it("roundtrips through the mock corsa binary", () => {
     const client = CorsaApiClient.spawn({
       executable: mockBinary,
       cwd: workspaceRoot,
@@ -261,7 +258,7 @@ describe("CorsaApiClient", () => {
     }
   });
 
-  it("roundtrips through the mock tsgo binary without blocking on async APIs", async () => {
+  it("roundtrips through the mock corsa binary without blocking on async APIs", async () => {
     const client = await CorsaApiClient.spawnAsync({
       executable: mockBinary,
       cwd: workspaceRoot,
@@ -306,7 +303,7 @@ describe("CorsaApiClient", () => {
   });
 
   for (const mode of ["msgpack", "jsonrpc"] as const) {
-    const realCase = realTsgoReady ? it : it.skip;
+    const realCase = realCorsaReady ? it : it.skip;
 
     realCase(`keeps real ${mode} snapshots alive across follow-up calls`, () => {
       const client = CorsaApiClient.spawn({

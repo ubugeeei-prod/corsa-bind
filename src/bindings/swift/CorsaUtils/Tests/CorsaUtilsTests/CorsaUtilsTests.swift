@@ -15,11 +15,11 @@ import Testing
 
 @Test func apiClientCheckerPositionBindings() async throws {
     let root = URL(fileURLWithPath: "../../../..", relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)).standardizedFileURL
-    let binary = root.appending(path: "target/debug/mock_tsgo").path
+    let binary = root.appending(path: "target/debug/mock_corsa").path
     guard FileManager.default.fileExists(atPath: binary) else {
         return
     }
-    let client = try CorsaTsgoApiClient(options: CorsaTsgoApiClientOptions(
+    let client = try CorsaApiClient(options: CorsaApiClientOptions(
         executable: binary,
         cwd: root.path,
         mode: .jsonrpc
@@ -55,11 +55,11 @@ import Testing
 
 @Test func apiClientTypeArgumentsBinding() async throws {
     let root = URL(fileURLWithPath: "../../../..", relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)).standardizedFileURL
-    let binary = root.appending(path: "target/debug/mock_tsgo").path
+    let binary = root.appending(path: "target/debug/mock_corsa").path
     guard FileManager.default.fileExists(atPath: binary) else {
         return
     }
-    let client = try CorsaTsgoApiClient(options: CorsaTsgoApiClientOptions(
+    let client = try CorsaApiClient(options: CorsaApiClientOptions(
         executable: binary,
         cwd: root.path,
         mode: .jsonrpc
@@ -100,11 +100,11 @@ import Testing
 
 @Test func apiClientSymbolTypeBindings() async throws {
     let root = URL(fileURLWithPath: "../../../..", relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)).standardizedFileURL
-    let binary = root.appending(path: "target/debug/mock_tsgo").path
+    let binary = root.appending(path: "target/debug/mock_corsa").path
     guard FileManager.default.fileExists(atPath: binary) else {
         return
     }
-    let client = try CorsaTsgoApiClient(options: CorsaTsgoApiClientOptions(
+    let client = try CorsaApiClient(options: CorsaApiClientOptions(
         executable: binary,
         cwd: root.path,
         mode: .jsonrpc

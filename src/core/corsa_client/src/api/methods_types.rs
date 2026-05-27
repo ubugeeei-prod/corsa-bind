@@ -345,7 +345,7 @@ impl ApiClient {
         options: PrintNodeOptions,
     ) -> Result<String> {
         if !self.allows_unstable_upstream_calls() {
-            return Err(crate::TsgoError::Unsupported(
+            return Err(crate::CorsaError::Unsupported(
                 "printNode is disabled by default because upstream can panic on real project data; opt in with ApiSpawnConfig::with_allow_unstable_upstream_calls(true)",
             ));
         }

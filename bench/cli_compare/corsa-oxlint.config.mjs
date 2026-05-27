@@ -1,17 +1,17 @@
 import { dirname, resolve } from "node:path";
 
-const tsconfig = process.env.TSGO_RS_BENCH_TSCONFIG;
-const tsgoExecutable = process.env.TSGO_RS_BENCH_TSGO;
-const workspaceRoot = process.env.TSGO_RS_BENCH_ROOT;
+const tsconfig = process.env.CORSA_RS_BENCH_TSCONFIG;
+const corsaExecutable = process.env.CORSA_RS_BENCH_EXECUTABLE;
+const workspaceRoot = process.env.CORSA_RS_BENCH_ROOT;
 
 if (!tsconfig) {
-  throw new Error("TSGO_RS_BENCH_TSCONFIG is required");
+  throw new Error("CORSA_RS_BENCH_TSCONFIG is required");
 }
-if (!tsgoExecutable) {
-  throw new Error("TSGO_RS_BENCH_TSGO is required");
+if (!corsaExecutable) {
+  throw new Error("CORSA_RS_BENCH_EXECUTABLE is required");
 }
 if (!workspaceRoot) {
-  throw new Error("TSGO_RS_BENCH_ROOT is required");
+  throw new Error("CORSA_RS_BENCH_ROOT is required");
 }
 
 const tsconfigPath = resolve(tsconfig);
@@ -41,12 +41,12 @@ const rules = {
 export default {
   jsPlugins: [{ name: "corsa", specifier: "./corsa-oxlint-plugin.mjs" }],
   settings: {
-    typescriptOxlint: {
+    corsaOxlint: {
       parserOptions: {
         project: [tsconfigPath],
         tsconfigRootDir,
-        tsgo: {
-          executable: tsgoExecutable,
+        corsa: {
+          executable: corsaExecutable,
           cwd: workspaceRoot,
           mode: "msgpack",
           cacheLifetimeMs: 60_000,

@@ -47,18 +47,18 @@ int main(int argc, char **argv) {
     }
     const CorsaStrRef options = to_ref(argv[3]);
     for (int index = 0; index < iterations; ++index) {
-      CorsaTsgoApiClient *client = corsa_tsgo_api_client_spawn(options);
+      CorsaApiClient *client = corsa_api_client_spawn(options);
       if (client == NULL) {
         print_last_error_and_exit("spawn failed");
       }
-      const CorsaString payload = corsa_tsgo_api_client_initialize_json(client);
+      const CorsaString payload = corsa_api_client_initialize_json(client);
       checksum += payload.len;
       corsa_utils_string_free(payload);
-      if (!corsa_tsgo_api_client_close(client)) {
-        corsa_tsgo_api_client_free(client);
+      if (!corsa_api_client_close(client)) {
+        corsa_api_client_free(client);
         print_last_error_and_exit("close failed");
       }
-      corsa_tsgo_api_client_free(client);
+      corsa_api_client_free(client);
     }
   } else {
     fprintf(stderr, "unknown scenario: %s\n", scenario);

@@ -1,5 +1,5 @@
 use crate::{
-    Result, TsgoError,
+    CorsaError, Result,
     api::{ManagedSnapshot, ProjectResponse, SnapshotChanges, SnapshotHandle},
     lsp::{VirtualChange, VirtualDocument},
 };
@@ -130,7 +130,7 @@ impl ReplicatedState {
             }
             ReplicatedCommand::ApplyDocumentChange { uri, changes } => {
                 let document = self.documents.get_mut(uri.as_str()).ok_or_else(|| {
-                    TsgoError::Protocol(compact_format(format_args!(
+                    CorsaError::Protocol(compact_format(format_args!(
                         "unknown replicated document: {uri}"
                     )))
                 })?;

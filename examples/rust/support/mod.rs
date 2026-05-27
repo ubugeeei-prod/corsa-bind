@@ -43,24 +43,24 @@ pub fn example_cwd(name: &str) -> PathBuf {
 pub fn mock_binary() -> PathBuf {
     workspace_root()
         .join("target/debug")
-        .join(format!("mock_tsgo{}", executable_suffix()))
+        .join(format!("mock_corsa{}", executable_suffix()))
 }
 
 pub fn resolved_real_binary() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("TSGO_EXECUTABLE") {
+    if let Some(path) = std::env::var_os("CORSA_EXECUTABLE") {
         let path = PathBuf::from(path);
         if path.exists() {
             return Some(path);
         }
     }
     [
-        workspace_root().join(format!(".cache/tsgo{}", executable_suffix())),
+        workspace_root().join(format!(".cache/corsa{}", executable_suffix())),
         workspace_root().join(format!(
-            "ref/typescript-go/.cache/tsgo{}",
+            "ref/corsa-upstream/.cache/corsa{}",
             executable_suffix()
         )),
         workspace_root().join(format!(
-            "ref/typescript-go/built/local/tsgo{}",
+            "ref/corsa-upstream/built/local/corsa{}",
             executable_suffix()
         )),
     ]
@@ -70,13 +70,13 @@ pub fn resolved_real_binary() -> Option<PathBuf> {
 
 pub fn real_dataset() -> PathBuf {
     [
-        workspace_root().join("ref/typescript-go/_packages/native-preview/tsconfig.json"),
-        workspace_root().join("ref/typescript-go/_packages/api/tsconfig.json"),
+        workspace_root().join("ref/corsa-upstream/_packages/native-preview/tsconfig.json"),
+        workspace_root().join("ref/corsa-upstream/_packages/api/tsconfig.json"),
     ]
     .into_iter()
     .find(|path| path.exists())
     .unwrap_or_else(|| {
-        workspace_root().join("ref/typescript-go/_packages/native-preview/tsconfig.json")
+        workspace_root().join("ref/corsa-upstream/_packages/native-preview/tsconfig.json")
     })
 }
 
@@ -114,7 +114,7 @@ pub fn mock_lsp_config(example_name: &str) -> Result<LspSpawnConfig, CorsaError>
 
 pub fn real_api_config(_example_name: &str, mode: ApiMode) -> Result<ApiSpawnConfig, CorsaError> {
     let binary = resolved_real_binary().ok_or_else(|| {
-        CorsaError::Protocol("missing real Corsa binary; run `vp run -w build_tsgo` first".into())
+        CorsaError::Protocol("missing real Corsa binary; run `vp run -w build_corsa` first".into())
     })?;
     let dataset = real_dataset();
     require_path(

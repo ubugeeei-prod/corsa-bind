@@ -3,7 +3,7 @@ import { CorsaApiClient } from "@corsa-bind/napi";
 import { assertExists, isMain, realBinary, realDataset, workspaceRoot } from "../shared.ts";
 
 export function runRealSnapshotExample() {
-  assertExists(realBinary, "real Corsa binary", "run `vp run -w build_tsgo` first");
+  assertExists(realBinary, "real Corsa binary", "run `vp run -w build_corsa` first");
   assertExists(realDataset, "pinned Corsa dataset", "run `vp run -w sync_ref` first");
 
   const client = CorsaApiClient.spawn({

@@ -2,14 +2,11 @@ use std::{path::PathBuf, ptr};
 
 use crate::{
     api_client::{
-        corsa_tsgo_api_client_close, corsa_tsgo_api_client_free,
-        corsa_tsgo_api_client_get_declared_type_of_symbol_json,
-        corsa_tsgo_api_client_get_string_type_json,
-        corsa_tsgo_api_client_get_symbol_at_position_json,
-        corsa_tsgo_api_client_get_type_arguments_json,
-        corsa_tsgo_api_client_get_type_at_position_json,
-        corsa_tsgo_api_client_get_type_of_symbol_json, corsa_tsgo_api_client_spawn,
-        corsa_tsgo_api_client_update_snapshot_json,
+        corsa_api_client_close, corsa_api_client_free,
+        corsa_api_client_get_declared_type_of_symbol_json, corsa_api_client_get_string_type_json,
+        corsa_api_client_get_symbol_at_position_json, corsa_api_client_get_type_arguments_json,
+        corsa_api_client_get_type_at_position_json, corsa_api_client_get_type_of_symbol_json,
+        corsa_api_client_spawn, corsa_api_client_update_snapshot_json,
     },
     error::corsa_error_message_take,
     types::{
@@ -104,11 +101,11 @@ fn workspace_root() -> PathBuf {
         .to_owned()
 }
 
-fn mock_tsgo_binary() -> Option<PathBuf> {
+fn mock_corsa_binary() -> Option<PathBuf> {
     let binary = workspace_root().join(if cfg!(windows) {
-        "target/debug/mock_tsgo.exe"
+        "target/debug/mock_corsa.exe"
     } else {
-        "target/debug/mock_tsgo"
+        "target/debug/mock_corsa"
     });
     binary.exists().then_some(binary)
 }
@@ -318,7 +315,7 @@ fn reports_virtual_document_errors() {
 #[test]
 fn reports_api_client_spawn_errors() {
     let client = unsafe {
-        corsa_tsgo_api_client_spawn(text_ref(r#"{"executable":"./definitely-missing-tsgo"}"#))
+        corsa_api_client_spawn(text_ref(r#"{"executable":"./definitely-missing-corsa"}"#))
     };
     assert!(client.is_null());
     let error = corsa_error_message_take();
@@ -338,7 +335,7 @@ fn reports_api_client_spawn_errors() {
 
 #[test]
 fn resolves_checker_positions_over_ffi() {
-    let Some(binary) = mock_tsgo_binary() else {
+    let Some(binary) = mock_corsa_binary() else {
         return;
     };
     let options = serde_json::json!({
@@ -347,11 +344,11 @@ fn resolves_checker_positions_over_ffi() {
         "mode": "jsonrpc",
     })
     .to_string();
-    let client = unsafe { corsa_tsgo_api_client_spawn(text_ref(&options)) };
+    let client = unsafe { corsa_api_client_spawn(text_ref(&options)) };
     assert!(!client.is_null());
 
     let snapshot_json = take_string(unsafe {
-        corsa_tsgo_api_client_update_snapshot_json(
+        corsa_api_client_update_snapshot_json(
             client,
             text_ref(r#"{"openProject":"/workspace/tsconfig.json"}"#),
         )
@@ -361,7 +358,7 @@ fn resolves_checker_positions_over_ffi() {
     let project_id = snapshot["projects"][0]["id"].as_str().unwrap();
 
     let type_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_type_at_position_json(
+        corsa_api_client_get_type_at_position_json(
             client,
             text_ref(snapshot_id),
             text_ref(project_id),
@@ -375,7 +372,7 @@ fn resolves_checker_positions_over_ffi() {
     );
 
     let symbol_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_symbol_at_position_json(
+        corsa_api_client_get_symbol_at_position_json(
             client,
             text_ref(snapshot_id),
             text_ref(project_id),
@@ -388,15 +385,15 @@ fn resolves_checker_positions_over_ffi() {
         "value"
     );
 
-    assert!(unsafe { corsa_tsgo_api_client_close(client) });
+    assert!(unsafe { corsa_api_client_close(client) });
     unsafe {
-        corsa_tsgo_api_client_free(client);
+        corsa_api_client_free(client);
     }
 }
 
 #[test]
 fn resolves_type_arguments_over_ffi() {
-    let Some(binary) = mock_tsgo_binary() else {
+    let Some(binary) = mock_corsa_binary() else {
         return;
     };
     let options = serde_json::json!({
@@ -405,11 +402,11 @@ fn resolves_type_arguments_over_ffi() {
         "mode": "jsonrpc",
     })
     .to_string();
-    let client = unsafe { corsa_tsgo_api_client_spawn(text_ref(&options)) };
+    let client = unsafe { corsa_api_client_spawn(text_ref(&options)) };
     assert!(!client.is_null());
 
     let snapshot_json = take_string(unsafe {
-        corsa_tsgo_api_client_update_snapshot_json(
+        corsa_api_client_update_snapshot_json(
             client,
             text_ref(r#"{"openProject":"/workspace/tsconfig.json"}"#),
         )
@@ -419,18 +416,14 @@ fn resolves_type_arguments_over_ffi() {
     let project_id = snapshot["projects"][0]["id"].as_str().unwrap();
 
     let string_type_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_string_type_json(
-            client,
-            text_ref(snapshot_id),
-            text_ref(project_id),
-        )
+        corsa_api_client_get_string_type_json(client, text_ref(snapshot_id), text_ref(project_id))
     });
     let string_type: serde_json::Value = serde_json::from_str(&string_type_json).unwrap();
     let type_id = string_type["id"].as_str().unwrap().to_owned();
     let object_flags = string_type["objectFlags"].as_u64().unwrap() as u32;
 
     let non_reference_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_type_arguments_json(
+        corsa_api_client_get_type_arguments_json(
             client,
             text_ref(snapshot_id),
             text_ref(project_id),
@@ -444,7 +437,7 @@ fn resolves_type_arguments_over_ffi() {
     );
 
     let reference_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_type_arguments_json(
+        corsa_api_client_get_type_arguments_json(
             client,
             text_ref(snapshot_id),
             text_ref(project_id),
@@ -455,15 +448,15 @@ fn resolves_type_arguments_over_ffi() {
     let reference_arguments: serde_json::Value = serde_json::from_str(&reference_json).unwrap();
     assert_eq!(reference_arguments[0]["id"], "t0000000000000001");
 
-    assert!(unsafe { corsa_tsgo_api_client_close(client) });
+    assert!(unsafe { corsa_api_client_close(client) });
     unsafe {
-        corsa_tsgo_api_client_free(client);
+        corsa_api_client_free(client);
     }
 }
 
 #[test]
 fn resolves_symbol_type_methods_over_ffi() {
-    let Some(binary) = mock_tsgo_binary() else {
+    let Some(binary) = mock_corsa_binary() else {
         return;
     };
     let options = serde_json::json!({
@@ -472,11 +465,11 @@ fn resolves_symbol_type_methods_over_ffi() {
         "mode": "jsonrpc",
     })
     .to_string();
-    let client = unsafe { corsa_tsgo_api_client_spawn(text_ref(&options)) };
+    let client = unsafe { corsa_api_client_spawn(text_ref(&options)) };
     assert!(!client.is_null());
 
     let snapshot_json = take_string(unsafe {
-        corsa_tsgo_api_client_update_snapshot_json(
+        corsa_api_client_update_snapshot_json(
             client,
             text_ref(r#"{"openProject":"/workspace/tsconfig.json"}"#),
         )
@@ -486,7 +479,7 @@ fn resolves_symbol_type_methods_over_ffi() {
     let project_id = snapshot["projects"][0]["id"].as_str().unwrap();
 
     let symbol_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_symbol_at_position_json(
+        corsa_api_client_get_symbol_at_position_json(
             client,
             text_ref(snapshot_id),
             text_ref(project_id),
@@ -499,7 +492,7 @@ fn resolves_symbol_type_methods_over_ffi() {
     let symbol_id = symbol["id"].as_str().unwrap().to_owned();
 
     let symbol_type_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_type_of_symbol_json(
+        corsa_api_client_get_type_of_symbol_json(
             client,
             text_ref(snapshot_id),
             text_ref(project_id),
@@ -512,7 +505,7 @@ fn resolves_symbol_type_methods_over_ffi() {
     );
 
     let declared_type_json = take_string(unsafe {
-        corsa_tsgo_api_client_get_declared_type_of_symbol_json(
+        corsa_api_client_get_declared_type_of_symbol_json(
             client,
             text_ref(snapshot_id),
             text_ref(project_id),
@@ -524,8 +517,8 @@ fn resolves_symbol_type_methods_over_ffi() {
         "t0000000000000001"
     );
 
-    assert!(unsafe { corsa_tsgo_api_client_close(client) });
+    assert!(unsafe { corsa_api_client_close(client) });
     unsafe {
-        corsa_tsgo_api_client_free(client);
+        corsa_api_client_free(client);
     }
 }

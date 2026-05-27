@@ -22,7 +22,7 @@ Internal Rust crates:
 Public npm packages:
 
 - `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`)
-- `corsa-oxlint` (`src/bindings/nodejs/typescript_oxlint`)
+- `corsa-oxlint` (`src/bindings/nodejs/corsa_oxlint`)
 
 The npm packages do not bundle the Corsa executable. Consumers must
 point them at a compatible Corsa binary at runtime.

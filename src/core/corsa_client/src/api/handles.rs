@@ -1,4 +1,4 @@
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::fast::CompactString;
 use serde::{Deserialize, Serialize};
 
@@ -66,11 +66,11 @@ impl NodeHandle {
     /// assert_eq!(parsed.end, 5);
     /// assert_eq!(parsed.kind, 123);
     /// assert_eq!(parsed.path.as_str(), "/workspace/main.ts");
-    /// # Ok::<(), corsa_client::TsgoError>(())
+    /// # Ok::<(), corsa_client::CorsaError>(())
     /// ```
     pub fn parse(&self) -> Result<ParsedNodeHandle> {
         let mut parts = self.0.splitn(4, '.');
-        let invalid = || TsgoError::InvalidHandle(self.0.clone());
+        let invalid = || CorsaError::InvalidHandle(self.0.clone());
         let pos = parts
             .next()
             .ok_or_else(&invalid)?

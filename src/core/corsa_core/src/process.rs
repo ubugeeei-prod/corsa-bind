@@ -1,5 +1,5 @@
 use crate::{
-    Result, TsgoError,
+    CorsaError, Result,
     fast::{CompactString, SmallVec},
 };
 use std::{
@@ -19,22 +19,22 @@ use std::{
 ///
 /// ```
 /// use std::path::PathBuf;
-/// use corsa_core::TsgoCommand;
+/// use corsa_core::CorsaCommand;
 ///
-/// let command = TsgoCommand::new("/opt/bin/corsa")
+/// let command = CorsaCommand::new("/opt/bin/corsa")
 ///     .with_cwd("/workspace")
-///     .with_env("TSGO_TRACE", "0");
+///     .with_env("CORSA_TRACE", "0");
 ///
 /// assert_eq!(command.cwd(), &PathBuf::from("/workspace"));
 /// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct TsgoCommand {
+pub struct CorsaCommand {
     executable: PathBuf,
     cwd: PathBuf,
     env: SmallVec<[(CompactString, CompactString); 4]>,
 }
 
-impl TsgoCommand {
+impl CorsaCommand {
     /// Creates a new command template rooted at the current working directory.
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {
@@ -169,8 +169,8 @@ impl Drop for AsyncChildGuard {
     }
 }
 
-fn process_guard_poisoned() -> TsgoError {
-    TsgoError::Join(CompactString::from("process guard lock poisoned"))
+fn process_guard_poisoned() -> CorsaError {
+    CorsaError::Join(CompactString::from("process guard lock poisoned"))
 }
 
 /// Waits for a child process to exit and forcefully terminates it after a timeout.

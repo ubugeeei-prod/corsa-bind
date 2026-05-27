@@ -31,7 +31,7 @@ fn main() -> ExitCode {
 async fn run(cli: args::Cli) -> corsa::Result<()> {
     let datasets = dataset::load(&cli).await?;
     let results = runner::run(&cli, &datasets).await?;
-    println!("tsgo: {}", cli.tsgo_path.display());
+    println!("corsa: {}", cli.corsa_path.display());
     println!("node: {}", cli.node_command);
     println!("iterations: {}", cli.iterations);
     println!("warmup_iterations: {}", cli.warmup_iterations);
@@ -70,15 +70,15 @@ async fn run(cli: args::Cli) -> corsa::Result<()> {
         );
     }
     println!();
-    println!("project_check vs tsgo baseline");
-    println!("dataset\ttool\tmedian_ms\ttsgo_median_ms\tvs_tsgo_x");
-    for line in report::project_check_vs_tsgo_lines(&results) {
+    println!("project_check vs corsa baseline");
+    println!("dataset\ttool\tmedian_ms\tcorsa_median_ms\tvs_corsa_x");
+    for line in report::project_check_vs_corsa_lines(&results) {
         println!("{line}");
     }
     println!();
-    println!("editor_workflow vs tsgo CLI project_check baseline (not equivalent work)");
-    println!("dataset\ttool\tmedian_ms\ttsgo_project_check_median_ms\tvs_tsgo_x");
-    for line in report::workflow_vs_tsgo_lines(&results) {
+    println!("editor_workflow vs corsa CLI project_check baseline (not equivalent work)");
+    println!("dataset\ttool\tmedian_ms\tcorsa_project_check_median_ms\tvs_corsa_x");
+    for line in report::workflow_vs_corsa_lines(&results) {
         println!("{line}");
     }
     if let Some(path) = &cli.json_output_path {

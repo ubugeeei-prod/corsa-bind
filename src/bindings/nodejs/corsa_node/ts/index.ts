@@ -21,9 +21,9 @@ const binding = (
   "default" in nativeModule ? nativeModule.default : nativeModule
 ) as typeof import("../index.js");
 
-type NativeApiClient = InstanceType<typeof binding.TsgoApiClient>;
-type NativeDistributedOrchestrator = InstanceType<typeof binding.TsgoDistributedOrchestrator>;
-type NativeVirtualDocument = InstanceType<typeof binding.TsgoVirtualDocument>;
+type NativeApiClient = InstanceType<typeof binding.CorsaApiClient>;
+type NativeDistributedOrchestrator = InstanceType<typeof binding.CorsaDistributedOrchestrator>;
+type NativeVirtualDocument = InstanceType<typeof binding.CorsaVirtualDocument>;
 
 function fromJson<T>(value: string): T {
   return JSON.parse(value) as T;
@@ -126,11 +126,11 @@ export class CorsaApiClient {
   }
 
   static spawn(options: ApiClientOptions): CorsaApiClient {
-    return new CorsaApiClient(binding.TsgoApiClient.spawn(toJson(options)));
+    return new CorsaApiClient(binding.CorsaApiClient.spawn(toJson(options)));
   }
 
   static async spawnAsync(options: ApiClientOptions): Promise<CorsaApiClient> {
-    return new CorsaApiClient(await binding.spawnTsgoApiClientAsync(toJson(options)));
+    return new CorsaApiClient(await binding.spawnCorsaApiClientAsync(toJson(options)));
   }
 
   initialize(): InitializeResponse {
@@ -353,7 +353,7 @@ export class CorsaVirtualDocument {
   }
 
   static untitled(path: string, languageId: string, text: string): CorsaVirtualDocument {
-    return new CorsaVirtualDocument(binding.TsgoVirtualDocument.untitled(path, languageId, text));
+    return new CorsaVirtualDocument(binding.CorsaVirtualDocument.untitled(path, languageId, text));
   }
 
   static inMemory(
@@ -363,7 +363,7 @@ export class CorsaVirtualDocument {
     text: string,
   ): CorsaVirtualDocument {
     return new CorsaVirtualDocument(
-      binding.TsgoVirtualDocument.inMemory(authority, path, languageId, text),
+      binding.CorsaVirtualDocument.inMemory(authority, path, languageId, text),
     );
   }
 
@@ -400,7 +400,7 @@ export class CorsaDistributedOrchestrator {
   readonly #inner: NativeDistributedOrchestrator;
 
   constructor(nodeIds: string[]) {
-    this.#inner = new binding.TsgoDistributedOrchestrator(nodeIds);
+    this.#inner = new binding.CorsaDistributedOrchestrator(nodeIds);
   }
 
   campaign(nodeId: string): number {
@@ -448,12 +448,6 @@ export class CorsaDistributedOrchestrator {
     return leaderId;
   }
 }
-
-export {
-  CorsaApiClient as TsgoApiClient,
-  CorsaDistributedOrchestrator as TsgoDistributedOrchestrator,
-  CorsaVirtualDocument as TsgoVirtualDocument,
-};
 
 export default binding;
 export const version = binding.version;

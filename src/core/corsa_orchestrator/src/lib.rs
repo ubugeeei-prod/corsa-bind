@@ -25,10 +25,10 @@ pub mod lsp {
 
 /// Re-exports structured operational events used by the orchestrator configs.
 pub mod observability {
-    pub use corsa_core::{SharedObserver, TsgoEvent, TsgoObserver};
+    pub use corsa_core::{CorsaEvent, CorsaObserver, SharedObserver};
 }
 
-pub use corsa_core::{Result, SharedObserver, TsgoError, TsgoEvent, TsgoObserver};
+pub use corsa_core::{CorsaError, CorsaEvent, CorsaObserver, Result, SharedObserver};
 
 #[path = "orchestrator/mod.rs"]
 /// Local and distributed orchestration helpers.

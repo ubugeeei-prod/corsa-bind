@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use corsa::{Result, TsgoError, fast::CompactString};
+use corsa::{CorsaError, Result, fast::CompactString};
 use corsa_core::terminate_child_process;
 
 pub fn run_command(
@@ -22,7 +22,7 @@ pub fn run_command(
         }
         if started.elapsed() >= timeout {
             child.terminate()?;
-            return Err(TsgoError::Protocol(CompactString::from(format!(
+            return Err(CorsaError::Protocol(CompactString::from(format!(
                 "{label} timed out after {} ms",
                 timeout.as_millis()
             ))));
@@ -86,7 +86,7 @@ fn validate_exit_status(
         .code()
         .map(|code| code.to_string())
         .unwrap_or_else(|| "terminated by signal".to_string());
-    Err(TsgoError::Protocol(CompactString::from(format!(
+    Err(CorsaError::Protocol(CompactString::from(format!(
         "{label} exited with unexpected status {rendered}"
     ))))
 }

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use super::ApiFileSystem;
-use crate::process::TsgoCommand;
+use crate::process::CorsaCommand;
 use corsa_core::{SharedObserver, fast::CompactString};
 
 use super::profiling::SharedProfiler;
@@ -36,7 +36,7 @@ pub enum ApiMode {
 #[derive(Clone)]
 pub struct ApiSpawnConfig {
     /// Reusable command template used to launch the worker.
-    pub command: TsgoCommand,
+    pub command: CorsaCommand,
     /// Wire protocol used between the client and Corsa.
     pub mode: ApiMode,
     /// Optional filesystem callback implementation exposed to Corsa.
@@ -67,7 +67,7 @@ impl ApiSpawnConfig {
     /// which makes it the preferred mode for benchmark and production usage.
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {
-            command: TsgoCommand::new(executable),
+            command: CorsaCommand::new(executable),
             mode: ApiMode::SyncMsgpackStdio,
             filesystem: None,
             request_timeout: Some(Duration::from_secs(30)),
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn new_prefers_msgpack_fast_path() {
-        let config = ApiSpawnConfig::new("/opt/bin/tsgo");
+        let config = ApiSpawnConfig::new("/opt/bin/corsa");
         assert_eq!(config.mode, ApiMode::SyncMsgpackStdio);
     }
 }

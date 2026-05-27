@@ -6,7 +6,7 @@ use corsa::lsp::{VirtualChange, VirtualDocument};
 use corsa::orchestrator::{DistributedApiOrchestrator, RaftCluster, ReplicatedCommand};
 use corsa::{
     api::{ApiClient, ApiMode, UpdateSnapshotParams},
-    observability::{TsgoEvent, TsgoObserver},
+    observability::{CorsaEvent, CorsaObserver},
     orchestrator::{ApiOrchestrator, ApiOrchestratorConfig},
     runtime::block_on,
 };
@@ -23,11 +23,11 @@ use std::{
 
 #[derive(Default)]
 struct EventCollector {
-    events: Mutex<Vec<TsgoEvent>>,
+    events: Mutex<Vec<CorsaEvent>>,
 }
 
-impl TsgoObserver for EventCollector {
-    fn on_event(&self, event: &TsgoEvent) {
+impl CorsaObserver for EventCollector {
+    fn on_event(&self, event: &CorsaEvent) {
         self.events.lock().unwrap().push(event.clone());
     }
 }
@@ -114,7 +114,7 @@ fn orchestrator_executes_parallel_batches() {
                 let echoed = client
                     .raw_json_request("echo", json!({ "value": value }))
                     .await?;
-                Ok::<_, corsa::TsgoError>(echoed["value"].as_u64().unwrap() as u32)
+                Ok::<_, corsa::CorsaError>(echoed["value"].as_u64().unwrap() as u32)
             })
             .await
             .unwrap();
@@ -132,7 +132,7 @@ fn orchestrator_executes_batches_larger_than_work_queue_capacity() {
         let profile = support::api_profile("async-batch-backpressure", ApiMode::AsyncJsonRpcStdio);
         let values = orchestrator
             .execute_all(&profile, 2, 0_u32..8, |_, value| async move {
-                Ok::<_, corsa::TsgoError>(value)
+                Ok::<_, corsa::CorsaError>(value)
             })
             .await
             .unwrap();
@@ -149,7 +149,7 @@ fn orchestrator_reports_batch_task_panics() {
             .execute_all(&profile, 1, [1_u32], |_, _| async move {
                 panic!("batch task exploded");
                 #[allow(unreachable_code)]
-                Ok::<_, corsa::TsgoError>(0_u32)
+                Ok::<_, corsa::CorsaError>(0_u32)
             })
             .await
             .unwrap_err();
@@ -172,7 +172,7 @@ fn orchestrator_skips_worker_start_for_empty_batches() {
                 &profile,
                 4,
                 std::iter::empty::<u32>(),
-                |_, value| async move { Ok::<_, corsa::TsgoError>(value) },
+                |_, value| async move { Ok::<_, corsa::CorsaError>(value) },
             )
             .await
             .unwrap();
@@ -505,10 +505,10 @@ fn orchestrator_emits_eviction_events() {
             .unwrap();
 
         let events = observer.events.lock().unwrap().clone();
-        assert!(events.contains(&TsgoEvent::OrchestratorSnapshotEvicted {
+        assert!(events.contains(&CorsaEvent::OrchestratorSnapshotEvicted {
             key: "workspace-a".into(),
         }));
-        assert!(events.contains(&TsgoEvent::OrchestratorResultEvicted {
+        assert!(events.contains(&CorsaEvent::OrchestratorResultEvicted {
             key: "ping-a".into(),
         }));
     });
@@ -528,7 +528,7 @@ fn orchestrator_rejects_worker_requests_above_limit() {
         let error = orchestrator.prewarm(&profile, 2).await.unwrap_err();
         assert!(matches!(
             error,
-            corsa::TsgoError::Protocol(message) if message.contains("exceeds the configured maximum")
+            corsa::CorsaError::Protocol(message) if message.contains("exceeds the configured maximum")
         ));
     });
 }

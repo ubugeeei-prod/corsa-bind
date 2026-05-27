@@ -1,12 +1,13 @@
 use std::{
     fs,
+    future::Future,
     path::{Path, PathBuf},
     process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use corsa::{
-    Result, TsgoError,
+    CorsaError, Result,
     api::{ApiClient, ApiMode, ApiSpawnConfig, SymbolHandle, UpdateSnapshotParams},
     fast::{CompactString, SmallVec},
 };
@@ -30,7 +31,7 @@ pub struct ToolRow {
 
 struct ToolSupport {
     workspace_root: PathBuf,
-    typescript_go_root: PathBuf,
+    corsa_upstream_root: PathBuf,
     node_command: CompactString,
     tsc_script: PathBuf,
     eslint_script: PathBuf,
@@ -87,73 +88,87 @@ async fn run_project_check_suite(
 ) -> Result<SmallVec<[ToolRow; 8]>> {
     let mut rows = SmallVec::<[ToolRow; 8]>::new();
     let timeout = Duration::from_millis(cli.timeout_ms);
-    rows.push(row(
-        "project_check",
-        dataset,
-        "tsc",
+    if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:tsc", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
             let mut command = tsc_command(support, overlay);
             run_command(&mut command, timeout, &[0], "tsc")
         })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "tsgo",
+    })
+    .await?
+    {
+        rows.push(row("project_check", dataset, "tsc", stats));
+    }
+    if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:corsa", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
-            let mut command = tsgo_command(cli, support, overlay);
-            run_command(&mut command, timeout, &[0], "tsgo")
+            let mut command = corsa_command(cli, support, overlay);
+            run_command(&mut command, timeout, &[0], "corsa")
         })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "typescript-eslint",
-        measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
-            let mut command = eslint_command(dataset, support, overlay);
-            run_command(&mut command, timeout, &[0, 1], "typescript-eslint")
-        })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "corsa-oxlint",
-        measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
-            let mut command = corsa_oxlint_command(cli, dataset, support, overlay);
-            run_command(&mut command, timeout, &[0, 1], "corsa-oxlint")
-        })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "tsgolint",
+    })
+    .await?
+    {
+        rows.push(row("project_check", dataset, "corsa", stats));
+    }
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "project_check:typescript-eslint",
+        || {
+            measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
+                let mut command = eslint_command(dataset, support, overlay);
+                run_command(&mut command, timeout, &[0, 1], "typescript-eslint")
+            })
+        },
+    )
+    .await?
+    {
+        rows.push(row("project_check", dataset, "typescript-eslint", stats));
+    }
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "project_check:corsa-oxlint",
+        || {
+            measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
+                let mut command = corsa_oxlint_command(cli, dataset, support, overlay);
+                run_command(&mut command, timeout, &[0, 1], "corsa-oxlint")
+            })
+        },
+    )
+    .await?
+    {
+        rows.push(row("project_check", dataset, "corsa-oxlint", stats));
+    }
+    if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:tsgolint", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
             let mut command = tsgolint_command(support, overlay);
             run_command(&mut command, timeout, &[0, 1], "tsgolint")
         })
-        .await?,
-    ));
+    })
+    .await?
+    {
+        rows.push(row("project_check", dataset, "tsgolint", stats));
+    }
     Ok(rows)
 }
 
 async fn run_workflow_suite(cli: &Cli, dataset: &DatasetCase) -> Result<SmallVec<[ToolRow; 4]>> {
     let mut rows = SmallVec::<[ToolRow; 4]>::new();
-    rows.push(row(
-        "editor_workflow",
-        dataset,
-        "corsa-msgpack-cold",
-        workflow_cold(cli, dataset).await?,
-    ));
-    rows.push(row(
-        "editor_workflow",
-        dataset,
-        "corsa-msgpack-warm",
-        workflow_warm(cli, dataset).await?,
-    ));
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "editor_workflow:corsa-msgpack-cold",
+        || workflow_cold(cli, dataset),
+    )
+    .await?
+    {
+        rows.push(row("editor_workflow", dataset, "corsa-msgpack-cold", stats));
+    }
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "editor_workflow:corsa-msgpack-warm",
+        || workflow_warm(cli, dataset),
+    )
+    .await?
+    {
+        rows.push(row("editor_workflow", dataset, "corsa-msgpack-warm", stats));
+    }
     Ok(rows)
 }
 
@@ -166,10 +181,31 @@ fn row(workload: &str, dataset: &DatasetCase, tool: &str, stats: Stats) -> ToolR
     }
 }
 
+async fn measure_row<T, Fut>(
+    allow_partial_failures: bool,
+    label: &str,
+    make_stats: impl FnOnce() -> Fut,
+) -> Result<Option<T>>
+where
+    Fut: Future<Output = Result<T>>,
+{
+    match make_stats().await {
+        Ok(stats) => Ok(Some(stats)),
+        Err(error) if allow_partial_failures => {
+            eprintln!(
+                "warning: skipping {label} benchmark\n{}",
+                error.diagnostic()
+            );
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn tsc_command(support: &ToolSupport, overlay: &OverlayConfig) -> Command {
     let mut command = Command::new(support.node_command.as_str());
     command
-        .current_dir(&support.typescript_go_root)
+        .current_dir(&support.corsa_upstream_root)
         .arg(&support.tsc_script)
         .arg("--pretty")
         .arg("false")
@@ -179,10 +215,10 @@ fn tsc_command(support: &ToolSupport, overlay: &OverlayConfig) -> Command {
     command
 }
 
-fn tsgo_command(cli: &Cli, support: &ToolSupport, overlay: &OverlayConfig) -> Command {
-    let mut command = Command::new(&cli.tsgo_path);
+fn corsa_command(cli: &Cli, support: &ToolSupport, overlay: &OverlayConfig) -> Command {
+    let mut command = Command::new(&cli.corsa_path);
     command
-        .current_dir(&support.typescript_go_root)
+        .current_dir(&support.corsa_upstream_root)
         .arg("--pretty")
         .arg("false")
         .arg("--noEmit")
@@ -203,7 +239,7 @@ fn eslint_command(
         .arg("--config")
         .arg(&support.eslint_config)
         .arg("--no-config-lookup")
-        .env("TSGO_RS_BENCH_TSCONFIG", &overlay.path);
+        .env("CORSA_RS_BENCH_TSCONFIG", &overlay.path);
     for file in &dataset.source_files {
         command.arg(file.as_str());
     }
@@ -224,9 +260,9 @@ fn corsa_oxlint_command(
         .arg(&support.corsa_oxlint_config)
         .arg("--disable-nested-config")
         .arg("--silent")
-        .env("TSGO_RS_BENCH_TSCONFIG", &overlay.path)
-        .env("TSGO_RS_BENCH_TSGO", &cli.tsgo_path)
-        .env("TSGO_RS_BENCH_ROOT", &support.workspace_root);
+        .env("CORSA_RS_BENCH_TSCONFIG", &overlay.path)
+        .env("CORSA_RS_BENCH_EXECUTABLE", &cli.corsa_path)
+        .env("CORSA_RS_BENCH_ROOT", &support.workspace_root);
     for file in &dataset.source_files {
         command.arg(file.as_str());
     }
@@ -270,7 +306,7 @@ async fn workflow_warm(cli: &Cli, dataset: &DatasetCase) -> Result<Stats> {
 
 async fn open_workflow_session(cli: &Cli, dataset: &DatasetCase) -> Result<WorkflowSession> {
     let client = ApiClient::spawn(
-        ApiSpawnConfig::new(&cli.tsgo_path)
+        ApiSpawnConfig::new(&cli.corsa_path)
             .with_cwd(&cli.root_dir)
             .with_mode(ApiMode::SyncMsgpackStdio),
     )
@@ -333,7 +369,7 @@ async fn run_editor_workflow(session: &WorkflowSession) -> Result<()> {
             session.target.position,
         )
         .await?
-        .ok_or(TsgoError::Protocol(
+        .ok_or(CorsaError::Protocol(
             "workflow target no longer resolves to a type".into(),
         ))?;
     let _ = session
@@ -365,7 +401,7 @@ async fn discover_bench_target(
     let source = client
         .get_source_file(snapshot.handle.clone(), project.clone(), file)
         .await?
-        .ok_or(TsgoError::Protocol(
+        .ok_or(CorsaError::Protocol(
             "benchmark dataset is missing its primary file".into(),
         ))?;
     let text = String::from_utf8_lossy(source.as_bytes());
@@ -383,7 +419,7 @@ async fn discover_bench_target(
             });
         }
     }
-    Err(TsgoError::Protocol(
+    Err(CorsaError::Protocol(
         "failed to discover a benchmarkable symbol in the primary file".into(),
     ))
 }
@@ -452,50 +488,50 @@ fn is_noise_identifier(token: &str) -> bool {
 impl ToolSupport {
     fn discover(cli: &Cli) -> Result<Self> {
         let workspace_root = cli.root_dir.clone();
-        let typescript_go_root = workspace_root.join("ref/typescript-go");
-        let tsc_script = typescript_go_root.join("node_modules/typescript/bin/tsc");
+        let corsa_upstream_root = workspace_root.join("ref/corsa-upstream");
+        let tsc_script = corsa_upstream_root.join("node_modules/typescript/bin/tsc");
         if !tsc_script.exists() {
-            return Err(TsgoError::Protocol(CompactString::from(
-                "missing ref/typescript-go/node_modules/typescript/bin/tsc; run `vp run -w bench_tooling_setup` first",
+            return Err(CorsaError::Protocol(CompactString::from(
+                "missing ref/corsa-upstream/node_modules/typescript/bin/tsc; run `vp run -w bench_tooling_setup` first",
             )));
         }
         let cli_compare_root = workspace_root.join("bench/cli_compare");
         let eslint_script = cli_compare_root.join("node_modules/eslint/bin/eslint.js");
         if !eslint_script.exists() {
-            return Err(TsgoError::Protocol(CompactString::from(
+            return Err(CorsaError::Protocol(CompactString::from(
                 "missing bench/cli_compare/node_modules/eslint/bin/eslint.js; run `vp run -w bench_tooling_setup` first",
             )));
         }
         let eslint_config = cli_compare_root.join("eslint.config.mjs");
-        let oxlint_script = workspace_root
-            .join("src/bindings/nodejs/typescript_oxlint/node_modules/oxlint/bin/oxlint");
+        let oxlint_script =
+            workspace_root.join("src/bindings/nodejs/corsa_oxlint/node_modules/oxlint/bin/oxlint");
         if !oxlint_script.exists() {
-            return Err(TsgoError::Protocol(CompactString::from(
-                "missing src/bindings/nodejs/typescript_oxlint/node_modules/oxlint/bin/oxlint; run `vp install` first",
+            return Err(CorsaError::Protocol(CompactString::from(
+                "missing src/bindings/nodejs/corsa_oxlint/node_modules/oxlint/bin/oxlint; run `vp install` first",
             )));
         }
         let corsa_oxlint_config = cli_compare_root.join("corsa-oxlint.config.mjs");
         if !corsa_oxlint_config.exists() {
-            return Err(TsgoError::Protocol(CompactString::from(
+            return Err(CorsaError::Protocol(CompactString::from(
                 "missing bench/cli_compare/corsa-oxlint.config.mjs",
             )));
         }
         let corsa_oxlint_rules =
-            workspace_root.join("src/bindings/nodejs/typescript_oxlint/dist/rules/index.js");
+            workspace_root.join("src/bindings/nodejs/corsa_oxlint/dist/rules/index.js");
         if !corsa_oxlint_rules.exists() {
-            return Err(TsgoError::Protocol(CompactString::from(
-                "missing src/bindings/nodejs/typescript_oxlint/dist/rules/index.js; run `vp run -w build_typescript_oxlint` first",
+            return Err(CorsaError::Protocol(CompactString::from(
+                "missing src/bindings/nodejs/corsa_oxlint/dist/rules/index.js; run `vp run -w build_corsa_oxlint` first",
             )));
         }
         let tsgolint_script = cli_compare_root.join("node_modules/oxlint-tsgolint/bin/tsgolint.js");
         if !tsgolint_script.exists() {
-            return Err(TsgoError::Protocol(CompactString::from(
+            return Err(CorsaError::Protocol(CompactString::from(
                 "missing bench/cli_compare/node_modules/oxlint-tsgolint/bin/tsgolint.js; run `vp run -w bench_tooling_setup` first",
             )));
         }
         Ok(Self {
             workspace_root,
-            typescript_go_root,
+            corsa_upstream_root,
             node_command: cli.node_command.clone(),
             tsc_script,
             eslint_script,
@@ -561,7 +597,7 @@ impl OverlayDir {
             .map(|elapsed| elapsed.as_nanos())
             .unwrap_or(0);
         let path = root_dir
-            .join("ref/typescript-go/.cache/bench_tooling_compare")
+            .join("ref/corsa-upstream/.cache/bench_tooling_compare")
             .join(format!("overlay-{}-{suffix}", std::process::id()));
         fs::create_dir_all(&path)?;
         Ok(Self { path })

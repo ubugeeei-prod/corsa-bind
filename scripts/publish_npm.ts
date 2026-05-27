@@ -7,7 +7,7 @@ import {
   nodeBindingPackage,
   publishPackedTarball,
   sleep,
-  typescriptOxlintPackage,
+  corsaOxlintPackage,
   withStagedNodeBindingPackages,
 } from "./npm_release_utils.ts";
 import { fail } from "./shared.ts";
@@ -22,11 +22,9 @@ const requireTrustedPublishBootstrap = process.env.NPM_TRUSTED_PUBLISH?.trim() =
 async function assertTrustedPublishBootstrapComplete(): Promise<void> {
   const missingPackages = (
     await Promise.all(
-      [
-        ...getNodeBindingBinaryPackageNames(),
-        nodeBindingPackage.name,
-        typescriptOxlintPackage.name,
-      ].map(async (packageName) => ((await doesNpmPackageExist(packageName)) ? null : packageName)),
+      [...getNodeBindingBinaryPackageNames(), nodeBindingPackage.name, corsaOxlintPackage.name].map(
+        async (packageName) => ((await doesNpmPackageExist(packageName)) ? null : packageName),
+      ),
     )
   ).filter((packageName): packageName is string => packageName !== null);
 
@@ -52,7 +50,7 @@ async function main(): Promise<void> {
   await withStagedNodeBindingPackages(
     { artifactsDir, requireAllTargets },
     async ({ binaryPackages, rootPackage }) => {
-      const releasePackages = [...binaryPackages, rootPackage, typescriptOxlintPackage];
+      const releasePackages = [...binaryPackages, rootPackage, corsaOxlintPackage];
       if (startAt && !releasePackages.some((pkg) => pkg.name === startAt)) {
         throw new Error(`Unknown NPM_PUBLISH_START_AT package: ${startAt}`);
       }

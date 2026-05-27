@@ -5,9 +5,9 @@
 //! wraps that blocking interaction in a worker thread so the public API can stay
 //! async-friendly without pulling in a full async runtime.
 
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::{
-    SharedObserver, TsgoEvent,
+    CorsaEvent, SharedObserver,
     fast::{CompactString, SmallVec, compact_format},
     observe, terminate_child_process,
 };
@@ -67,11 +67,11 @@ impl MsgpackWorker {
         let stdin = child
             .stdin
             .take()
-            .ok_or(TsgoError::Closed("msgpack stdin"))?;
+            .ok_or(CorsaError::Closed("msgpack stdin"))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or(TsgoError::Closed("msgpack stdout"))?;
+            .ok_or(CorsaError::Closed("msgpack stdout"))?;
         let process = Arc::new(std::sync::Mutex::new(Some(child)));
         let worker_process = process.clone();
         let (tx, rx) = mpsc::sync_channel::<WorkerCommand>(queue_capacity.max(1));
@@ -105,7 +105,7 @@ impl MsgpackWorker {
                     let _ = terminate_child_process(&mut child);
                 }
             })
-            .map_err(TsgoError::Io)?;
+            .map_err(CorsaError::Io)?;
         Ok(Self {
             tx: Mutex::new(Some(tx)),
             join: Mutex::new(Some(join)),
@@ -123,7 +123,7 @@ impl MsgpackWorker {
             .tx
             .lock()
             .clone()
-            .ok_or(TsgoError::Closed("msgpack worker"))?;
+            .ok_or(CorsaError::Closed("msgpack worker"))?;
         match sender.try_send(WorkerCommand::Request {
             method: SmallVec::from_slice(method.as_bytes()),
             payload,
@@ -133,14 +133,14 @@ impl MsgpackWorker {
             Err(mpsc::TrySendError::Full(_)) => {
                 observe(
                     self.observer.as_ref(),
-                    TsgoEvent::MsgpackWorkerQueueFull {
+                    CorsaEvent::MsgpackWorkerQueueFull {
                         method: CompactString::from(method),
                     },
                 );
-                return Err(TsgoError::Protocol("msgpack worker queue is full".into()));
+                return Err(CorsaError::Protocol("msgpack worker queue is full".into()));
             }
             Err(mpsc::TrySendError::Disconnected(_)) => {
-                return Err(TsgoError::Closed("msgpack worker"));
+                return Err(CorsaError::Closed("msgpack worker"));
             }
         }
         let response = if let Some(timeout) = self.request_timeout {
@@ -148,13 +148,13 @@ impl MsgpackWorker {
                 warn!("msgpack request `{method}` timed out; terminating worker");
                 observe(
                     self.observer.as_ref(),
-                    TsgoEvent::MsgpackRequestTimedOut {
+                    CorsaEvent::MsgpackRequestTimedOut {
                         method: CompactString::from(method),
                         timeout,
                     },
                 );
                 self.terminate_process("request timeout");
-                TsgoError::timeout(
+                CorsaError::timeout(
                     compact_format(format_args!("msgpack request `{method}`")).as_str(),
                     timeout,
                 )
@@ -162,7 +162,7 @@ impl MsgpackWorker {
         } else {
             reply_rx
                 .recv()
-                .map_err(|_| TsgoError::Closed("msgpack worker"))??
+                .map_err(|_| CorsaError::Closed("msgpack worker"))??
         };
         Ok(response.bytes)
     }
@@ -174,7 +174,7 @@ impl MsgpackWorker {
         self.terminate_process("close");
         if let Some(join) = self.join.lock().take() {
             join.join()
-                .map_err(|_| TsgoError::Join("msgpack worker".into()))?;
+                .map_err(|_| CorsaError::Join("msgpack worker".into()))?;
         }
         Ok(())
     }
@@ -184,7 +184,7 @@ impl MsgpackWorker {
             let _ = terminate_child_process(&mut child);
             observe(
                 self.observer.as_ref(),
-                TsgoEvent::MsgpackWorkerTerminated {
+                CorsaEvent::MsgpackWorkerTerminated {
                     reason: CompactString::from(reason),
                 },
             );
@@ -213,16 +213,16 @@ fn read_response(
         match message.kind {
             MSG_RESPONSE if message.method == method => return Ok(message.payload),
             MSG_ERROR if message.method == method => {
-                return Err(TsgoError::Protocol(
+                return Err(CorsaError::Protocol(
                     String::from_utf8_lossy(&message.payload).into(),
                 ));
             }
-            // `tsgo` can interleave filesystem callbacks while it computes the
+            // `corsa` can interleave filesystem callbacks while it computes the
             // request. Those callbacks must be answered before the final
             // response tuple can arrive.
             MSG_CALL => handle_callback(writer, filesystem, message)?,
             other => {
-                return Err(TsgoError::UnexpectedMessage(compact_format(format_args!(
+                return Err(CorsaError::UnexpectedMessage(compact_format(format_args!(
                     "msgpack type {other}"
                 ))));
             }
@@ -237,7 +237,7 @@ fn handle_callback(
     callback: MsgpackTuple,
 ) -> Result<()> {
     let method = std::str::from_utf8(&callback.method)
-        .map_err(|_| TsgoError::Protocol("callback method must be utf-8".into()))?;
+        .map_err(|_| CorsaError::Protocol("callback method must be utf-8".into()))?;
     let Some(filesystem) = filesystem else {
         return write_tuple(
             writer,
@@ -259,7 +259,7 @@ fn handle_callback(
         }
     };
     // Callback results are encoded as JSON and then wrapped back into the
-    // msgpack tuple protocol expected by `tsgo`.
+    // msgpack tuple protocol expected by `corsa`.
     match serde_json::to_vec(&value) {
         Ok(bytes) => write_tuple(writer, MSG_CALL_RESPONSE, method.as_bytes(), &bytes),
         Err(error) => write_tuple(

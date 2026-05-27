@@ -10,11 +10,11 @@ describe("PR benchmark report", () => {
   it("compares head means against base means by TypeScript channel", () => {
     const comparisons = compareReports([
       captured("base", "6", [
-        row("project_check", "api", "tsgo", 100),
+        row("project_check", "api", "corsa", 100),
         row("editor_workflow", "api", "corsa-msgpack-warm", 10),
       ]),
       captured("head", "6", [
-        row("project_check", "api", "tsgo", 80),
+        row("project_check", "api", "corsa", 80),
         row("editor_workflow", "api", "corsa-msgpack-warm", 10.1),
       ]),
     ]);
@@ -27,7 +27,7 @@ describe("PR benchmark report", () => {
       result: "stable",
     });
     expect(comparisons[0]?.rows[1]).toMatchObject({
-      tool: "tsgo",
+      tool: "corsa",
       result: "faster",
       deltaPercent: -20,
     });

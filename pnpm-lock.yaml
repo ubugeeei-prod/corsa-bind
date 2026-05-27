@@ -37,7 +37,7 @@ importers:
         version: link:../src/bindings/nodejs/corsa_node
       corsa-oxlint:
         specifier: workspace:*
-        version: link:../src/bindings/nodejs/typescript_oxlint
+        version: link:../src/bindings/nodejs/corsa_oxlint
 
   examples:
     dependencies:
@@ -46,11 +46,11 @@ importers:
         version: link:../src/bindings/nodejs/corsa_node
       corsa-oxlint:
         specifier: workspace:*
-        version: link:../src/bindings/nodejs/typescript_oxlint
+        version: link:../src/bindings/nodejs/corsa_oxlint
 
   src/bindings/nodejs/corsa_node: {}
 
-  src/bindings/nodejs/typescript_oxlint:
+  src/bindings/nodejs/corsa_oxlint:
     dependencies:
       '@corsa-bind/napi':
         specifier: workspace:*

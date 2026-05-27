@@ -28,6 +28,7 @@ jobs:
     name: Benchmark ${{ matrix.ref-role }} TypeScript ${{ matrix.typescript.channel }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    continue-on-error: ${{ matrix.ref-role == 'base' }}
     strategy:
       fail-fast: false
       matrix:
@@ -72,10 +73,27 @@ jobs:
       - name: Sync pinned Corsa ref
         run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
 
+      - name: Resolve benchmark compatibility
+        id: compat
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d ref/corsa-upstream ]; then
+            echo "build_corsa_task=build_corsa" >> "$GITHUB_OUTPUT"
+            echo "build_oxlint_task=build_corsa_oxlint" >> "$GITHUB_OUTPUT"
+          elif [ -d ref/typescript-go ]; then
+            ln -s typescript-go ref/corsa-upstream
+            echo "build_corsa_task=build_tsgo" >> "$GITHUB_OUTPUT"
+            echo "build_oxlint_task=build_typescript_oxlint" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing upstream checkout" >&2
+            exit 1
+          fi
+
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: ref/typescript-go/go.mod
+          go-version-file: ref/corsa-upstream/go.mod
           cache: false
 
       - name: Setup Vite+
@@ -86,34 +104,22 @@ jobs:
           run-install: true
 
       - name: Build pinned Corsa binary
-        run: vp run -w build_tsgo
+        run: vp run -w ${{ steps.compat.outputs.build_corsa_task }}
+
+      - name: Normalize benchmark paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.ref-role }}" = "base" ]; then
+            cp .cache/tsgo .cache/corsa
+            ln -sfn typescript_oxlint src/bindings/nodejs/corsa_oxlint
+          fi
 
       - name: Build corsa-oxlint package
-        run: vp run -w build_typescript_oxlint
+        run: vp run -w ${{ steps.compat.outputs.build_oxlint_task }}
 
       - name: Install benchmark comparison dependencies
         run: vp run -w bench_tooling_setup
-
-      - name: Select TypeScript ${{ matrix.typescript.channel }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          spec="${{ matrix.typescript.package }}"
-          npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix ref/typescript-go
-          npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix bench/cli_compare
-          node -p "require('./ref/typescript-go/node_modules/typescript/package.json').version"
-          node -p "require('./bench/cli_compare/node_modules/typescript/package.json').version"
-
-      - name: Run tooling benchmark
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .cache/pr-benchmark
-          cargo run --release -p corsa --bin bench_tooling_compare -- \
-            --iterations "$BENCH_ITERATIONS" \
-            --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \
-            --timeout-ms "$BENCH_TIMEOUT_MS" \
-            --json-output ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json"
 
       - name: Checkout PR helper scripts
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -123,11 +129,38 @@ jobs:
           path: .cache/pr-benchmark/workflow-scripts
           persist-credentials: false
 
+      - name: Select TypeScript ${{ matrix.typescript.channel }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          spec="${{ matrix.typescript.package }}"
+          npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix ref/corsa-upstream
+          npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix bench/cli_compare
+          node -p "require('./ref/corsa-upstream/node_modules/typescript/package.json').version"
+          node -p "require('./bench/cli_compare/node_modules/typescript/package.json').version"
+
+      - name: Run tooling benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/pr-benchmark
+          benchmark_args=()
+          if [ "${{ matrix.ref-role }}" = "base" ]; then
+            benchmark_args+=(--allow-partial-failures)
+          fi
+          cargo run --manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml --release -p corsa --bin bench_tooling_compare -- \
+            --corsa .cache/corsa \
+            "${benchmark_args[@]}" \
+            --iterations "$BENCH_ITERATIONS" \
+            --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \
+            --timeout-ms "$BENCH_TIMEOUT_MS" \
+            --json-output ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json"
+
       - name: Capture benchmark metadata
         shell: bash
         run: |
           set -euo pipefail
-          installed_ts="$(node -p "require('./ref/typescript-go/node_modules/typescript/package.json').version")"
+          installed_ts="$(node -p "require('./ref/corsa-upstream/node_modules/typescript/package.json').version")"
           node --strip-types ./.cache/pr-benchmark/workflow-scripts/scripts/pr_benchmark_report.ts capture \
             --input ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json" \
             --output ".cache/pr-benchmark/report-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json" \

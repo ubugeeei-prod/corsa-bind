@@ -28,7 +28,7 @@ do {
         }
         let optionsJSON = args[2]
         for _ in 0..<iterations {
-            let client = try CorsaTsgoApiClient.spawn(json: optionsJSON)
+            let client = try CorsaApiClient.spawn(json: optionsJSON)
             checksum += try client.initializeJSON().count
             try client.close()
         }

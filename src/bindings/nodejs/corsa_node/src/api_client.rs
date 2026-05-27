@@ -38,14 +38,14 @@ pub struct SpawnApiClientTask {
 
 #[napi]
 impl Task for SpawnApiClientTask {
-    type Output = TsgoApiClient;
-    type JsValue = TsgoApiClient;
+    type Output = CorsaApiClient;
+    type JsValue = CorsaApiClient;
 
     fn compute(&mut self) -> Result<Self::Output> {
         let options = parse_json::<SpawnOptions>(self.options_json.as_str())?;
         let inner =
             block_on(ApiClient::spawn(build_spawn_config(options)?)).map_err(into_napi_error)?;
-        Ok(TsgoApiClient {
+        Ok(CorsaApiClient {
             inner,
             snapshots: Arc::new(Mutex::new(FastMap::default())),
         })
@@ -375,19 +375,19 @@ impl Task for UnitApiTask {
 
 /// Spawns a new client on a libuv worker thread.
 #[napi]
-pub fn spawn_tsgo_api_client_async(options_json: String) -> AsyncTask<SpawnApiClientTask> {
+pub fn spawn_corsa_api_client_async(options_json: String) -> AsyncTask<SpawnApiClientTask> {
     AsyncTask::new(SpawnApiClientTask { options_json })
 }
 
 /// Thin synchronous wrapper around the Rust stdio API client.
 #[napi]
-pub struct TsgoApiClient {
+pub struct CorsaApiClient {
     inner: ApiClient,
     snapshots: SnapshotStore,
 }
 
 #[napi]
-impl TsgoApiClient {
+impl CorsaApiClient {
     /// Spawns a new client from a JSON-encoded spawn config.
     #[napi(factory)]
     pub fn spawn(options_json: String) -> Result<Self> {
@@ -416,7 +416,7 @@ impl TsgoApiClient {
         })
     }
 
-    /// Parses a `tsconfig` through tsgo and returns the JSON response.
+    /// Parses a `tsconfig` through corsa and returns the JSON response.
     #[napi]
     pub fn parse_config_file_json(&self, file: String) -> Result<String> {
         let response = block_on(self.inner.parse_config_file(file)).map_err(into_napi_error)?;
@@ -805,7 +805,7 @@ impl TsgoApiClient {
         })
     }
 
-    /// Releases a tsgo handle explicitly.
+    /// Releases a corsa handle explicitly.
     #[napi]
     pub fn release_handle(&self, handle: String) -> Result<()> {
         if let Some(snapshot) = self
@@ -822,7 +822,7 @@ impl TsgoApiClient {
         Ok(())
     }
 
-    /// Releases a tsgo handle on a libuv worker thread.
+    /// Releases a corsa handle on a libuv worker thread.
     #[napi]
     pub fn release_handle_async(&self, handle: String) -> AsyncTask<UnitApiTask> {
         AsyncTask::new(UnitApiTask {

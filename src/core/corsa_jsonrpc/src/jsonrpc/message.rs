@@ -1,5 +1,5 @@
 pub use crate::RpcResponseError;
-use crate::{Result, TsgoError};
+use crate::{CorsaError, Result};
 use corsa_core::fast::{CompactString, compact_format};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -108,7 +108,7 @@ impl RawMessage {
     /// Classifies the envelope into a higher-level message kind.
     pub fn kind(&self) -> Result<MessageKind> {
         if self.jsonrpc.as_str() != "2.0" {
-            return Err(TsgoError::Protocol(compact_format(format_args!(
+            return Err(CorsaError::Protocol(compact_format(format_args!(
                 "unsupported jsonrpc version: {}",
                 self.jsonrpc
             ))));
@@ -133,7 +133,7 @@ impl RawMessage {
                 result: None,
                 error: Some(error.clone()),
             }),
-            _ => Err(TsgoError::UnexpectedMessage(compact_format(format_args!(
+            _ => Err(CorsaError::UnexpectedMessage(compact_format(format_args!(
                 "{self:?}"
             )))),
         }
@@ -189,7 +189,7 @@ mod tests {
         let error = message.kind().unwrap_err();
         assert!(matches!(
             error,
-            TsgoError::Protocol(message) if message.contains("unsupported jsonrpc version")
+            CorsaError::Protocol(message) if message.contains("unsupported jsonrpc version")
         ));
     }
 
@@ -206,7 +206,7 @@ mod tests {
 
         assert!(matches!(
             message.kind().unwrap_err(),
-            TsgoError::UnexpectedMessage(_)
+            CorsaError::UnexpectedMessage(_)
         ));
     }
 
@@ -227,7 +227,7 @@ mod tests {
 
         assert!(matches!(
             message.kind().unwrap_err(),
-            TsgoError::UnexpectedMessage(_)
+            CorsaError::UnexpectedMessage(_)
         ));
     }
 
@@ -253,7 +253,7 @@ mod tests {
 
         assert!(matches!(
             message.kind().unwrap_err(),
-            TsgoError::UnexpectedMessage(_)
+            CorsaError::UnexpectedMessage(_)
         ));
     }
 }

@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn spawn_config_defaults_to_msgpack() {
-        let options = parse_json::<SpawnOptions>(r#"{"executable":"./tsgo"}"#).unwrap();
+        let options = parse_json::<SpawnOptions>(r#"{"executable":"./corsa"}"#).unwrap();
         let config = build_spawn_config(options).unwrap();
         assert_eq!(config.mode, ApiMode::SyncMsgpackStdio);
     }
@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn spawn_config_accepts_jsonrpc_mode() {
         let options =
-            parse_json::<SpawnOptions>(r#"{"executable":"./tsgo","mode":"jsonrpc"}"#).unwrap();
+            parse_json::<SpawnOptions>(r#"{"executable":"./corsa","mode":"jsonrpc"}"#).unwrap();
         let config = build_spawn_config(options).unwrap();
         assert_eq!(config.mode, ApiMode::AsyncJsonRpcStdio);
     }
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn spawn_config_accepts_transport_limits() {
         let options = parse_json::<SpawnOptions>(
-            r#"{"executable":"./tsgo","requestTimeoutMs":5000,"shutdownTimeoutMs":250,"outboundCapacity":8,"allowUnstableUpstreamCalls":true}"#,
+            r#"{"executable":"./corsa","requestTimeoutMs":5000,"shutdownTimeoutMs":250,"outboundCapacity":8,"allowUnstableUpstreamCalls":true}"#,
         )
         .unwrap();
         let config = build_spawn_config(options).unwrap();

@@ -70,7 +70,7 @@ function npmPackages(): SpdxPackage[] {
   return [
     "package.json",
     "src/bindings/nodejs/corsa_node/package.json",
-    "src/bindings/nodejs/typescript_oxlint/package.json",
+    "src/bindings/nodejs/corsa_oxlint/package.json",
   ]
     .filter(existsSync)
     .map((path) => {

@@ -11,12 +11,23 @@ Rust bindings, orchestration layers, and JS runtime bindings for Corsa over stdi
 > [!IMPORTANT]
 > `corsa` is intentionally built around upstream-supported Corsa
 > workflows. We follow Corsa's recommended stdio/API/LSP integration points,
-> keep `ref/typescript-go` as an exact upstream checkout, and preserve a strict
+> keep `ref/corsa-upstream` as an exact upstream checkout, and preserve a strict
 > `no forks, no patches` policy.
 
 ## What This Is
 
 `corsa` is a multi-crate workspace for talking to Corsa from Rust and JavaScript runtimes without patching upstream, with a Rust-backed native FFI layer that exposes Corsa API, virtual-document, and `utils` surfaces across C-family and other native languages.
+
+## Naming Note
+
+`corsa` is the codename for this effort: the native TypeScript 7 implementation
+line we track here in the `typescript-go` codebase.
+The TypeScript roadmap describes this as the JS-based TypeScript 6 line versus
+the native TypeScript 7 line, and it also uses `Strada` for the original
+TypeScript codename and `Corsa` for this effort:
+[TypeScript Native Port: Versioning Roadmap](https://devblogs.microsoft.com/typescript/typescript-native-port/#versioning-roadmap).
+We use `corsa` here instead of the more generic `tsc` or `tsgo` labels because
+those names are easy to misread in docs, code, and release notes.
 
 In practice, that means:
 
@@ -41,13 +52,13 @@ Current focus:
 ## Current Status
 
 - License: MIT
-- Upstream policy: `ref/typescript-go` is pinned and tracked by exact commit, with no local patching
+- Upstream policy: `ref/corsa-upstream` is pinned and tracked by exact commit, with no local patching
 - Default API transport: `SyncMsgpackStdio`
 - Runtime: custom in-house runtime, no `tokio`
 - Fast-path bias: `CompactString`, `SmallVec`, `bumpalo`, `memchr`, `phf`, `FxHash`
 - JS toolchain: Vite+ (`vp`) with vp-managed Node `24`, pnpm `10`, `oxfmt`, and `oxlint`
 - Repo automation: `scripts/*.ts` executed directly through Node `24` with `--strip-types`
-- JS bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa oxlint` (`src/bindings/nodejs/typescript_oxlint`, published as `corsa-oxlint`) (public npm packages that still expect a caller-managed Corsa executable)
+- JS bindings: `@corsa-bind/napi` (`src/bindings/nodejs/corsa_node`) and `corsa oxlint` (`src/bindings/nodejs/corsa_oxlint`, published as `corsa-oxlint`) (public npm packages that still expect a caller-managed Corsa executable)
 - Distributed orchestration: `experimental-distributed` cargo feature
 - TS benchmark project: `bench`
 - Example workspace: `examples`
@@ -57,11 +68,11 @@ Current focus:
 - Unstable upstream endpoints such as `printNode` are opt-in
 - Structured event sink: `CorsaObserver` / `CorsaEvent`
 
-Pinned upstream at the time of writing:
+Corsa upstream snapshot at the time of writing:
 
 - Repository: `https://github.com/microsoft/typescript-go.git`
 - Commit: `f4a1d2a1d0d5df4333f2440500e3a6c4b4702d9a`
-- Lock file: [`tsgo_ref.lock.toml`](./tsgo_ref.lock.toml), which is the
+- Lock file: [`corsa_ref.lock.toml`](./corsa_ref.lock.toml), which is the
   source of truth for the exact upstream ref and tree.
 
 ## Workspace Layout
@@ -77,9 +88,9 @@ Pinned upstream at the time of writing:
 - `src/bindings/c/corsa_ffi`: shared C ABI over the Rust `corsa_client::ApiClient`, `corsa_core::utils`, and `corsa_lsp::VirtualDocument` surfaces
 - `src/bindings/cpp`, `src/bindings/go`, `src/bindings/zig`, `src/bindings/csharp`, `src/bindings/swift`, `src/bindings/moonbit`: thin language bindings layered on top of `corsa_ffi`
 - `src/bindings/nodejs/corsa_node`: `napi-rs` native bindings and the `@corsa-bind/napi` TypeScript wrapper package
-- `src/bindings/nodejs/typescript_oxlint`: type-aware Oxlint rule framework powered by Corsa
+- `src/bindings/nodejs/corsa_oxlint`: type-aware Oxlint rule framework powered by Corsa
 - `bench`: Vitest benchmark project for the Node binding
-- `examples`: curated `examples/nodejs`, `examples/rust`, and `examples/typescript_oxlint` flows from minimal start to real-project runs
+- `examples`: curated `examples/nodejs`, `examples/rust`, and `examples/corsa_oxlint` flows from minimal start to real-project runs
 
 For a detailed architecture walkthrough, design strategy, and implementation tips, see [docs/project_guide.md](./docs/project_guide.md).
 For deployment-oriented defaults, supported scope, and release checks, see [docs/production_readiness.md](./docs/production_readiness.md).
@@ -117,7 +128,7 @@ That split avoids current `tnix` edges around some larger flake constructs.
 See [docs/tnix_notes.md](./docs/tnix_notes.md) for the current limitations and
 the reasoning behind the layout.
 
-Sync and verify the pinned upstream checkout:
+Sync and verify the Corsa upstream checkout:
 
 ```bash
 vp run -w sync_ref
@@ -166,7 +177,7 @@ Run the real pinned Corsa examples with:
 ```bash
 vp run -w sync_ref
 vp run -w verify_ref
-vp run -w build_tsgo
+vp run -w build_corsa
 vp run -w examples_real
 ```
 
@@ -229,18 +240,18 @@ export const noStringPlusNumber = createRule({
 });
 ```
 
-The rule-side type-aware config lives under `settings.typescriptOxlint`. Package
-details and caveats are documented in [`src/bindings/nodejs/typescript_oxlint/README.md`](./src/bindings/nodejs/typescript_oxlint/README.md).
+The rule-side type-aware config lives under `settings.corsaOxlint`. Package
+details and caveats are documented in [`src/bindings/nodejs/corsa_oxlint/README.md`](./src/bindings/nodejs/corsa_oxlint/README.md).
 
 `corsa oxlint` exposes a TS-native type-aware rule set and plugin via `corsa-oxlint/rules`:
 
 ```ts
-import { typescriptOxlintPlugin } from "corsa-oxlint/rules";
+import { corsaOxlintPlugin } from "corsa-oxlint/rules";
 
 export default [
   {
     plugins: {
-      typescript: typescriptOxlintPlugin,
+      typescript: corsaOxlintPlugin,
     },
     rules: {
       "typescript/no-floating-promises": "error",
@@ -280,8 +291,8 @@ use corsa::{
 fn main() -> Result<(), corsa::CorsaError> {
     block_on(async {
         let client = ApiClient::spawn(
-            ApiSpawnConfig::new(".cache/tsgo")
-                .with_cwd("ref/typescript-go/_packages/native-preview"),
+            ApiSpawnConfig::new(".cache/corsa")
+                .with_cwd("ref/corsa-upstream/_packages/native-preview"),
         )
         .await?;
 
@@ -301,41 +312,41 @@ The repo ships two benchmark layers:
 - Native Rust benchmark: `vp run -w bench_native`
 - Native profiling benchmark: `vp run -w bench_native_profile`
 - Node binding benchmark: `vp run -w bench_ts`
-- `corsa oxlint` checker benchmark: `vp test bench --config ./vite.config.ts bench/src/typescript_oxlint.bench.ts`
-- `corsa oxlint` native-rule benchmark: `vp test bench --config ./vite.config.ts bench/src/typescript_oxlint_rules.bench.ts`
+- `corsa oxlint` checker benchmark: `vp test bench --config ./vite.config.ts bench/src/corsa_oxlint.bench.ts`
+- `corsa oxlint` native-rule benchmark: `vp test bench --config ./vite.config.ts bench/src/corsa_oxlint_rules.bench.ts`
 - Combined benchmark + budget guard: `vp run -w bench`
 
 The TS benchmark writes machine-readable output to `.cache/bench_ts.json`.
 The native benchmark writes machine-readable output to `.cache/bench_native.json`.
 The native profiling benchmark writes machine-readable output to `.cache/bench_native_profile.json`.
-The native Rust benchmark uses the real pinned Corsa binary through [`bench_real_tsgo`](./src/bindings/rust/corsa/src/bin/bench_real_tsgo/main.rs).
+The native Rust benchmark uses the real pinned Corsa binary through [`bench_real_corsa`](./src/bindings/rust/corsa/src/bin/bench_real_corsa/main.rs).
 
 Latest native measurements are documented in [docs/performance.md](./docs/performance.md).
 Benchmarking rationale, implementation notes, and usage tips are documented in [docs/benchmarking_guide.md](./docs/benchmarking_guide.md).
 CI structure, local reproduction steps, and troubleshooting notes are documented in [docs/ci_guide.md](./docs/ci_guide.md).
-On the pinned upstream commit and bundled datasets, `msgpack` was consistently faster than async JSON-RPC, which is why `ApiSpawnConfig::new()` defaults to `SyncMsgpackStdio`.
+On the exact Corsa upstream commit and bundled datasets, `msgpack` was consistently faster than async JSON-RPC, which is why `ApiSpawnConfig::new()` defaults to `SyncMsgpackStdio`.
 
 ## Regression Strategy
 
 The repository is intentionally aggressive about change detection because Corsa upstream is still unstable.
 
-- `cargo test --workspace` includes mock-server integration tests, policy tests, and real-Corsa regression tests when `.cache/tsgo` is available
-- `src/bindings/rust/corsa/tests/real_tsgo_baseline.rs` locks a real-server API summary to the pinned upstream commit
-- `src/bindings/rust/corsa/tests/real_tsgo_regression.rs` checks both transports against the real pinned Corsa binary
+- `cargo test --workspace` includes mock-server integration tests, policy tests, and real-Corsa regression tests when `.cache/corsa` is available
+- `src/bindings/rust/corsa/tests/real_corsa_baseline.rs` locks a real-server API summary to the pinned upstream commit
+- `src/bindings/rust/corsa/tests/real_corsa_regression.rs` checks both transports against the real pinned Corsa binary
 - the real-Corsa regression suite includes a hot-path guard that fails if msgpack falls too far behind JSON-RPC on the same machine
 - `vp run -w bench_native` and `vp run -w bench_ts` give repeatable transport-level measurements for Rust and Node
 - `vp run -w bench_verify` regenerates both reports and fails if benchmark samples disappear or hot-path budgets regress
-- `corsa_ref` enforces detached-HEAD exact-commit verification for `ref/typescript-go`
+- `corsa_ref` enforces detached-HEAD exact-commit verification for `ref/corsa-upstream`
 - CI structure and local reproduction notes live in [`docs/ci_guide.md`](./docs/ci_guide.md)
 
 ## Upstream Tracking
 
 Corsa upstream is under heavy development, so reproducibility is treated as a hard requirement.
 
-- exact commit metadata lives in [`tsgo_ref.lock.toml`](./tsgo_ref.lock.toml)
+- exact commit metadata lives in [`corsa_ref.lock.toml`](./corsa_ref.lock.toml)
 - sync and drift tooling lives in [`docs/corsa_upstream_dependency.md`](./docs/corsa_upstream_dependency.md)
 - CI and local reproduction details live in [`docs/ci_guide.md`](./docs/ci_guide.md)
-- `ref/typescript-go` must remain on detached `HEAD`
+- `ref/corsa-upstream` must remain on detached `HEAD`
 - dirty upstream worktrees fail verification
 
 ## Known Limitations

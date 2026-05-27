@@ -39,7 +39,7 @@ That means:
 - benchmark wins have to come from transport and orchestration, not private engine modifications
 - upgrading upstream is work, but it is honest work
 
-This policy is enforced through `ref/typescript-go`, `tsgo_ref.lock.toml`, and `corsa_ref`.
+This policy is enforced through `ref/corsa-upstream`, `corsa_ref.lock.toml`, and `corsa_ref`.
 
 ### 2. Reproducibility Beats Convenience
 
@@ -102,7 +102,7 @@ flowchart LR
     I["corsa_orchestrator"] --> C
     I --> D
     J["corsa_node"] --> B
-    K["typescript_oxlint"] --> J
+    K["corsa_oxlint"] --> J
 ```
 
 The mental model is:
@@ -114,7 +114,7 @@ The mental model is:
 - `orchestrator` owns pooling, caching, and replicated state
 - `runtime` keeps async execution lightweight and local to the repository
 - `ref` owns upstream pinning and verification
-- `corsa_node` and `typescript_oxlint` expose the Rust engine to JS and TS consumers
+- `corsa_node` and `corsa_oxlint` expose the Rust engine to JS and TS consumers
 
 ## Workspace Walkthrough
 
@@ -253,7 +253,7 @@ Why it exists:
 Touch this crate when:
 
 - the upstream pinning policy changes
-- CI or local reproduction around `ref/typescript-go` needs stronger guarantees
+- CI or local reproduction around `ref/corsa-upstream` needs stronger guarantees
 
 ### `corsa`
 
@@ -284,7 +284,7 @@ Touch this package when:
 - a Rust capability needs to be surfaced to JS
 - the JS wrapper API shape should change
 
-### `src/bindings/nodejs/typescript_oxlint`
+### `src/bindings/nodejs/corsa_oxlint`
 
 Role:
 
@@ -494,7 +494,7 @@ Good instincts:
 - keep replicated state deterministic
 - keep live process handles and replicated metadata conceptually separate
 
-### When Touching `typescript_oxlint`
+### When Touching `corsa_oxlint`
 
 Checklist:
 
@@ -587,7 +587,7 @@ If you are debugging performance:
 
 1. [benchmarking_guide.md](./benchmarking_guide.md)
 2. [performance.md](./performance.md)
-3. `bench_real_tsgo`
+3. `bench_real_corsa`
 4. transport code in `client`, `jsonrpc`, and `runtime`
 
 If you are debugging CI or environment issues:
@@ -595,7 +595,7 @@ If you are debugging CI or environment issues:
 1. [ci_guide.md](./ci_guide.md)
 2. `vite.config.ts`
 3. `corsa_ref`
-4. the managed upstream checkout under `ref/typescript-go`
+4. the managed upstream checkout under `ref/corsa-upstream`
 
 ## Final Mental Model
 

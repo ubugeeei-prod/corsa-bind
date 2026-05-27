@@ -1,5 +1,5 @@
 use corsa_core::{
-    Result, TsgoError,
+    CorsaError, Result,
     fast::{CompactString, compact_format},
 };
 use std::{path::Path, process::Command};
@@ -133,7 +133,7 @@ pub fn switch_detached(path: &Path, commit: &str) -> Result<()> {
 
 fn next_line<'a>(lines: &mut impl Iterator<Item = &'a str>, name: &str) -> Result<CompactString> {
     lines.next().map(CompactString::from).ok_or_else(|| {
-        TsgoError::Protocol(compact_format(format_args!("git output missing {name}")))
+        CorsaError::Protocol(compact_format(format_args!("git output missing {name}")))
     })
 }
 
@@ -173,7 +173,7 @@ fn git_command_error(
     args: &[&str],
     status: std::process::ExitStatus,
     stderr: Option<&[u8]>,
-) -> TsgoError {
+) -> CorsaError {
     let command = git_command_line(args);
     let cwd = path
         .map(|path| compact_format(format_args!("{}", path.display())))
@@ -190,11 +190,11 @@ fn git_command_error(
             "git command failed: {command}\n  cwd: {cwd}\n  status: {status}"
         )),
     };
-    TsgoError::Protocol(message)
+    CorsaError::Protocol(message)
 }
 
-fn git_clone_error(repository: &str, path: &Path, status: std::process::ExitStatus) -> TsgoError {
-    TsgoError::Protocol(compact_format(format_args!(
+fn git_clone_error(repository: &str, path: &Path, status: std::process::ExitStatus) -> CorsaError {
+    CorsaError::Protocol(compact_format(format_args!(
         "git command failed: git clone --origin origin --no-checkout {repository} {}\n  cwd: <current directory>\n  status: {status}",
         path.display()
     )))

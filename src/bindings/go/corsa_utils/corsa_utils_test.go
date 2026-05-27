@@ -45,9 +45,9 @@ func TestApiClientCheckerPositionBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workspace root: %v", err)
 	}
-	binary := filepath.Join(root, "target", "debug", "mock_tsgo")
+	binary := filepath.Join(root, "target", "debug", "mock_corsa")
 	if _, err := os.Stat(binary); err != nil {
-		t.Skip("mock_tsgo binary is not built")
+		t.Skip("mock_corsa binary is not built")
 	}
 	client, err := NewApiClient(ApiClientOptions{
 		Executable: binary,
@@ -108,9 +108,9 @@ func TestApiClientTypeArgumentsBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workspace root: %v", err)
 	}
-	binary := filepath.Join(root, "target", "debug", "mock_tsgo")
+	binary := filepath.Join(root, "target", "debug", "mock_corsa")
 	if _, err := os.Stat(binary); err != nil {
-		t.Skip("mock_tsgo binary is not built")
+		t.Skip("mock_corsa binary is not built")
 	}
 	client, err := NewApiClient(ApiClientOptions{
 		Executable: binary,
@@ -181,9 +181,9 @@ func TestApiClientSymbolTypeBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workspace root: %v", err)
 	}
-	binary := filepath.Join(root, "target", "debug", "mock_tsgo")
+	binary := filepath.Join(root, "target", "debug", "mock_corsa")
 	if _, err := os.Stat(binary); err != nil {
-		t.Skip("mock_tsgo binary is not built")
+		t.Skip("mock_corsa binary is not built")
 	}
 	client, err := NewApiClient(ApiClientOptions{
 		Executable: binary,

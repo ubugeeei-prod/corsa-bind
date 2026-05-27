@@ -6,7 +6,7 @@ import {
   getPackageVersion,
   isNpmPackageVersionPublished,
   publishPackedTarball,
-  typescriptOxlintPackage,
+  corsaOxlintPackage,
   withStagedNodeBindingPackages,
 } from "./npm_release_utils.ts";
 import { publicRustCrates } from "./release_manifest.ts";
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   await withStagedNodeBindingPackages(
     { requireAllTargets: false },
     async ({ binaryPackages, rootPackage }) => {
-      for (const npmPackage of [...binaryPackages, rootPackage, typescriptOxlintPackage]) {
+      for (const npmPackage of [...binaryPackages, rootPackage, corsaOxlintPackage]) {
         const version = getPackageVersion(npmPackage);
         if (await isNpmPackageVersionPublished(npmPackage, version)) {
           console.log(

@@ -4,7 +4,7 @@ use super::{
     state::{ReplicatedCacheEntry, ReplicatedCommand, ReplicatedSnapshot, ReplicatedState},
 };
 use crate::{
-    Result, TsgoError,
+    CorsaError, Result,
     api::{ApiClient, ApiProfile, ManagedSnapshot, UpdateSnapshotParams},
     lsp::{VirtualChange, VirtualDocument},
 };
@@ -36,7 +36,7 @@ use std::{future::Future, sync::Arc, time::Duration};
 ///     cluster.document("node-a", &document.uri).unwrap().text,
 ///     "let x = 1;"
 /// );
-/// # Ok::<(), corsa_orchestrator::TsgoError>(())
+/// # Ok::<(), corsa_orchestrator::CorsaError>(())
 /// ```
 #[derive(Clone)]
 pub struct DistributedApiOrchestrator {
@@ -138,7 +138,7 @@ impl DistributedApiOrchestrator {
             .into_iter()
             .collect::<SmallVec<[VirtualChange; 4]>>();
         let mut document = self.document(leader_id, uri).ok_or_else(|| {
-            TsgoError::Protocol(compact_format(format_args!(
+            CorsaError::Protocol(compact_format(format_args!(
                 "unknown virtual document: {}",
                 uri.as_str()
             )))
@@ -157,7 +157,7 @@ impl DistributedApiOrchestrator {
     /// Removes a replicated virtual document.
     pub fn close_virtual_document(&self, leader_id: &str, uri: &Uri) -> Result<()> {
         if self.document(leader_id, uri).is_none() {
-            return Err(TsgoError::Protocol(compact_format(format_args!(
+            return Err(CorsaError::Protocol(compact_format(format_args!(
                 "unknown virtual document: {}",
                 uri.as_str()
             ))));

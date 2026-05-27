@@ -61,7 +61,7 @@ fn malformed_results_surface_decode_errors() {
     );
     assert!(matches!(
         state.result::<String>("broken"),
-        Err(TsgoError::Json(_))
+        Err(CorsaError::Json(_))
     ));
 }
 
@@ -74,7 +74,7 @@ fn change_to_unknown_document_returns_protocol_error() {
         })
         .unwrap_err();
     assert!(
-        matches!(err, TsgoError::Protocol(message) if message.contains("unknown replicated document"))
+        matches!(err, CorsaError::Protocol(message) if message.contains("unknown replicated document"))
     );
 }
 

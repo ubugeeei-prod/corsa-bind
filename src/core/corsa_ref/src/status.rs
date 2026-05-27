@@ -75,7 +75,7 @@ impl RepositoryStatus {
     pub fn describe(&self) -> CompactString {
         if self.exact {
             return compact_format(format_args!(
-                "typescript_go is pinned exactly at {} ({})",
+                "corsa_upstream is pinned exactly at {} ({})",
                 self.snapshot.commit, self.snapshot.subject
             ));
         }
@@ -111,7 +111,7 @@ mod tests {
 
     fn lock() -> LockedRepository {
         LockedRepository {
-            path: "ref/typescript-go".into(),
+            path: "ref/corsa-upstream".into(),
             repository: "https://github.com/microsoft/typescript-go.git".into(),
             commit: "abc".into(),
             tree: "tree".into(),
@@ -157,7 +157,7 @@ mod tests {
         let status = RepositoryStatus::from_snapshot(&lock(), snapshot());
         assert_eq!(
             status.describe(),
-            "typescript_go is pinned exactly at abc (Pinned)"
+            "corsa_upstream is pinned exactly at abc (Pinned)"
         );
     }
 
