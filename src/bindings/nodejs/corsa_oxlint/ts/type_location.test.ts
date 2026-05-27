@@ -251,6 +251,121 @@ describe("corsa oxlint type locations", () => {
     expect(seen.declarationText).toContain("class Construct");
   });
 
+  integrationCase("resolves constructor parameter symbols from dependency declarations", () => {
+    const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-external-symbols-"));
+    const depDir = resolve(workspace, "node_modules", "external-dep");
+    const srcDir = resolve(workspace, "src");
+    mkdirSync(depDir, { recursive: true });
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(
+      resolve(depDir, "package.json"),
+      JSON.stringify({ name: "external-dep", version: "1.0.0", types: "index.d.ts" }),
+    );
+    writeFileSync(
+      resolve(depDir, "index.d.ts"),
+      [
+        "export interface IConstruct {",
+        "  readonly node: unknown;",
+        "}",
+        "export interface StackProps {",
+        "  readonly stackName?: string;",
+        "}",
+        "export interface ITaggable {",
+        "  readonly tags: unknown;",
+        "}",
+        "/**",
+        " * Represents the building block of the construct graph.",
+        " *",
+        " * All constructs besides the root construct must be created within the scope of",
+        " * another construct.",
+        " */",
+        "export declare class Construct implements IConstruct {",
+        "  readonly node: unknown;",
+        "  constructor(scope: Construct, id: string);",
+        "}",
+        "/**",
+        " * A root construct which represents a single CloudFormation stack.",
+        " */",
+        "export declare class Stack extends Construct implements ITaggable {",
+        "  /**",
+        "   * Tags to be applied to the stack.",
+        "   */",
+        "  readonly tags: unknown;",
+        "  private readonly _logicalIds;",
+        "  private readonly _stackDependencies;",
+        "  private readonly _missingContext;",
+        "  private readonly _stackName;",
+        "  /**",
+        "   * Creates a new stack.",
+        "   *",
+        "   * @param scope Parent of this stack, usually an `App` or a `Stage`, but could be any construct.",
+        "   * @param id The construct ID of this stack. If `stackName` is not explicitly",
+        "   * defined, this id (and any parent IDs) will be used to determine the",
+        "   * physical ID of the stack.",
+        "   * @param props Stack properties.",
+        "   */",
+        "  constructor(scope?: Construct, id?: string, props?: StackProps);",
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      resolve(workspace, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: "esnext",
+            moduleResolution: "node",
+            target: "es2022",
+            strict: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      ),
+    );
+    const filename = resolve(srcDir, "index.ts");
+    const sourceText = [
+      'import { Construct, Stack } from "external-dep";',
+      "declare const scope: Construct;",
+      'new Stack(scope, "x", { stackName: "demo" });',
+    ].join("\n");
+    writeFileSync(filename, sourceText);
+    const checker = createTypeChecker({
+      cwd: workspace,
+      filename,
+      sourceCode: { text: sourceText },
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            project: "tsconfig.json",
+            corsa: {
+              executable: realCorsaBinary,
+              cwd: workspace,
+              mode: "jsonrpc",
+            },
+          },
+        },
+      },
+    } as any);
+    const constructIndex = sourceText.indexOf("Stack(scope");
+    const callee = {
+      fileName: filename,
+      pos: constructIndex,
+      end: constructIndex + "Stack".length,
+      range: [constructIndex, constructIndex + "Stack".length] as const,
+    };
+    const constructType = checker.getTypeAtLocation(callee);
+    expect(constructType ? checker.typeToString(constructType) : undefined).toBe("typeof Stack");
+    const signature = constructType ? checker.getSignaturesOfType(constructType, 1)[0] : undefined;
+
+    expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual([
+      "scope",
+      "id",
+      "props",
+    ]);
+  });
+
   integrationCase("resolves the symbol type at a location instead of the node type", () => {
     const seen: Record<string, string | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
