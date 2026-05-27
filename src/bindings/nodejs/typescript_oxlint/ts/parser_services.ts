@@ -27,7 +27,11 @@ export function getParserServices(
     return current;
   }
   const parserOptions = resolveTypeAwareParserOptions(context);
-  if (!parserOptions.corsa && !parserOptions.tsgo && hasEslintParserServices(context.parserServices)) {
+  if (
+    !parserOptions.corsa &&
+    !parserOptions.tsgo &&
+    hasEslintParserServices(context.parserServices)
+  ) {
     const services = createEslintParserServices(context);
     parserServices.set(context, services);
     return services;
@@ -71,49 +75,32 @@ export function getParserServices(
 function createEslintParserServices(
   context: ContextWithParserOptions,
 ): ParserServicesWithTypeInformation {
-  const parserServices = context.parserServices as unknown as EslintParserServices;
+  const parserServices = context.parserServices!;
   const checker = parserServices.program.getTypeChecker();
   return {
-    program: parserServices.program as never,
+    program: parserServices.program,
     esTreeNodeToTSNodeMap: parserServices.esTreeNodeToTSNodeMap,
     tsNodeToESTreeNodeMap: parserServices.tsNodeToESTreeNodeMap,
     hasFullTypeInformation: true,
     getTypeAtLocation(node) {
       const tsNode = parserServices.esTreeNodeToTSNodeMap.get(node);
-      return tsNode ? checker.getTypeAtLocation(tsNode as never) : undefined;
+      return tsNode ? checker.getTypeAtLocation(tsNode) : undefined;
     },
     getSymbolAtLocation(node) {
       const tsNode = parserServices.esTreeNodeToTSNodeMap.get(node);
-      return tsNode ? checker.getSymbolAtLocation(tsNode as never) : undefined;
+      return tsNode ? checker.getSymbolAtLocation(tsNode) : undefined;
     },
   };
 }
 
 function hasEslintParserServices(
   value: ContextWithParserOptions["parserServices"],
-): value is EslintParserServices {
+): value is ParserServices {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      "program" in value &&
-      "esTreeNodeToTSNodeMap" in value &&
-      "tsNodeToESTreeNodeMap" in value,
+    typeof value === "object" &&
+    "program" in value &&
+    "esTreeNodeToTSNodeMap" in value &&
+    "tsNodeToESTreeNodeMap" in value,
   );
 }
-
-type EslintParserServices = {
-  readonly program: {
-    getTypeChecker(): {
-      getTypeAtLocation(node: unknown): unknown;
-      getSymbolAtLocation(node: unknown): unknown;
-    };
-  };
-  readonly esTreeNodeToTSNodeMap: {
-    get(node: unknown): unknown;
-    has(node: unknown): boolean;
-  };
-  readonly tsNodeToESTreeNodeMap: {
-    get(node: unknown): unknown;
-    has(node: unknown): boolean;
-  };
-};

@@ -77,74 +77,77 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.PlainClass).toEqual([]);
   });
 
-  integrationCase("resolves implemented types from a declaration node recovered from type metadata", () => {
-    const seen: Record<string, readonly string[] | undefined> = {};
-    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
-    const rule = createRule({
-      name: "implemented-types-from-node-id",
-      meta: {
-        type: "problem",
-        docs: {
-          description: "exercise implemented types from a recovered declaration node",
-          requiresTypeChecking: true,
-        },
-        messages: {
-          unexpected: "unexpected",
-        },
-        schema: [],
-      },
-      defaultOptions: [],
-      create(context: any) {
-        const services = OxlintUtils.getParserServices(context);
-        const checker = services.program.getTypeChecker();
-        return {
-          TSPropertySignature(node: any) {
-            if (node.key?.name !== "foo") {
-              return;
-            }
-            const type = checker.getTypeAtLocation(node);
-            const symbol = type?.symbol ? checker.getSymbol(type.symbol) : undefined;
-            const declaration = symbol?.declarations?.[0];
-            const declarationNode = declaration ? checker.getNodeById(declaration) : undefined;
-            seen.foo = declarationNode
-              ? checker.getImplementedTypes(declarationNode).map((implemented) =>
-                  checker.typeToString(implemented),
-                )
-              : undefined;
+  integrationCase(
+    "resolves implemented types from a declaration node recovered from type metadata",
+    () => {
+      const seen: Record<string, readonly string[] | undefined> = {};
+      const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+      const rule = createRule({
+        name: "implemented-types-from-node-id",
+        meta: {
+          type: "problem",
+          docs: {
+            description: "exercise implemented types from a recovered declaration node",
+            requiresTypeChecking: true,
           },
-        };
-      },
-    });
+          messages: {
+            unexpected: "unexpected",
+          },
+          schema: [],
+        },
+        defaultOptions: [],
+        create(context: any) {
+          const services = OxlintUtils.getParserServices(context);
+          const checker = services.program.getTypeChecker();
+          return {
+            TSPropertySignature(node: any) {
+              if (node.key?.name !== "foo") {
+                return;
+              }
+              const type = checker.getTypeAtLocation(node);
+              const symbol = type?.symbol ? checker.getSymbol(type.symbol) : undefined;
+              const declaration = symbol?.declarations?.[0];
+              const declarationNode = declaration ? checker.getNodeById(declaration) : undefined;
+              seen.foo = declarationNode
+                ? checker
+                    .getImplementedTypes(declarationNode)
+                    .map((implemented) => checker.typeToString(implemented))
+                : undefined;
+            },
+          };
+        },
+      });
 
-    const tester = new RuleTester();
-    tester.run("implemented-types-from-node-id", rule as any, {
-      valid: [
-        {
-          code: [
-            "interface IFoo {",
-            "  name: string;",
-            "}",
-            "declare class Foo implements IFoo {",
-            "  name: string;",
-            "}",
-            "interface Bag {",
-            "  foo: Foo;",
-            "}",
-          ].join("\n"),
-          settings: {
-            typescriptOxlint: {
-              parserOptions: {
-                tsgo: {
-                  executable: realTsgoBinary,
+      const tester = new RuleTester();
+      tester.run("implemented-types-from-node-id", rule as any, {
+        valid: [
+          {
+            code: [
+              "interface IFoo {",
+              "  name: string;",
+              "}",
+              "declare class Foo implements IFoo {",
+              "  name: string;",
+              "}",
+              "interface Bag {",
+              "  foo: Foo;",
+              "}",
+            ].join("\n"),
+            settings: {
+              typescriptOxlint: {
+                parserOptions: {
+                  tsgo: {
+                    executable: realTsgoBinary,
+                  },
                 },
               },
             },
           },
-        },
-      ],
-      invalid: [],
-    });
+        ],
+        invalid: [],
+      });
 
-    expect(seen.foo).toEqual(["IFoo"]);
-  });
+      expect(seen.foo).toEqual(["IFoo"]);
+    },
+  );
 });

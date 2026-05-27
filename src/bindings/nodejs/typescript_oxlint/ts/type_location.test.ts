@@ -119,7 +119,9 @@ describe("corsa oxlint type locations", () => {
             }
             seen.newExpressionType = onNode ? checker.typeToString(onNode) : undefined;
             const signature = checker.getSignaturesOfType(type, 1)[0];
-            seen.parameterNames = signature?.parameters.map((id) => checker.getSymbolById(id)?.name);
+            seen.parameterNames = signature?.parameters.map(
+              (id) => checker.getSymbolById(id)?.name,
+            );
             const symbol = type.symbol ? checker.getSymbol(type.symbol) : undefined;
             seen.typeSymbolName = symbol?.name;
             const declarationNode = symbol?.valueDeclaration
@@ -167,7 +169,7 @@ describe("corsa oxlint type locations", () => {
             "  /**",
             "   * Separator used to delimit construct path components.",
             "   */",
-            "  static readonly PATH_SEP = \"/\";",
+            '  static readonly PATH_SEP = "/";',
             "  /**",
             "   * Returns the node associated with a construct.",
             "   * @param construct the construct",

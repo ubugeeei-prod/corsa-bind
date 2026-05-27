@@ -274,8 +274,10 @@ function implementedTypesFromTsgoNode(
           const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
           const pos = node.pos + implementsIndex + "implements".length + range.start + leading;
           const end = node.pos + implementsIndex + "implements".length + range.end - trailing;
-          const lookupNode = {
-            type: "Identifier",
+          const lookupNode: TsgoNode = {
+            fileName: node.fileName,
+            pos,
+            end,
             range: [pos, end] as const,
           };
           const symbol = checker.getSymbolAtLocation(lookupNode);

@@ -759,12 +759,12 @@ export class TsgoProjectSession {
 
 function isArrayOrTupleLikeType(session: TsgoProjectSession, type: TsgoType): boolean {
   const texts =
-    Array.isArray(type.texts) && type.texts.length > 0
-      ? type.texts
-      : [session.typeToString(type)];
+    Array.isArray(type.texts) && type.texts.length > 0 ? type.texts : [session.typeToString(type)];
   return texts.some((text) => {
     const normalized = text.trimStart();
-    return normalized.startsWith("readonly [") || normalized.startsWith("[") || normalized.endsWith("[]");
+    return (
+      normalized.startsWith("readonly [") || normalized.startsWith("[") || normalized.endsWith("[]")
+    );
   });
 }
 
