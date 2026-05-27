@@ -112,6 +112,14 @@ jobs:
       - name: Install benchmark comparison dependencies
         run: vp run -w bench_tooling_setup
 
+      - name: Checkout PR helper scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .cache/pr-benchmark/workflow-scripts
+          persist-credentials: false
+
       - name: Select TypeScript ${{ matrix.typescript.channel }}
         shell: bash
         run: |
@@ -131,20 +139,12 @@ jobs:
           if [ "${{ matrix.ref-role }}" = "base" ]; then
             benchmark_args+=(--allow-partial-failures)
           fi
-          cargo run --release -p corsa --bin bench_tooling_compare -- \
+          cargo run --manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml --release -p corsa --bin bench_tooling_compare -- \
             "${benchmark_args[@]}" \
             --iterations "$BENCH_ITERATIONS" \
             --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \
             --timeout-ms "$BENCH_TIMEOUT_MS" \
             --json-output ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json"
-
-      - name: Checkout PR helper scripts
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: .cache/pr-benchmark/workflow-scripts
-          persist-credentials: false
 
       - name: Capture benchmark metadata
         shell: bash
