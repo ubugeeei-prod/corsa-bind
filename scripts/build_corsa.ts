@@ -11,7 +11,7 @@ function main(): void {
 
   mkdirSync(goCacheDir, { recursive: true });
 
-  runCommand("go", ["build", "-o", outputPath, "./cmd/corsa"], {
+  runCommand("go", ["build", "-o", outputPath, "./cmd/tsgo"], {
     cwd: refDir,
     env: {
       ...process.env,
