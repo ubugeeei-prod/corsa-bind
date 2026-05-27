@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::split::{split_top_level_owned, split_type_text_owned};
+use super::split::{split_top_level_owned, split_type_text_owned, strip_wrapping_parens};
 
 /// Classification bucket for a rendered TypeScript type text.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -56,21 +56,11 @@ pub fn classify_type_text(text: Option<&str>) -> TypeTextKind {
     let Some(text) = text.map(str::trim).filter(|text| !text.is_empty()) else {
         return TypeTextKind::Other;
     };
-    match text {
-        "any" => TypeTextKind::Any,
-        "unknown" | "never" => TypeTextKind::Unknown,
-        "string" => TypeTextKind::String,
-        "number" => TypeTextKind::Number,
-        "bigint" => TypeTextKind::Bigint,
-        "boolean" | "true" | "false" => TypeTextKind::Boolean,
-        "null" | "undefined" => TypeTextKind::Nullish,
-        _ if is_string_literal(text) => TypeTextKind::String,
-        _ if is_number_literal(text) => TypeTextKind::Number,
-        _ if is_bigint_literal(text) => TypeTextKind::Bigint,
-        _ if text.contains("null |") || text.contains("| null") => TypeTextKind::Nullish,
-        _ if text.contains("RegExp") => TypeTextKind::Regexp,
-        _ => TypeTextKind::Other,
-    }
+    let text = strip_wrapping_parens(text);
+    classify_atomic_type_text(text)
+        .or_else(|| contains_top_level_kind(text, TypeTextKind::Nullish))
+        .or_else(|| contains_top_level_kind(text, TypeTextKind::Regexp))
+        .unwrap_or(TypeTextKind::Other)
 }
 
 /// Splits a type text at top-level occurrences of `delimiter`.
@@ -135,10 +125,10 @@ pub fn is_promise_like_type_texts<T: AsRef<str>, P: AsRef<str>>(
     type_texts: &[T],
     property_names: &[P],
 ) -> bool {
-    type_texts.iter().any(|text| {
-        let text = text.as_ref();
-        text.contains("Promise") || text.contains("Thenable")
-    }) || property_names.iter().any(|name| name.as_ref() == "then")
+    type_texts
+        .iter()
+        .any(|text| is_promise_like_type_text(text.as_ref()))
+        || property_names.iter().any(|name| name.as_ref() == "then")
 }
 
 /// Returns whether type text or known properties suggest an Error-like value.
@@ -170,6 +160,43 @@ fn matches_kind<T: AsRef<str>>(type_texts: &[T], kind: TypeTextKind) -> bool {
     type_texts
         .iter()
         .any(|text| classify_type_text(Some(text.as_ref())) == kind)
+}
+
+fn classify_atomic_type_text(text: &str) -> Option<TypeTextKind> {
+    match text {
+        "any" => Some(TypeTextKind::Any),
+        "unknown" | "never" => Some(TypeTextKind::Unknown),
+        "string" => Some(TypeTextKind::String),
+        "number" => Some(TypeTextKind::Number),
+        "bigint" => Some(TypeTextKind::Bigint),
+        "boolean" | "true" | "false" => Some(TypeTextKind::Boolean),
+        "null" | "undefined" => Some(TypeTextKind::Nullish),
+        "RegExp" => Some(TypeTextKind::Regexp),
+        _ if is_string_literal(text) => Some(TypeTextKind::String),
+        _ if is_number_literal(text) => Some(TypeTextKind::Number),
+        _ if is_bigint_literal(text) => Some(TypeTextKind::Bigint),
+        _ => None,
+    }
+}
+
+fn contains_top_level_kind(text: &str, kind: TypeTextKind) -> Option<TypeTextKind> {
+    split_type_text_owned(text)
+        .into_iter()
+        .any(|part| classify_atomic_type_text(part.as_str()) == Some(kind))
+        .then_some(kind)
+}
+
+fn is_promise_like_type_text(text: &str) -> bool {
+    split_type_text_owned(strip_wrapping_parens(text))
+        .into_iter()
+        .any(|part| is_promise_like_atom(part.trim()))
+}
+
+fn is_promise_like_atom(text: &str) -> bool {
+    matches!(text, "Promise" | "PromiseLike" | "Thenable")
+        || text.starts_with("Promise<")
+        || text.starts_with("PromiseLike<")
+        || text.starts_with("Thenable<")
 }
 
 pub(crate) fn is_string_literal(text: &str) -> bool {
@@ -204,6 +231,18 @@ mod tests {
             classify_type_text(Some("null | string")),
             TypeTextKind::Nullish
         );
+        assert_eq!(
+            classify_type_text(Some("string | undefined")),
+            TypeTextKind::Nullish
+        );
+        assert_eq!(
+            classify_type_text(Some("Promise<string | null>")),
+            TypeTextKind::Other
+        );
+        assert_eq!(
+            classify_type_text(Some("Promise<RegExp>")),
+            TypeTextKind::Other
+        );
         assert_eq!(classify_type_text(Some("RegExp")), TypeTextKind::Regexp);
         assert_eq!(classify_type_text(None), TypeTextKind::Other);
     }
@@ -225,6 +264,14 @@ mod tests {
         assert!(is_array_like_type_texts(&["ReadonlyArray<string>"]));
         assert!(is_promise_like_type_texts(
             &["Promise<string>"],
+            &[] as &[&str]
+        ));
+        assert!(is_promise_like_type_texts(
+            &["Promise<string> | null"],
+            &[] as &[&str]
+        ));
+        assert!(!is_promise_like_type_texts(
+            &["NotPromise<string>"],
             &[] as &[&str]
         ));
         assert!(is_promise_like_type_texts(
