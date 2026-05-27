@@ -28,6 +28,7 @@ jobs:
     name: Benchmark ${{ matrix.ref-role }} TypeScript ${{ matrix.typescript.channel }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    continue-on-error: ${{ matrix.ref-role == 'base' }}
     strategy:
       fail-fast: false
       matrix:
