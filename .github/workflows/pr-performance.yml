@@ -106,6 +106,14 @@ jobs:
       - name: Build pinned Corsa binary
         run: vp run -w ${{ steps.compat.outputs.build_corsa_task }}
 
+      - name: Normalize benchmark Corsa path
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.ref-role }}" = "base" ]; then
+            cp .cache/tsgo .cache/corsa
+          fi
+
       - name: Build corsa-oxlint package
         run: vp run -w ${{ steps.compat.outputs.build_oxlint_task }}
 
@@ -140,6 +148,7 @@ jobs:
             benchmark_args+=(--allow-partial-failures)
           fi
           cargo run --manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml --release -p corsa --bin bench_tooling_compare -- \
+            --corsa .cache/corsa \
             "${benchmark_args[@]}" \
             --iterations "$BENCH_ITERATIONS" \
             --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \
