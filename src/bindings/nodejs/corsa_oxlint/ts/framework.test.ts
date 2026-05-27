@@ -73,7 +73,8 @@ describe("corsa oxlint", () => {
       },
     } as any);
 
-    rule.create({
+    expect(rule.create).toBeDefined();
+    rule.create!({
       cwd: workspaceRoot,
       filename: resolve(workspaceRoot, "fixture.ts"),
       languageOptions: {
@@ -150,8 +151,9 @@ describe("corsa oxlint", () => {
       },
     } as never);
 
-    expect(services.program).toBe(program);
+    expect(Object.getPrototypeOf(services.program)).toBe(program);
     expect(services.hasFullTypeInformation).toBe(true);
+    expect(typeof services.program.getTypeChecker().isUnionType).toBe("function");
     expect(services.getTypeAtLocation({ type: "Identifier" } as never)).toEqual({
       kind: "type",
     });
@@ -208,14 +210,115 @@ describe("corsa oxlint", () => {
       },
     } as never);
 
-    expect(services.program).toBe(program);
+    expect(Object.getPrototypeOf(services.program)).toBe(program);
     expect(services.hasFullTypeInformation).toBe(true);
+    expect(typeof services.program.getTypeChecker().isUnionType).toBe("function");
     expect(services.getTypeAtLocation({ type: "Identifier" } as never)).toEqual({
       kind: "type",
     });
     expect(services.getSymbolAtLocation({ type: "Identifier" } as never)).toEqual({
       kind: "symbol",
     });
+  });
+
+  it("exposes the corsa checker shape when using sourceCode parserServices", () => {
+    const unionType = {
+      isUnion() {
+        return true;
+      },
+      types: [{ name: "string" }, { name: "number" }],
+    };
+    const implementedType = { name: "Implemented" };
+    const implementationExpression = { kind: "implementation-expression" };
+    const implementedClause = {
+      getText() {
+        return "implements Implemented";
+      },
+      types: [
+        {
+          expression: implementationExpression,
+        },
+      ],
+    };
+    const classDeclaration = {
+      heritageClauses: [implementedClause],
+    };
+    const classType = {
+      symbol: {
+        declarations: [classDeclaration],
+      },
+    };
+    const classNode = { type: "ClassDeclaration" };
+    const typeArgument = { name: "T" };
+    const checker = {
+      getTypeAtLocation(node: unknown) {
+        return node === implementationExpression ? implementedType : unionType;
+      },
+      getSymbolAtLocation() {
+        return { kind: "symbol" };
+      },
+      getTypeArguments() {
+        return [typeArgument];
+      },
+    };
+    const program = {
+      getTypeChecker() {
+        return checker;
+      },
+    };
+    const tsNode = { kind: "ts-node" };
+    const parserServices = {
+      program,
+      esTreeNodeToTSNodeMap: {
+        get(node: unknown) {
+          if (node === classNode) {
+            return classDeclaration;
+          }
+          return tsNode;
+        },
+        has() {
+          return true;
+        },
+      },
+      tsNodeToESTreeNodeMap: {
+        get(node: unknown) {
+          if (node === classDeclaration) {
+            return classNode;
+          }
+          return { type: "Identifier" };
+        },
+        has() {
+          return true;
+        },
+      },
+    };
+
+    const services = getParserServices({
+      cwd: workspaceRoot,
+      filename: resolve(workspaceRoot, "fixture.ts"),
+      languageOptions: {
+        parserOptions: {},
+      },
+      report() {},
+      settings: {},
+      sourceCode: {
+        text: "type Fixture = string | number;",
+        parserServices: parserServices as never,
+      },
+    } as never);
+    const corsaChecker = services.program.getTypeChecker();
+    const type = services.getTypeAtLocation({ type: "Identifier" } as never);
+
+    expect(type).toBe(unionType);
+    expect(corsaChecker.getTypeAtLocation({ type: "Identifier" } as never)).toBe(unionType);
+    expect(corsaChecker.isUnionType(type as never)).toBe(true);
+    expect(corsaChecker.getTypesOfType(type as never)).toEqual(unionType.types);
+    expect(corsaChecker.getBaseTypes(type as never)).toEqual([]);
+    expect(corsaChecker.getImplementedTypes(classNode as never)).toEqual([implementedType]);
+    expect(corsaChecker.getImplementedTypesOfType(classType as never)).toEqual([implementedType]);
+    expect(corsaChecker.getTypeArguments(type as never)).toEqual([typeArgument]);
+    expect(corsaChecker.getSymbolById("missing")).toBeUndefined();
+    expect(corsaChecker.getNodeById("missing")).toBeUndefined();
   });
 
   it("propagates corsaOxlint settings through RuleTester", () => {

@@ -1,7 +1,8 @@
-import type { Rule, RuleMeta, Visitor } from "@oxlint/plugins";
+import type { RuleMeta, Visitor } from "@oxlint/plugins";
 
 import { getParserServices } from "./parser_services";
 import { decorateRule } from "./plugin";
+import type { Rule } from "./plugin";
 import type { ContextWithParserOptions } from "./types";
 
 export type RuleCreatorRule<
@@ -16,10 +17,7 @@ export type RuleCreatorRule<
   readonly create: (context: ContextWithParserOptions) => Visitor;
 };
 
-export type RuleCreatorCreatedRule<TRule extends RuleCreatorRule> = Omit<
-  TRule,
-  "defaultOptions" | "meta"
-> & {
+export type RuleCreatorCreatedRule<TRule extends RuleCreatorRule> = Rule & {
   readonly defaultOptions: TRule extends { readonly defaultOptions: infer TOptions }
     ? TOptions
     : readonly [];
@@ -28,8 +26,7 @@ export type RuleCreatorCreatedRule<TRule extends RuleCreatorRule> = Omit<
       readonly url: string;
     };
   };
-} & Rule &
-  Record<string, unknown>;
+};
 
 export type RuleCreatorFactory = <TRule extends RuleCreatorRule>(
   rule: TRule,
@@ -68,12 +65,11 @@ export const NullThrowsReasons = Object.freeze({
 export const RuleCreator = Object.assign(OxlintUtils.RuleCreator, {
   withoutDocs<TRule extends Omit<RuleCreatorRule, "name">>(
     rule: TRule,
-  ): Omit<TRule, "defaultOptions"> &
-    Rule & {
-      readonly defaultOptions: TRule extends { readonly defaultOptions: infer TOptions }
-        ? TOptions
-        : readonly [];
-    } {
+  ): Rule & {
+    readonly defaultOptions: TRule extends { readonly defaultOptions: infer TOptions }
+      ? TOptions
+      : readonly [];
+  } {
     return decorateRule({
       ...rule,
       defaultOptions: rule.defaultOptions ?? [],
