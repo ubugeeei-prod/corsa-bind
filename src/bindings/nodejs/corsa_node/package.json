@@ -1,6 +1,6 @@
 {
   "name": "@corsa-bind/napi",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Native JS runtime bindings for Corsa stdio workflows",
   "homepage": "https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/corsa_node",
   "bugs": {
