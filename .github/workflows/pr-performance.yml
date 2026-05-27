@@ -75,7 +75,7 @@ jobs:
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: ref/typescript-go/go.mod
+          go-version-file: ref/corsa-upstream/go.mod
           cache: false
 
       - name: Setup Vite+
@@ -86,7 +86,7 @@ jobs:
           run-install: true
 
       - name: Build pinned Corsa binary
-        run: vp run -w build_tsgo
+        run: vp run -w build_corsa
 
       - name: Build corsa-oxlint package
         run: vp run -w build_typescript_oxlint
@@ -99,9 +99,9 @@ jobs:
         run: |
           set -euo pipefail
           spec="${{ matrix.typescript.package }}"
-          npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix ref/typescript-go
+          npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix ref/corsa-upstream
           npm install --no-save --package-lock=false --legacy-peer-deps --no-fund --no-audit "$spec" --prefix bench/cli_compare
-          node -p "require('./ref/typescript-go/node_modules/typescript/package.json').version"
+          node -p "require('./ref/corsa-upstream/node_modules/typescript/package.json').version"
           node -p "require('./bench/cli_compare/node_modules/typescript/package.json').version"
 
       - name: Run tooling benchmark
@@ -127,7 +127,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          installed_ts="$(node -p "require('./ref/typescript-go/node_modules/typescript/package.json').version")"
+          installed_ts="$(node -p "require('./ref/corsa-upstream/node_modules/typescript/package.json').version")"
           node --strip-types ./.cache/pr-benchmark/workflow-scripts/scripts/pr_benchmark_report.ts capture \
             --input ".cache/pr-benchmark/raw-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json" \
             --output ".cache/pr-benchmark/report-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}.json" \

@@ -239,7 +239,7 @@ jobs:
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Build mock Corsa binary
-        run: cargo build -p corsa --bin mock_tsgo
+        run: cargo build -p corsa --bin mock_corsa
 
       - name: Validate public facade without experimental features
         run: cargo test -p corsa --no-default-features --test orchestrator
@@ -270,7 +270,7 @@ jobs:
       - name: Build C ABI and mock server
         run: |
           cargo build -p corsa_ffi
-          cargo build -p corsa --bin mock_tsgo
+          cargo build -p corsa --bin mock_corsa
 
       - name: Test Go binding
         working-directory: src/bindings/go/corsa_utils
@@ -283,7 +283,7 @@ jobs:
         run: |
           mkdir -p .cache/bindings
           cat > .cache/bindings/cpp_smoke.cpp <<'CPP'
-          #include "corsa_tsgo_api.hpp"
+          #include "corsa_api.hpp"
           #include "corsa_utils.hpp"
           #include "corsa_virtual_document.hpp"
           int main() {
@@ -379,7 +379,7 @@ jobs:
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: ref/typescript-go/go.mod
+          go-version-file: ref/corsa-upstream/go.mod
           cache: false
 
       - name: Setup Vite+
@@ -392,10 +392,10 @@ jobs:
           run-install: true
 
       - name: Build pinned Corsa binary
-        run: vp run -w build_tsgo
+        run: vp run -w build_corsa
 
       - name: Real Corsa smoke tests
-        run: cargo test -p corsa --no-default-features --test real_tsgo_regression --test real_tsgo_typecheck
+        run: cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck
 
       - name: Real examples
         run: vp run -w examples_real
@@ -423,7 +423,7 @@ jobs:
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: ref/typescript-go/go.mod
+          go-version-file: ref/corsa-upstream/go.mod
           cache: false
 
       - name: Setup Vite+
@@ -434,10 +434,10 @@ jobs:
           run-install: true
 
       - name: Build pinned Corsa binary
-        run: vp run -w build_tsgo
+        run: vp run -w build_corsa
 
       - name: Real Corsa baseline and regression tests
-        run: cargo test -p corsa --no-default-features --test real_tsgo_baseline --test real_tsgo_regression --test real_tsgo_typecheck
+        run: cargo test -p corsa --no-default-features --test real_corsa_baseline --test real_corsa_regression --test real_corsa_typecheck
 
       - name: Benchmark guards
         run: vp run -w bench_verify
