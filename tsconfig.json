@@ -28,6 +28,7 @@
   },
   "include": [
     "bench/**/*.ts",
+    "docs/**/*.ts",
     "examples/**/*.ts",
     "src/bindings/nodejs/corsa_oxlint/ts/**/*.ts",
     "src/bindings/nodejs/corsa_oxlint/tsconfig.json",

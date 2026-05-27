@@ -93,6 +93,7 @@ Corsa upstream snapshot at the time of writing:
 - `examples`: curated `examples/nodejs`, `examples/rust`, and `examples/corsa_oxlint` flows from minimal start to real-project runs
 
 For a detailed architecture walkthrough, design strategy, and implementation tips, see [docs/project_guide.md](./docs/project_guide.md).
+The generated Ox Content documentation site starts at [docs/index.md](./docs/index.md).
 For deployment-oriented defaults, supported scope, and release checks, see [docs/production_readiness.md](./docs/production_readiness.md).
 For support guarantees, compatibility, and semver expectations, see [docs/support_policy.md](./docs/support_policy.md).
 For distribution decisions and release dry-runs, see [docs/release_guide.md](./docs/release_guide.md).
@@ -141,6 +142,14 @@ Build everything through Vite+:
 vp install
 vp run -w build
 vp check
+```
+
+Build the Ox Content documentation site and deploy the generated static output
+with Void:
+
+```bash
+vp run -w docs_build
+vp run -w docs_deploy
 ```
 
 Repository automation scripts now assume Node `24` so they can run TypeScript
