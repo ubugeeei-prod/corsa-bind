@@ -10,6 +10,7 @@ options:
   --node CMD                 node executable or command name (default: node)
   --dataset PATH             tsconfig path to benchmark (repeatable)
   --json-output PATH         write machine-readable benchmark JSON
+  --allow-partial-failures    skip failed benchmark rows and continue
   --suite SUITE              project-check | workflow | both (default: both)
   --iterations N             timed iterations per row (default: 10)
   --warmup-iterations N      untimed warmup iterations (default: 2)
@@ -30,6 +31,7 @@ pub struct Cli {
     pub node_command: CompactString,
     pub dataset_paths: SmallVec<[PathBuf; 4]>,
     pub json_output_path: Option<PathBuf>,
+    pub allow_partial_failures: bool,
     pub suites: SmallVec<[Suite; 2]>,
     pub iterations: usize,
     pub warmup_iterations: usize,
@@ -42,6 +44,7 @@ pub fn parse() -> Result<Option<Cli>, CompactString> {
     let mut node_command = CompactString::from("node");
     let mut dataset_paths = SmallVec::<[PathBuf; 4]>::new();
     let mut json_output_path = None;
+    let mut allow_partial_failures = false;
     let mut suites = both_suites();
     let mut iterations = 10_usize;
     let mut warmup_iterations = 2_usize;
@@ -65,6 +68,9 @@ pub fn parse() -> Result<Option<Cli>, CompactString> {
             }
             "--json-output" => {
                 json_output_path = Some(read_path(&mut args, &argument, &root_dir)?);
+            }
+            "--allow-partial-failures" => {
+                allow_partial_failures = true;
             }
             "--suite" => {
                 suites = parse_suite(read_value(&mut args, &argument)?)?;
@@ -104,6 +110,7 @@ pub fn parse() -> Result<Option<Cli>, CompactString> {
         node_command,
         dataset_paths,
         json_output_path,
+        allow_partial_failures,
         suites,
         iterations,
         warmup_iterations,

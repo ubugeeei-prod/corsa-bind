@@ -57,6 +57,7 @@ describe("publish workflows", () => {
     expect(workflow).toContain('package: "typescript@next"');
     expect(workflow).toContain("Build corsa-oxlint package");
     expect(workflow).toContain("Checkout PR helper scripts");
+    expect(workflow).toContain("--allow-partial-failures");
     expect(workflow).toContain(
       "node --strip-types ./.cache/pr-benchmark/workflow-scripts/scripts/pr_benchmark_report.ts capture",
     );

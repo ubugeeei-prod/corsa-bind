@@ -127,7 +127,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cache/pr-benchmark
+          benchmark_args=()
+          if [ "${{ matrix.ref-role }}" = "base" ]; then
+            benchmark_args+=(--allow-partial-failures)
+          fi
           cargo run --release -p corsa --bin bench_tooling_compare -- \
+            "${benchmark_args[@]}" \
             --iterations "$BENCH_ITERATIONS" \
             --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \
             --timeout-ms "$BENCH_TIMEOUT_MS" \

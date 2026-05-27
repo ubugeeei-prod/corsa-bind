@@ -1,5 +1,6 @@
 use std::{
     fs,
+    future::Future,
     path::{Path, PathBuf},
     process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -87,73 +88,87 @@ async fn run_project_check_suite(
 ) -> Result<SmallVec<[ToolRow; 8]>> {
     let mut rows = SmallVec::<[ToolRow; 8]>::new();
     let timeout = Duration::from_millis(cli.timeout_ms);
-    rows.push(row(
-        "project_check",
-        dataset,
-        "tsc",
+    if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:tsc", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
             let mut command = tsc_command(support, overlay);
             run_command(&mut command, timeout, &[0], "tsc")
         })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "corsa",
+    })
+    .await?
+    {
+        rows.push(row("project_check", dataset, "tsc", stats));
+    }
+    if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:corsa", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
             let mut command = corsa_command(cli, support, overlay);
             run_command(&mut command, timeout, &[0], "corsa")
         })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "typescript-eslint",
-        measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
-            let mut command = eslint_command(dataset, support, overlay);
-            run_command(&mut command, timeout, &[0, 1], "typescript-eslint")
-        })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "corsa-oxlint",
-        measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
-            let mut command = corsa_oxlint_command(cli, dataset, support, overlay);
-            run_command(&mut command, timeout, &[0, 1], "corsa-oxlint")
-        })
-        .await?,
-    ));
-    rows.push(row(
-        "project_check",
-        dataset,
-        "tsgolint",
+    })
+    .await?
+    {
+        rows.push(row("project_check", dataset, "corsa", stats));
+    }
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "project_check:typescript-eslint",
+        || {
+            measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
+                let mut command = eslint_command(dataset, support, overlay);
+                run_command(&mut command, timeout, &[0, 1], "typescript-eslint")
+            })
+        },
+    )
+    .await?
+    {
+        rows.push(row("project_check", dataset, "typescript-eslint", stats));
+    }
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "project_check:corsa-oxlint",
+        || {
+            measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
+                let mut command = corsa_oxlint_command(cli, dataset, support, overlay);
+                run_command(&mut command, timeout, &[0, 1], "corsa-oxlint")
+            })
+        },
+    )
+    .await?
+    {
+        rows.push(row("project_check", dataset, "corsa-oxlint", stats));
+    }
+    if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:tsgolint", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
             let mut command = tsgolint_command(support, overlay);
             run_command(&mut command, timeout, &[0, 1], "tsgolint")
         })
-        .await?,
-    ));
+    })
+    .await?
+    {
+        rows.push(row("project_check", dataset, "tsgolint", stats));
+    }
     Ok(rows)
 }
 
 async fn run_workflow_suite(cli: &Cli, dataset: &DatasetCase) -> Result<SmallVec<[ToolRow; 4]>> {
     let mut rows = SmallVec::<[ToolRow; 4]>::new();
-    rows.push(row(
-        "editor_workflow",
-        dataset,
-        "corsa-msgpack-cold",
-        workflow_cold(cli, dataset).await?,
-    ));
-    rows.push(row(
-        "editor_workflow",
-        dataset,
-        "corsa-msgpack-warm",
-        workflow_warm(cli, dataset).await?,
-    ));
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "editor_workflow:corsa-msgpack-cold",
+        || workflow_cold(cli, dataset),
+    )
+    .await?
+    {
+        rows.push(row("editor_workflow", dataset, "corsa-msgpack-cold", stats));
+    }
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "editor_workflow:corsa-msgpack-warm",
+        || workflow_warm(cli, dataset),
+    )
+    .await?
+    {
+        rows.push(row("editor_workflow", dataset, "corsa-msgpack-warm", stats));
+    }
     Ok(rows)
 }
 
@@ -163,6 +178,27 @@ fn row(workload: &str, dataset: &DatasetCase, tool: &str, stats: Stats) -> ToolR
         dataset: dataset.label.clone(),
         tool: CompactString::from(tool),
         stats,
+    }
+}
+
+async fn measure_row<T, Fut>(
+    allow_partial_failures: bool,
+    label: &str,
+    make_stats: impl FnOnce() -> Fut,
+) -> Result<Option<T>>
+where
+    Fut: Future<Output = Result<T>>,
+{
+    match make_stats().await {
+        Ok(stats) => Ok(Some(stats)),
+        Err(error) if allow_partial_failures => {
+            eprintln!(
+                "warning: skipping {label} benchmark\n{}",
+                error.diagnostic()
+            );
+            Ok(None)
+        }
+        Err(error) => Err(error),
     }
 }
 
