@@ -1,3 +1,14 @@
+import { execFileSync } from "node:child_process";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { relative, resolve } from "node:path";
+
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ESTree as RootESTree } from "./index";
 
@@ -9,6 +20,8 @@ import * as rules from "./rules";
 import * as tsEslintEntry from "./ts_eslint";
 import * as tsestreeEntry from "./ts_estree";
 import * as tsUtilsEntry from "./ts_utils";
+
+const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 
 describe("api surface", () => {
   it("re-exports the compatibility entrypoint", () => {
@@ -32,6 +45,95 @@ describe("api surface", () => {
     expectTypeOf<RootESTree["BindingIdentifier"]["typeAnnotation"]>().toEqualTypeOf<
       RootESTree["TSTypeAnnotation"] | null | undefined
     >();
+  });
+
+  it("emits declarations for inferred visitor callback node types", () => {
+    const workspace = realpathSync(mkdtempSync("/tmp/corsa-oxlint-declaration-"));
+    const importPath = moduleSpecifierFor(
+      workspace,
+      realpathSync(resolve(workspaceRoot, "src/bindings/nodejs/corsa_oxlint/ts/index.ts")),
+    );
+    writeFileSync(
+      resolve(workspace, "rule.ts"),
+      [
+        `import { RuleCreator, definePlugin, defineRule } from "${importPath}";`,
+        "",
+        "export const r = defineRule({",
+        '  meta: { type: "problem", messages: {}, schema: [] },',
+        "  create() {",
+        "    return {",
+        "      NewExpression(node) {",
+        "        void node;",
+        "      },",
+        "    };",
+        "  },",
+        "});",
+        "",
+        "export const p = definePlugin({",
+        "  rules: {",
+        "    demo: {",
+        '      meta: { type: "problem", messages: {}, schema: [] },',
+        "      create() {",
+        "        return {",
+        "          NewExpression(node) {",
+        "            void node;",
+        "          },",
+        "        };",
+        "      },",
+        "    },",
+        "  },",
+        "});",
+        "",
+        "export const created = RuleCreator.withoutDocs({",
+        '  meta: { type: "problem", messages: {}, schema: [] },',
+        "  create() {",
+        "    return {",
+        "      NewExpression(node) {",
+        "        void node;",
+        "      },",
+        "    };",
+        "  },",
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    try {
+      try {
+        execFileSync(
+          resolve(workspaceRoot, "node_modules/.bin/tsc"),
+          [
+            "--ignoreConfig",
+            "--declaration",
+            "--emitDeclarationOnly",
+            "--outDir",
+            resolve(workspace, "out"),
+            "--moduleResolution",
+            "bundler",
+            "--module",
+            "esnext",
+            "--target",
+            "esnext",
+            "--strict",
+            "--skipLibCheck",
+            "--types",
+            "node",
+            resolve(workspace, "rule.ts"),
+          ],
+          {
+            cwd: workspaceRoot,
+            stdio: "pipe",
+          },
+        );
+      } catch (error) {
+        throw new Error(`tsc declaration emit failed:\n${commandOutput(error)}`);
+      }
+
+      const declarationPath = findFile(resolve(workspace, "out"), "rule.d.ts");
+      expect(readFileSync(declarationPath, "utf8")).not.toContain("NewExpression");
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 
   it("re-exports typescript-eslint-style utility namespaces", () => {
@@ -473,6 +575,31 @@ function importNamedDeclaration(source: string, imported: string, local: Record<
   Object.assign(specifier, { parent: node });
   Object.assign(node.source, { parent: node });
   return node;
+}
+
+function moduleSpecifierFor(fromDirectory: string, toFile: string): string {
+  const specifier = relative(fromDirectory, toFile).replace(/\\/g, "/").replace(/\.ts$/, "");
+  return specifier.startsWith(".") ? specifier : `./${specifier}`;
+}
+
+function commandOutput(error: unknown): string {
+  const output = error as { readonly stderr?: Buffer; readonly stdout?: Buffer };
+  return [output.stdout?.toString(), output.stderr?.toString()].filter(Boolean).join("\n");
+}
+
+function findFile(directory: string, name: string): string {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      const found = findFile(entryPath, name);
+      if (found) {
+        return found;
+      }
+    } else if (entry.name === name) {
+      return entryPath;
+    }
+  }
+  return "";
 }
 
 function summarizeReferences(

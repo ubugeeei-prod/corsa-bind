@@ -73,7 +73,8 @@ describe("corsa oxlint", () => {
       },
     } as any);
 
-    rule.create({
+    expect(rule.create).toBeDefined();
+    rule.create!({
       cwd: workspaceRoot,
       filename: resolve(workspaceRoot, "fixture.ts"),
       languageOptions: {
