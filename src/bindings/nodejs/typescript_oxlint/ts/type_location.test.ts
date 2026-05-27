@@ -112,10 +112,12 @@ describe("corsa oxlint type locations", () => {
             if (node.callee?.name !== "Construct") {
               return;
             }
+            const onNode = checker.getTypeAtLocation(node);
             const type = checker.getTypeAtLocation(node.callee);
             if (!type) {
               return;
             }
+            seen.newExpressionType = onNode ? checker.typeToString(onNode) : undefined;
             const signature = checker.getSignaturesOfType(type, 1)[0];
             seen.parameterNames = signature?.parameters.map((id) => checker.getSymbolById(id)?.name);
             const symbol = type.symbol ? checker.getSymbol(type.symbol) : undefined;
@@ -242,6 +244,7 @@ describe("corsa oxlint type locations", () => {
     });
 
     expect(seen.parameterNames).toEqual(["scope", "id"]);
+    expect(seen.newExpressionType).toBe("Construct");
     expect(seen.typeSymbolName).toBe("Construct");
     expect(seen.declarationText).toContain("class Construct");
   });
@@ -252,6 +255,7 @@ describe("corsa oxlint type locations", () => {
       {
         args: readonly string[];
         parts: readonly string[];
+        baseTypes: readonly string[];
         target?: string;
         isUnion: boolean;
         isIntersection: boolean;
@@ -285,11 +289,13 @@ describe("corsa oxlint type locations", () => {
             if (!type) {
               return;
             }
+            const baseTypes = checker.getBaseTypes(type).map((part) => checker.typeToString(part));
             const target = checker.getTargetOfType(type);
             seen[keyName] = {
               args: checker
                 .getTypeArguments(type)
                 .map((argument) => checker.typeToString(argument)),
+              baseTypes,
               parts: checker.getTypesOfType(type).map((part) => checker.typeToString(part)),
               target: target ? checker.typeToString(target) : undefined,
               isUnion: checker.isUnionType(type),
@@ -308,6 +314,7 @@ describe("corsa oxlint type locations", () => {
             "class Foo { value = 1; }",
             "interface Bag {",
             "  arr: Foo[];",
+            "  tup: [Foo, number];",
             "  union: Foo | string;",
             "  intersection: Foo & { x: number };",
             "  mapped: Readonly<Foo>;",
@@ -329,6 +336,8 @@ describe("corsa oxlint type locations", () => {
     });
 
     expect(seen.arr.args).toEqual(["Foo"]);
+    expect(seen.arr.baseTypes).toEqual([]);
+    expect(seen.tup.baseTypes).toEqual([]);
     expect(seen.union.isUnion).toBe(true);
     expect(seen.union.parts).toEqual(expect.arrayContaining(["Foo", "string"]));
     expect(seen.intersection.isIntersection).toBe(true);

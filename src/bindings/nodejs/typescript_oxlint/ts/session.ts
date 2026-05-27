@@ -255,6 +255,9 @@ export class TsgoProjectSession {
   }
 
   getBaseTypes(type: TsgoType): readonly TsgoType[] {
+    if (isArrayOrTupleLikeType(this, type)) {
+      return [];
+    }
     return this.rememberTypes(
       this.client().callJson("getBaseTypes", {
         snapshot: this.#snapshot,
@@ -752,6 +755,17 @@ export class TsgoProjectSession {
     }
     return this.#supportsOverlayChanges;
   }
+}
+
+function isArrayOrTupleLikeType(session: TsgoProjectSession, type: TsgoType): boolean {
+  const texts =
+    Array.isArray(type.texts) && type.texts.length > 0
+      ? type.texts
+      : [session.typeToString(type)];
+  return texts.some((text) => {
+    const normalized = text.trimStart();
+    return normalized.startsWith("readonly [") || normalized.startsWith("[") || normalized.endsWith("[]");
+  });
 }
 
 function findConstructorParameterOpen(text: string): number {
