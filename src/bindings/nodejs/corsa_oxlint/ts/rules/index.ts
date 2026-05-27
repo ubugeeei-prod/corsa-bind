@@ -62,6 +62,13 @@ import { restrictPlusOperandsRule } from "./restrict_plus_operands";
 import { restrictTemplateExpressionsRule } from "./restrict_template_expressions";
 import { useUnknownInCatchCallbackVariableRule } from "./use_unknown_in_catch_callback_variable";
 
+/**
+ * Native rule names currently implemented by the Rust-backed Corsa rule bridge.
+ *
+ * The list is exported so preset builders, tests, and documentation generators
+ * can reason about the exact supported rule surface without instantiating the
+ * plugin object.
+ */
 export const implementedNativeRuleNames = [
   "await-thenable",
   "consistent-return",
@@ -124,8 +131,22 @@ export const implementedNativeRuleNames = [
   "use-unknown-in-catch-callback-variable",
 ] as const;
 
+/**
+ * Native rule names reserved for future parity work.
+ *
+ * This is intentionally empty once all registered rule names have a concrete
+ * implementation, but keeping the export stable lets callers surface roadmap
+ * state without hard-coding package internals.
+ */
 export const pendingNativeRuleNames = [] as const;
 
+/**
+ * Oxlint-compatible rule map backed by Corsa type information.
+ *
+ * Keys are unprefixed rule names. Consumers usually install this through
+ * `corsaOxlintPlugin`, while advanced integrations can compose this map into
+ * their own plugin object.
+ */
 export const corsaOxlintRules = Object.freeze({
   "await-thenable": awaitThenableRule,
   "consistent-return": consistentReturnRule,
@@ -188,6 +209,12 @@ export const corsaOxlintRules = Object.freeze({
   "use-unknown-in-catch-callback-variable": useUnknownInCatchCallbackVariableRule,
 });
 
+/**
+ * Oxlint plugin object exposing the Corsa-backed native rule set.
+ *
+ * Register it under the namespace expected by your config, then enable rules
+ * such as `typescript/no-floating-promises` or `typescript/restrict-plus-operands`.
+ */
 export const corsaOxlintPlugin = definePlugin({
   meta: { name: "oxlint-plugin-corsa" },
   rules: corsaOxlintRules,

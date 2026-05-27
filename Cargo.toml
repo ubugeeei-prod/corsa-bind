@@ -10,6 +10,7 @@ members = [
   "src/bindings/c/corsa_ffi",
   "src/bindings/rust/corsa",
   "src/bindings/nodejs/corsa_node",
+  "src/tools/corsa_docs",
 ]
 resolver = "2"
 
