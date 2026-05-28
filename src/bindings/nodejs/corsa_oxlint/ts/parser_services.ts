@@ -191,7 +191,7 @@ function createEslintTypeChecker(
       );
     },
     getImplementedTypesOfType(type) {
-      return heritageTypes(type, source, "implements");
+      return implementedTypesIncludingBases(type, source);
     },
     getTypeArguments(type) {
       return asReadonlyArray(callChecker(source, "getTypeArguments", type));
@@ -289,6 +289,43 @@ function heritageTypes(
   return declarations.flatMap((declaration) =>
     heritageTypesFromDeclaration(declaration, checker, keyword),
   );
+}
+
+/**
+ * Mirrors the tsgo-backed `getImplementedTypesOfType` behaviour by walking the
+ * base-type chain so a class that implements an interface only through a base
+ * class still reports that interface. Without this, a rule shared between
+ * oxlint (tsgo) and ESLint (this `@typescript-eslint` fallback checker) would
+ * see different implemented types for the same source (GH#207).
+ */
+function implementedTypesIncludingBases(
+  type: unknown,
+  checker: Record<string, unknown>,
+): readonly never[] {
+  const visited = new Set<unknown>();
+  const seenImplemented = new Set<unknown>();
+  const implemented: never[] = [];
+  const queue: unknown[] = [type];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined || current === null || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    for (const ownType of heritageTypes(current, checker, "implements")) {
+      if (seenImplemented.has(ownType)) {
+        continue;
+      }
+      seenImplemented.add(ownType);
+      implemented.push(ownType);
+    }
+    const directBases = asReadonlyArray(callChecker(checker, "getBaseTypes", current));
+    const bases = directBases.length > 0 ? directBases : heritageTypes(current, checker, "extends");
+    for (const baseType of bases) {
+      queue.push(baseType);
+    }
+  }
+  return implemented;
 }
 
 function heritageTypesFromDeclaration(
