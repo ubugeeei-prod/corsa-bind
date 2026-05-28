@@ -326,6 +326,7 @@ The repo ships two benchmark layers:
 
 - Native Rust benchmark: `vp run -w bench_native`
 - Native profiling benchmark: `vp run -w bench_native_profile`
+- Tooling comparison benchmark: `vp run -w bench_tooling_compare`
 - Node binding benchmark: `vp run -w bench_ts`
 - `corsa oxlint` checker benchmark: `vp test bench --config ./vite.config.ts bench/src/corsa_oxlint.bench.ts`
 - `corsa oxlint` native-rule benchmark: `vp test bench --config ./vite.config.ts bench/src/corsa_oxlint_rules.bench.ts`

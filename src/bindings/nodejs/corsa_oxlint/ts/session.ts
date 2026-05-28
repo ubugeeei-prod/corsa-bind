@@ -694,13 +694,14 @@ export class CorsaProjectSession {
     const cached = this.#files.get(fileName);
     const mtimeMs = statMtimeMs(fileName);
     const overlayText = this.supportedOverlayText(fileName, sourceText, mtimeMs, cached);
+    const mtimeChanged = cached !== undefined && mtimeMs !== cached.mtimeMs;
     const textChanged = overlayText !== cached?.sourceText;
     const prepared = {
       mtimeMs,
       lintSourceText: sourceText,
       sourceText: overlayText,
     };
-    const stale = !this.#snapshot || mtimeMs !== cached?.mtimeMs || textChanged || expired;
+    const stale = !this.#snapshot || mtimeChanged || textChanged || expired;
     if (!stale) {
       return prepared;
     }
