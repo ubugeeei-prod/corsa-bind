@@ -22,3 +22,16 @@ pub fn run_native_lint_rule(rule_name: String, node: Value) -> Result<Value> {
 pub fn native_lint_rule_metas() -> Result<Value> {
     to_value(&corsa::lint::LintRuleRegistry::with_default_type_aware_rules().metas())
 }
+
+#[napi]
+pub fn run_native_stylistic_lint(source_text: String, config: Value) -> Result<Value> {
+    let config = from_value::<corsa::lint::StylisticRunConfig>(config)?;
+    let diagnostics =
+        corsa::lint::run_stylistic_lint(source_text.as_str(), &config).map_err(into_napi_error)?;
+    to_value(&diagnostics)
+}
+
+#[napi]
+pub fn native_stylistic_rule_metas() -> Result<Value> {
+    to_value(&corsa::lint::stylistic_rule_metas())
+}

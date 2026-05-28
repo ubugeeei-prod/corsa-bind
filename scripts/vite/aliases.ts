@@ -18,6 +18,7 @@ export const aliases = {
   "corsa-oxlint/utils": resolve(corsaOxlintDir, "ts/utils.ts"),
   "corsa-oxlint/rule-tester": resolve(corsaOxlintDir, "ts/rule_tester.ts"),
   "corsa-oxlint/rules": resolve(corsaOxlintDir, "ts/rules/index.ts"),
+  "corsa-oxlint/stylistic": resolve(corsaOxlintDir, "ts/stylistic.ts"),
   "corsa-oxlint/ts-estree": resolve(corsaOxlintDir, "ts/ts_estree.ts"),
   "corsa-oxlint/ts-eslint": resolve(corsaOxlintDir, "ts/ts_eslint.ts"),
   "corsa-oxlint/ts-utils": resolve(corsaOxlintDir, "ts/ts_utils.ts"),
