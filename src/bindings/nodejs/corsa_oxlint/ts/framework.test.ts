@@ -321,6 +321,194 @@ describe("corsa oxlint", () => {
     expect(corsaChecker.getNodeById("missing")).toBeUndefined();
   });
 
+  // Regression for GH#207: the @typescript-eslint fallback used to walk only
+  // the type's own `implements` clause, so a class that implemented an
+  // interface only through a base class came back empty here while the tsgo
+  // backend reported the interface. The fallback now walks the base chain
+  // too, matching tsgo.
+  it("includes inherited implemented interfaces in the eslint fallback checker", () => {
+    const interfaceType = { name: "IA" };
+    const interfaceExpression = { kind: "ia-expression" };
+    const baseImplementsClause = {
+      getText() {
+        return "implements IA";
+      },
+      types: [{ expression: interfaceExpression }],
+    };
+    const baseDeclaration = {
+      heritageClauses: [baseImplementsClause],
+    };
+    const baseType: { symbol: { declarations: unknown[] } } = {
+      symbol: { declarations: [baseDeclaration] },
+    };
+    const baseExpression = { kind: "base-expression" };
+    const derivedExtendsClause = {
+      getText() {
+        return "extends Base";
+      },
+      types: [{ expression: baseExpression }],
+    };
+    const derivedDeclaration = {
+      heritageClauses: [derivedExtendsClause],
+    };
+    const derivedType = {
+      symbol: { declarations: [derivedDeclaration] },
+    };
+
+    const checker = {
+      getTypeAtLocation(node: unknown) {
+        if (node === interfaceExpression) {
+          return interfaceType;
+        }
+        if (node === baseExpression) {
+          return baseType;
+        }
+        return undefined;
+      },
+      getSymbolAtLocation() {
+        return { kind: "symbol" };
+      },
+      getBaseTypes(type: unknown) {
+        return type === derivedType ? [baseType] : [];
+      },
+    };
+    const program = {
+      getTypeChecker() {
+        return checker;
+      },
+    };
+    const parserServices = {
+      program,
+      esTreeNodeToTSNodeMap: {
+        get() {
+          return undefined;
+        },
+        has() {
+          return false;
+        },
+      },
+      tsNodeToESTreeNodeMap: {
+        get() {
+          return { type: "Identifier" };
+        },
+        has() {
+          return true;
+        },
+      },
+    };
+
+    const services = getParserServices({
+      cwd: workspaceRoot,
+      filename: resolve(workspaceRoot, "fixture.ts"),
+      languageOptions: {
+        parserOptions: {},
+      },
+      report() {},
+      settings: {},
+      sourceCode: {
+        text: "",
+        parserServices: parserServices as never,
+      },
+    } as never);
+    const corsaChecker = services.program.getTypeChecker();
+
+    expect(corsaChecker.getImplementedTypesOfType(baseType as never)).toEqual([interfaceType]);
+    expect(corsaChecker.getImplementedTypesOfType(derivedType as never)).toEqual([interfaceType]);
+  });
+
+  // Companion to the GH#207 regression above: when the checker can't tell us
+  // the base types directly (the upstream `getBaseTypes` returns nothing), the
+  // fallback walks the `extends` clause from source and still reports
+  // inherited interfaces.
+  it("walks extends-clause base types when the eslint checker omits them", () => {
+    const interfaceType = { name: "IA" };
+    const interfaceExpression = { kind: "ia-expression" };
+    const baseImplementsClause = {
+      getText() {
+        return "implements IA";
+      },
+      types: [{ expression: interfaceExpression }],
+    };
+    const baseDeclaration = {
+      heritageClauses: [baseImplementsClause],
+    };
+    const baseType = {
+      symbol: { declarations: [baseDeclaration] },
+    };
+    const baseExpression = { kind: "base-expression" };
+    const derivedExtendsClause = {
+      getText() {
+        return "extends Base";
+      },
+      types: [{ expression: baseExpression }],
+    };
+    const derivedDeclaration = {
+      heritageClauses: [derivedExtendsClause],
+    };
+    const derivedType = {
+      symbol: { declarations: [derivedDeclaration] },
+    };
+
+    const checker = {
+      getTypeAtLocation(node: unknown) {
+        if (node === interfaceExpression) {
+          return interfaceType;
+        }
+        if (node === baseExpression) {
+          return baseType;
+        }
+        return undefined;
+      },
+      getSymbolAtLocation() {
+        return { kind: "symbol" };
+      },
+      getBaseTypes() {
+        return [];
+      },
+    };
+    const program = {
+      getTypeChecker() {
+        return checker;
+      },
+    };
+    const parserServices = {
+      program,
+      esTreeNodeToTSNodeMap: {
+        get() {
+          return undefined;
+        },
+        has() {
+          return false;
+        },
+      },
+      tsNodeToESTreeNodeMap: {
+        get() {
+          return { type: "Identifier" };
+        },
+        has() {
+          return true;
+        },
+      },
+    };
+
+    const services = getParserServices({
+      cwd: workspaceRoot,
+      filename: resolve(workspaceRoot, "fixture.ts"),
+      languageOptions: {
+        parserOptions: {},
+      },
+      report() {},
+      settings: {},
+      sourceCode: {
+        text: "",
+        parserServices: parserServices as never,
+      },
+    } as never);
+    const corsaChecker = services.program.getTypeChecker();
+
+    expect(corsaChecker.getImplementedTypesOfType(derivedType as never)).toEqual([interfaceType]);
+  });
+
   it("propagates corsaOxlint settings through RuleTester", () => {
     let seen: Record<string, unknown> | undefined;
     const tester = new RuleTester();
