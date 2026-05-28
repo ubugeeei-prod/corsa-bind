@@ -131,7 +131,11 @@ export declare function isUnsafeReturn(input: any): boolean
 
 export declare function nativeLintRuleMetas(): any
 
+export declare function nativeStylisticRuleMetas(): any
+
 export declare function runNativeLintRule(ruleName: string, node: any): any
+
+export declare function runNativeStylisticLint(sourceText: string, config: any): any
 
 /** Spawns a new client on a libuv worker thread. */
 export declare function spawnCorsaApiClientAsync(options: any): Promise<CorsaApiClient>

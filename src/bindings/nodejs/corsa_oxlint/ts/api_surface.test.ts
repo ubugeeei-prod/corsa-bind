@@ -10,6 +10,7 @@ import * as main from "./index";
 import * as eslintUtilsEntry from "./oxlint_utils";
 import * as compatEntry from "./oxlint_compat";
 import * as rules from "./rules";
+import * as stylistic from "./stylistic";
 import * as tsEslintEntry from "./ts_eslint";
 import * as tsestreeEntry from "./ts_estree";
 import * as tsUtilsEntry from "./ts_utils";
@@ -497,6 +498,11 @@ describe("api surface", () => {
   it("re-exports the native rules surface from both entrypoints", () => {
     expect(typeof main.rules.corsaOxlintPlugin).toBe("object");
     expect(rules.implementedNativeRuleNames).toContain("restrict-plus-operands");
+  });
+
+  it("re-exports the native stylistic surface from both entrypoints", () => {
+    expect(typeof main.stylistic.corsaStylisticPlugin).toBe("object");
+    expect(stylistic.implementedStylisticRuleNames).toContain("quotes");
   });
 
   it("re-exports Rust-backed utility helpers from the root entry", () => {

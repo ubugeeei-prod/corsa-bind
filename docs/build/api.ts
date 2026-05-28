@@ -8,6 +8,7 @@ const ENTRYPOINTS = [
   ["@corsa-bind/napi", "src/bindings/nodejs/corsa_node/ts/index.ts"],
   ["corsa-oxlint", "src/bindings/nodejs/corsa_oxlint/ts/index.ts"],
   ["corsa-oxlint/rules", "src/bindings/nodejs/corsa_oxlint/ts/rules/index.ts"],
+  ["corsa-oxlint/stylistic", "src/bindings/nodejs/corsa_oxlint/ts/stylistic.ts"],
 ] as const;
 
 /** Builds API reference Markdown from public TypeScript exports and JSDoc. */

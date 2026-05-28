@@ -33,6 +33,7 @@ const NAV_GROUPS = [
       "api/corsa-bind-napi/index.html",
       "api/corsa-oxlint/index.html",
       "api/corsa-oxlint-rules/index.html",
+      "api/corsa-oxlint-stylistic/index.html",
       "api_reference/index.html",
     ],
   },
@@ -54,6 +55,7 @@ const ROUTE_TITLES = new Map<string, string>([
   ["api/corsa-bind-napi/index.html", "@corsa-bind/napi"],
   ["api/corsa-oxlint/index.html", "corsa-oxlint"],
   ["api/corsa-oxlint-rules/index.html", "Oxlint rules"],
+  ["api/corsa-oxlint-stylistic/index.html", "Stylistic rules"],
   ["api_reference/index.html", "API docs generation"],
 ]);
 
