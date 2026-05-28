@@ -16,6 +16,7 @@ import * as tsUtilsEntry from "./ts_utils";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const declarationEmitTimeoutMs = 20_000;
+const typescriptCompilerBin = resolve(workspaceRoot, "node_modules/typescript/bin/tsc");
 
 describe("api surface", () => {
   it("re-exports the compatibility entrypoint", () => {
@@ -127,8 +128,8 @@ describe("api surface", () => {
       try {
         try {
           execFileSync(
-            resolve(workspaceRoot, "node_modules/.bin/tsc"),
-            ["-p", resolve(workspace, "tsconfig.json")],
+            process.execPath,
+            [typescriptCompilerBin, "-p", resolve(workspace, "tsconfig.json")],
             {
               cwd: workspaceRoot,
               stdio: "pipe",
