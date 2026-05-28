@@ -1,0 +1,7 @@
+{
+  "inference": {
+    "appType": "static",
+    "build": "vp run -w docs_build",
+    "outputDir": "dist/docs"
+  }
+}

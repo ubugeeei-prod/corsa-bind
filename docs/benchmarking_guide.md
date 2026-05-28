@@ -1,15 +1,15 @@
 # Benchmarking Principles, Concepts, and Tips
 
-This document explains how `corsa` thinks about performance work.
+This document explains how `corsa-bind` thinks about performance work.
 It is intentionally more conceptual than [performance.md](./performance.md), which is the place for commands and measured numbers.
 For CI structure, local reproduction, and troubleshooting, see [ci_guide.md](./ci_guide.md).
 
 ## Why This Exists
 
-`corsa` wraps the Corsa upstream.
+`corsa-bind` wraps the Corsa upstream.
 That creates an important constraint:
 
-- if `corsa` and the Corsa CLI do exactly the same work, `corsa` should usually aim for parity, not miracles
+- if `corsa-bind` and the Corsa CLI do exactly the same work, `corsa-bind` should usually aim for parity, not miracles
 - the realistic place to win is the end-to-end workflow, not the compiler engine itself
 
 That is why this repository keeps benchmark layers separate.
@@ -19,7 +19,7 @@ We want to answer different questions with different tools instead of forcing on
 
 ### 1. No Forks, No Patches, No Fake Wins
 
-`corsa` follows a strict upstream policy:
+`corsa-bind` follows a strict upstream policy:
 
 - use upstream-supported Corsa entry points
 - pin an exact upstream commit

@@ -7,8 +7,6 @@ export const docsTasks = {
   },
   docs_deploy: {
     cache: false,
-    command:
-      "npx --yes --package void@0.8.11 --package @void/md@0.8.11 void deploy --dir dist/docs --skip-build",
-    dependsOn: ["docs_build"],
+    command: "npx --yes --package void@0.8.11 void deploy",
   },
 } satisfies RunTasks;
