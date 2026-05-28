@@ -155,22 +155,22 @@ const nodeBindingBuildTargetConfig: Record<string, NodeBindingBuildTargetConfig>
   },
   "x86_64-unknown-linux-gnu": {
     crossCompile: false,
-    os: "ubuntu-latest",
+    os: "blacksmith-32vcpu-ubuntu-2404",
     useNapiCross: true,
   },
   "aarch64-unknown-linux-gnu": {
     crossCompile: false,
-    os: "ubuntu-latest",
+    os: "blacksmith-32vcpu-ubuntu-2404",
     useNapiCross: true,
   },
   "x86_64-unknown-linux-musl": {
     crossCompile: true,
-    os: "ubuntu-latest",
+    os: "blacksmith-32vcpu-ubuntu-2404",
     useNapiCross: false,
   },
   "aarch64-unknown-linux-musl": {
     crossCompile: true,
-    os: "ubuntu-latest",
+    os: "blacksmith-32vcpu-ubuntu-2404",
     useNapiCross: false,
   },
 };

@@ -118,7 +118,7 @@ describe("npm release utils", () => {
       },
       {
         crossCompile: false,
-        os: "ubuntu-latest",
+        os: "blacksmith-32vcpu-ubuntu-2404",
         target: "x86_64-unknown-linux-gnu",
         useNapiCross: true,
       },
@@ -136,19 +136,19 @@ describe("npm release utils", () => {
       },
       {
         crossCompile: true,
-        os: "ubuntu-latest",
+        os: "blacksmith-32vcpu-ubuntu-2404",
         target: "x86_64-unknown-linux-musl",
         useNapiCross: false,
       },
       {
         crossCompile: false,
-        os: "ubuntu-latest",
+        os: "blacksmith-32vcpu-ubuntu-2404",
         target: "aarch64-unknown-linux-gnu",
         useNapiCross: true,
       },
       {
         crossCompile: true,
-        os: "ubuntu-latest",
+        os: "blacksmith-32vcpu-ubuntu-2404",
         target: "aarch64-unknown-linux-musl",
         useNapiCross: false,
       },

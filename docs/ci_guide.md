@@ -371,10 +371,10 @@ requests cannot merge until the current CI surface is green.
 
 Required status checks for `main` should include:
 
-- `Quality (ubuntu-latest)`
+- `Quality (blacksmith-32vcpu-ubuntu-2404)`
 - `Quality (macos-latest)`
 - `Quality (windows-latest)`
-- `Real Corsa Smoke (ubuntu-latest)`
+- `Real Corsa Smoke (blacksmith-32vcpu-ubuntu-2404)`
 - `Real Corsa Smoke (macos-latest)`
 - `Real Corsa Smoke (windows-latest)`
 - `Corsa Ref Bench`
