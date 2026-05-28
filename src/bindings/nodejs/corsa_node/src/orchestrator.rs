@@ -4,9 +4,10 @@ use corsa::{
 };
 use napi::Result;
 use napi_derive::napi;
+use serde_json::Value;
 use std::str::FromStr;
 
-use crate::util::{into_napi_error, parse_json, to_json};
+use crate::util::{from_value, into_napi_error, to_value};
 
 /// N-API wrapper for the distributed orchestration layer.
 #[napi]
@@ -40,69 +41,70 @@ impl CorsaDistributedOrchestrator {
         self.inner.leader_id().map(|value| value.to_string())
     }
 
-    /// Serializes the leader state.
+    /// Returns the leader state.
     #[napi]
-    pub fn state_json(&self) -> Result<Option<String>> {
-        self.inner.state().map(|state| to_json(&state)).transpose()
+    pub fn state(&self) -> Result<Option<Value>> {
+        self.inner.state().map(|state| to_value(&state)).transpose()
     }
 
-    /// Serializes the state for a single node.
+    /// Returns the state for a single node.
     #[napi]
-    pub fn node_state_json(&self, node_id: String) -> Result<Option<String>> {
+    pub fn node_state(&self, node_id: String) -> Result<Option<Value>> {
         self.inner
             .node_state(node_id.as_str())
-            .map(|state| to_json(&state))
+            .map(|state| to_value(&state))
             .transpose()
     }
 
-    /// Serializes a replicated document if it exists.
+    /// Returns a replicated document if it exists.
     #[napi]
-    pub fn document_json(&self, node_id: String, uri: String) -> Result<Option<String>> {
+    pub fn document(&self, node_id: String, uri: String) -> Result<Option<Value>> {
         let uri = lsp_types::Uri::from_str(uri.as_str()).map_err(into_napi_error)?;
         self.inner
             .document(node_id.as_str(), &uri)
-            .map(|document| to_json(&document))
+            .map(|document| to_value(&document))
             .transpose()
     }
 
-    /// Replicates an opened document and returns the serialized state.
+    /// Replicates an opened document and returns the state.
     #[napi]
-    pub fn open_virtual_document_json(
-        &self,
-        leader_id: String,
-        document_json: String,
-    ) -> Result<String> {
-        let document = parse_json::<VirtualDocument>(document_json.as_str())?;
+    pub fn open_virtual_document(&self, document: Value) -> Result<Value> {
+        let leader_id = self.require_leader()?;
+        let document = from_value::<VirtualDocument>(document)?;
         let document = self
             .inner
             .open_virtual_document(leader_id.as_str(), document)
             .map_err(into_napi_error)?;
-        to_json(&document)
+        to_value(&document)
     }
 
-    /// Applies replicated incremental changes and returns the serialized state.
+    /// Applies replicated incremental changes and returns the state.
     #[napi]
-    pub fn change_virtual_document_json(
-        &self,
-        leader_id: String,
-        uri: String,
-        changes_json: String,
-    ) -> Result<String> {
+    pub fn change_virtual_document(&self, uri: String, changes: Value) -> Result<Value> {
+        let leader_id = self.require_leader()?;
         let uri = lsp_types::Uri::from_str(uri.as_str()).map_err(into_napi_error)?;
-        let changes = parse_json::<Vec<VirtualChange>>(changes_json.as_str())?;
+        let changes = from_value::<Vec<VirtualChange>>(changes)?;
         let document = self
             .inner
             .change_virtual_document(leader_id.as_str(), &uri, changes)
             .map_err(into_napi_error)?;
-        to_json(&document)
+        to_value(&document)
     }
 
     /// Removes a replicated document.
     #[napi]
-    pub fn close_virtual_document(&self, leader_id: String, uri: String) -> Result<()> {
+    pub fn close_virtual_document(&self, uri: String) -> Result<()> {
+        let leader_id = self.require_leader()?;
         let uri = lsp_types::Uri::from_str(uri.as_str()).map_err(into_napi_error)?;
         self.inner
             .close_virtual_document(leader_id.as_str(), &uri)
             .map_err(into_napi_error)
+    }
+}
+
+impl CorsaDistributedOrchestrator {
+    fn require_leader(&self) -> Result<String> {
+        self.leader_id()
+            .ok_or_else(|| into_napi_error("raft leader has not been elected"))
     }
 }

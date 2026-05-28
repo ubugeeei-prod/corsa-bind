@@ -1,8 +1,9 @@
 use corsa::lsp::{VirtualChange, VirtualDocument};
 use napi::Result;
 use napi_derive::napi;
+use serde_json::Value;
 
-use crate::util::{into_napi_error, parse_json, to_json};
+use crate::util::{from_value, into_napi_error, to_value};
 
 /// Mutable virtual document mirrored through the LSP overlay layer.
 #[napi]
@@ -59,10 +60,10 @@ impl CorsaVirtualDocument {
         self.inner.text.to_string()
     }
 
-    /// Serializes the full document state.
+    /// Returns the full document state.
     #[napi]
-    pub fn state_json(&self) -> Result<String> {
-        to_json(&self.inner)
+    pub fn state(&self) -> Result<Value> {
+        to_value(&self.inner)
     }
 
     /// Replaces the entire document text.
@@ -75,14 +76,14 @@ impl CorsaVirtualDocument {
         Ok(())
     }
 
-    /// Applies a batch of JSON-encoded LSP changes.
+    /// Applies a batch of LSP changes.
     #[napi]
-    pub fn apply_changes_json(&mut self, changes_json: String) -> Result<String> {
-        let changes = parse_json::<Vec<VirtualChange>>(changes_json.as_str())?;
+    pub fn apply_changes(&mut self, changes: Value) -> Result<Value> {
+        let changes = from_value::<Vec<VirtualChange>>(changes)?;
         let events = self
             .inner
             .apply_changes(changes.as_slice())
             .map_err(into_napi_error)?;
-        to_json(&events)
+        to_value(&events)
     }
 }

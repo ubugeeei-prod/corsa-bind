@@ -9,14 +9,16 @@ use corsa::{
     runtime::block_on,
 };
 use napi::{
-    Result, Task,
-    bindgen_prelude::{AsyncTask, Buffer},
+    Env, Result, ScopedTask, Task,
+    bindgen_prelude::{AsyncTask, Buffer, Unknown},
 };
 use napi_derive::napi;
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::util::{
-    SpawnOptions, build_spawn_config, into_napi_error, parse_json, parse_optional_json, to_json,
+    SpawnOptions, build_spawn_config, from_optional_value, from_value, into_napi_error,
+    optional_value, to_value,
 };
 
 const OBJECT_FLAGS_REFERENCE: u32 = 1 << 2;
@@ -33,7 +35,7 @@ struct SnapshotState<'a> {
 type SnapshotStore = Arc<Mutex<FastMap<CompactString, ManagedSnapshot>>>;
 
 pub struct SpawnApiClientTask {
-    options_json: String,
+    options: Option<SpawnOptions>,
 }
 
 #[napi]
@@ -42,7 +44,10 @@ impl Task for SpawnApiClientTask {
     type JsValue = CorsaApiClient;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        let options = parse_json::<SpawnOptions>(self.options_json.as_str())?;
+        let options = self
+            .options
+            .take()
+            .ok_or_else(|| into_napi_error("spawn options were already consumed"))?;
         let inner =
             block_on(ApiClient::spawn(build_spawn_config(options)?)).map_err(into_napi_error)?;
         Ok(CorsaApiClient {
@@ -62,7 +67,7 @@ enum JsonTaskKind {
         file: String,
     },
     UpdateSnapshot {
-        params_json: Option<String>,
+        params: Option<Value>,
         snapshots: SnapshotStore,
     },
     GetStringType {
@@ -106,7 +111,7 @@ enum JsonTaskKind {
     },
     CallJson {
         method: String,
-        params_json: Option<String>,
+        params: Option<Value>,
     },
 }
 
@@ -115,34 +120,27 @@ pub struct JsonApiTask {
     kind: JsonTaskKind,
 }
 
-#[napi]
-impl Task for JsonApiTask {
-    type Output = String;
-    type JsValue = String;
+impl<'task> ScopedTask<'task> for JsonApiTask {
+    type Output = Value;
+    type JsValue = Unknown<'task>;
 
     fn compute(&mut self) -> Result<Self::Output> {
         match &mut self.kind {
             JsonTaskKind::Initialize => {
                 let response = block_on(self.client.initialize()).map_err(into_napi_error)?;
-                to_json(response.as_ref())
+                to_value(response.as_ref())
             }
             JsonTaskKind::ParseConfigFile { file } => {
                 let response = block_on(self.client.parse_config_file(file.clone()))
                     .map_err(into_napi_error)?;
-                to_json(&response)
+                to_value(&response)
             }
-            JsonTaskKind::UpdateSnapshot {
-                params_json,
-                snapshots,
-            } => {
-                let params = match params_json.take() {
-                    Some(params_json) => parse_json::<UpdateSnapshotParams>(params_json.as_str())?,
-                    None => UpdateSnapshotParams::default(),
-                };
+            JsonTaskKind::UpdateSnapshot { params, snapshots } => {
+                let params = from_optional_value::<UpdateSnapshotParams>(params.take())?;
                 let snapshot =
                     block_on(self.client.update_snapshot(params)).map_err(into_napi_error)?;
                 let handle = snapshot.handle.clone();
-                let state = to_json(&SnapshotState {
+                let state = to_value(&SnapshotState {
                     snapshot: &snapshot.handle,
                     projects: snapshot.projects.as_slice(),
                     changes: &snapshot.changes,
@@ -159,7 +157,7 @@ impl Task for JsonApiTask {
                     ProjectHandle::from(project.as_str()),
                 ))
                 .map_err(into_napi_error)?;
-                to_json(&response)
+                to_value(&response)
             }
             JsonTaskKind::GetTypeAtPosition {
                 snapshot,
@@ -174,7 +172,7 @@ impl Task for JsonApiTask {
                     *position,
                 ))
                 .map_err(into_napi_error)?;
-                to_json(&response)
+                to_value(&response)
             }
             JsonTaskKind::GetSymbolAtPosition {
                 snapshot,
@@ -189,7 +187,7 @@ impl Task for JsonApiTask {
                     *position,
                 ))
                 .map_err(into_napi_error)?;
-                to_json(&response)
+                to_value(&response)
             }
             JsonTaskKind::GetTypeArguments {
                 snapshot,
@@ -198,7 +196,7 @@ impl Task for JsonApiTask {
                 object_flags,
             } => {
                 if object_flags.unwrap_or_default() & OBJECT_FLAGS_REFERENCE == 0 {
-                    return to_json(&Vec::<corsa::api::TypeResponse>::new());
+                    return to_value(&Vec::<corsa::api::TypeResponse>::new());
                 }
                 let response = block_on(self.client.get_type_arguments(
                     SnapshotHandle::from(snapshot.as_str()),
@@ -206,7 +204,7 @@ impl Task for JsonApiTask {
                     TypeHandle::from(type_handle.as_str()),
                 ))
                 .map_err(into_napi_error)?;
-                to_json(&response)
+                to_value(&response)
             }
             JsonTaskKind::GetTypeOfSymbol {
                 snapshot,
@@ -219,7 +217,7 @@ impl Task for JsonApiTask {
                     SymbolHandle::from(symbol.as_str()),
                 ))
                 .map_err(into_napi_error)?;
-                to_json(&response)
+                to_value(&response)
             }
             JsonTaskKind::GetDeclaredTypeOfSymbol {
                 snapshot,
@@ -232,7 +230,7 @@ impl Task for JsonApiTask {
                     SymbolHandle::from(symbol.as_str()),
                 ))
                 .map_err(into_napi_error)?;
-                to_json(&response)
+                to_value(&response)
             }
             JsonTaskKind::TypeToString {
                 snapshot,
@@ -240,32 +238,32 @@ impl Task for JsonApiTask {
                 type_handle,
                 location,
                 flags,
-            } => block_on(
-                self.client.type_to_string(
-                    SnapshotHandle::from(snapshot.as_str()),
-                    ProjectHandle::from(project.as_str()),
-                    TypeHandle::from(type_handle.as_str()),
-                    location
-                        .as_ref()
-                        .map(|value| corsa::api::NodeHandle::from(value.as_str())),
-                    *flags,
-                ),
-            )
-            .map_err(into_napi_error),
-            JsonTaskKind::CallJson {
-                method,
-                params_json,
             } => {
-                let params = parse_optional_json(params_json.take())?;
+                let text = block_on(
+                    self.client.type_to_string(
+                        SnapshotHandle::from(snapshot.as_str()),
+                        ProjectHandle::from(project.as_str()),
+                        TypeHandle::from(type_handle.as_str()),
+                        location
+                            .as_ref()
+                            .map(|value| corsa::api::NodeHandle::from(value.as_str())),
+                        *flags,
+                    ),
+                )
+                .map_err(into_napi_error)?;
+                Ok(Value::String(text))
+            }
+            JsonTaskKind::CallJson { method, params } => {
+                let params = optional_value(params.take());
                 let response = block_on(self.client.raw_json_request(method.as_str(), params))
                     .map_err(into_napi_error)?;
-                to_json(&response)
+                Ok(response)
             }
         }
     }
 
-    fn resolve(&mut self, _: napi::Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(output)
+    fn resolve(&mut self, env: &'task Env, output: Self::Output) -> Result<Self::JsValue> {
+        env.to_js_value(&output)
     }
 }
 
@@ -277,7 +275,7 @@ enum BinaryTaskKind {
     },
     CallBinary {
         method: String,
-        params_json: Option<String>,
+        params: Option<Value>,
     },
 }
 
@@ -304,11 +302,8 @@ impl Task for BinaryApiTask {
             ))
             .map_err(into_napi_error)?
             .map(|payload| payload.into_bytes())),
-            BinaryTaskKind::CallBinary {
-                method,
-                params_json,
-            } => {
-                let params = parse_optional_json(params_json.take())?;
+            BinaryTaskKind::CallBinary { method, params } => {
+                let params = optional_value(params.take());
                 Ok(
                     block_on(self.client.raw_binary_request(method.as_str(), params))
                         .map_err(into_napi_error)?
@@ -375,8 +370,10 @@ impl Task for UnitApiTask {
 
 /// Spawns a new client on a libuv worker thread.
 #[napi]
-pub fn spawn_corsa_api_client_async(options_json: String) -> AsyncTask<SpawnApiClientTask> {
-    AsyncTask::new(SpawnApiClientTask { options_json })
+pub fn spawn_corsa_api_client_async(options: Value) -> Result<AsyncTask<SpawnApiClientTask>> {
+    Ok(AsyncTask::new(SpawnApiClientTask {
+        options: Some(from_value::<SpawnOptions>(options)?),
+    }))
 }
 
 /// Thin synchronous wrapper around the Rust stdio API client.
@@ -388,10 +385,10 @@ pub struct CorsaApiClient {
 
 #[napi]
 impl CorsaApiClient {
-    /// Spawns a new client from a JSON-encoded spawn config.
+    /// Spawns a new client from a JavaScript spawn config.
     #[napi(factory)]
-    pub fn spawn(options_json: String) -> Result<Self> {
-        let options = parse_json::<SpawnOptions>(options_json.as_str())?;
+    pub fn spawn(options: Value) -> Result<Self> {
+        let options = from_value::<SpawnOptions>(options)?;
         let inner =
             block_on(ApiClient::spawn(build_spawn_config(options)?)).map_err(into_napi_error)?;
         Ok(Self {
@@ -400,48 +397,51 @@ impl CorsaApiClient {
         })
     }
 
-    /// Calls `initialize` and returns the raw JSON response.
+    /// Spawns a new client without blocking the JavaScript event loop.
     #[napi]
-    pub fn initialize_json(&self) -> Result<String> {
+    pub fn spawn_async(options: Value) -> Result<AsyncTask<SpawnApiClientTask>> {
+        spawn_corsa_api_client_async(options)
+    }
+
+    /// Calls `initialize` and returns the response object.
+    #[napi]
+    pub fn initialize(&self) -> Result<Value> {
         let response = block_on(self.inner.initialize()).map_err(into_napi_error)?;
-        to_json(response.as_ref())
+        to_value(response.as_ref())
     }
 
     /// Calls `initialize` without blocking the JavaScript event loop.
     #[napi]
-    pub fn initialize_json_async(&self) -> AsyncTask<JsonApiTask> {
+    pub fn initialize_async(&self) -> AsyncTask<JsonApiTask> {
         AsyncTask::new(JsonApiTask {
             client: self.inner.clone(),
             kind: JsonTaskKind::Initialize,
         })
     }
 
-    /// Parses a `tsconfig` through corsa and returns the JSON response.
+    /// Parses a `tsconfig` through corsa and returns the response object.
     #[napi]
-    pub fn parse_config_file_json(&self, file: String) -> Result<String> {
+    pub fn parse_config_file(&self, file: String) -> Result<Value> {
         let response = block_on(self.inner.parse_config_file(file)).map_err(into_napi_error)?;
-        to_json(&response)
+        to_value(&response)
     }
 
     /// Parses a `tsconfig` on a libuv worker thread.
     #[napi]
-    pub fn parse_config_file_json_async(&self, file: String) -> AsyncTask<JsonApiTask> {
+    pub fn parse_config_file_async(&self, file: String) -> AsyncTask<JsonApiTask> {
         AsyncTask::new(JsonApiTask {
             client: self.inner.clone(),
             kind: JsonTaskKind::ParseConfigFile { file },
         })
     }
 
-    /// Applies file changes and returns a serialized snapshot record.
+    /// Applies file changes and returns a snapshot record.
     #[napi]
-    pub fn update_snapshot_json(&self, params_json: Option<String>) -> Result<String> {
-        let params = match params_json {
-            Some(params_json) => parse_json::<UpdateSnapshotParams>(params_json.as_str())?,
-            None => UpdateSnapshotParams::default(),
-        };
+    pub fn update_snapshot(&self, params: Option<Value>) -> Result<Value> {
+        let params = from_optional_value::<UpdateSnapshotParams>(params)?;
         let snapshot = block_on(self.inner.update_snapshot(params)).map_err(into_napi_error)?;
         let handle = snapshot.handle.clone();
-        let state = to_json(&SnapshotState {
+        let state = to_value(&SnapshotState {
             snapshot: &snapshot.handle,
             projects: snapshot.projects.as_slice(),
             changes: &snapshot.changes,
@@ -455,14 +455,11 @@ impl CorsaApiClient {
 
     /// Applies file changes on a libuv worker thread.
     #[napi]
-    pub fn update_snapshot_json_async(
-        &self,
-        params_json: Option<String>,
-    ) -> AsyncTask<JsonApiTask> {
+    pub fn update_snapshot_async(&self, params: Option<Value>) -> AsyncTask<JsonApiTask> {
         AsyncTask::new(JsonApiTask {
             client: self.inner.clone(),
             kind: JsonTaskKind::UpdateSnapshot {
-                params_json,
+                params,
                 snapshots: self.snapshots.clone(),
             },
         })
@@ -505,17 +502,17 @@ impl CorsaApiClient {
 
     /// Resolves the intrinsic string type for a project.
     #[napi]
-    pub fn get_string_type_json(&self, snapshot: String, project: String) -> Result<String> {
+    pub fn get_string_type(&self, snapshot: String, project: String) -> Result<Value> {
         let response = block_on(self.inner.get_string_type(
             SnapshotHandle::from(snapshot.as_str()),
             ProjectHandle::from(project.as_str()),
         ))
         .map_err(into_napi_error)?;
-        to_json(&response)
+        to_value(&response)
     }
 
     #[napi]
-    pub fn get_string_type_json_async(
+    pub fn get_string_type_async(
         &self,
         snapshot: String,
         project: String,
@@ -528,13 +525,13 @@ impl CorsaApiClient {
 
     /// Resolves the checker type visible at a file position.
     #[napi]
-    pub fn get_type_at_position_json(
+    pub fn get_type_at_position(
         &self,
         snapshot: String,
         project: String,
         file: String,
         position: u32,
-    ) -> Result<String> {
+    ) -> Result<Value> {
         let response = block_on(self.inner.get_type_at_position(
             SnapshotHandle::from(snapshot.as_str()),
             ProjectHandle::from(project.as_str()),
@@ -542,11 +539,11 @@ impl CorsaApiClient {
             position,
         ))
         .map_err(into_napi_error)?;
-        to_json(&response)
+        to_value(&response)
     }
 
     #[napi]
-    pub fn get_type_at_position_json_async(
+    pub fn get_type_at_position_async(
         &self,
         snapshot: String,
         project: String,
@@ -566,13 +563,13 @@ impl CorsaApiClient {
 
     /// Resolves the checker symbol visible at a file position.
     #[napi]
-    pub fn get_symbol_at_position_json(
+    pub fn get_symbol_at_position(
         &self,
         snapshot: String,
         project: String,
         file: String,
         position: u32,
-    ) -> Result<String> {
+    ) -> Result<Value> {
         let response = block_on(self.inner.get_symbol_at_position(
             SnapshotHandle::from(snapshot.as_str()),
             ProjectHandle::from(project.as_str()),
@@ -580,11 +577,11 @@ impl CorsaApiClient {
             position,
         ))
         .map_err(into_napi_error)?;
-        to_json(&response)
+        to_value(&response)
     }
 
     #[napi]
-    pub fn get_symbol_at_position_json_async(
+    pub fn get_symbol_at_position_async(
         &self,
         snapshot: String,
         project: String,
@@ -604,15 +601,15 @@ impl CorsaApiClient {
 
     /// Resolves type arguments for type-reference objects and returns [] otherwise.
     #[napi]
-    pub fn get_type_arguments_json(
+    pub fn get_type_arguments(
         &self,
         snapshot: String,
         project: String,
         type_handle: String,
         object_flags: Option<u32>,
-    ) -> Result<String> {
+    ) -> Result<Value> {
         if object_flags.unwrap_or_default() & OBJECT_FLAGS_REFERENCE == 0 {
-            return to_json(&Vec::<corsa::api::TypeResponse>::new());
+            return to_value(&Vec::<corsa::api::TypeResponse>::new());
         }
         let response = block_on(self.inner.get_type_arguments(
             SnapshotHandle::from(snapshot.as_str()),
@@ -620,11 +617,11 @@ impl CorsaApiClient {
             TypeHandle::from(type_handle.as_str()),
         ))
         .map_err(into_napi_error)?;
-        to_json(&response)
+        to_value(&response)
     }
 
     #[napi]
-    pub fn get_type_arguments_json_async(
+    pub fn get_type_arguments_async(
         &self,
         snapshot: String,
         project: String,
@@ -644,23 +641,23 @@ impl CorsaApiClient {
 
     /// Resolves the apparent checker type of a symbol.
     #[napi]
-    pub fn get_type_of_symbol_json(
+    pub fn get_type_of_symbol(
         &self,
         snapshot: String,
         project: String,
         symbol: String,
-    ) -> Result<String> {
+    ) -> Result<Value> {
         let response = block_on(self.inner.get_type_of_symbol(
             SnapshotHandle::from(snapshot.as_str()),
             ProjectHandle::from(project.as_str()),
             SymbolHandle::from(symbol.as_str()),
         ))
         .map_err(into_napi_error)?;
-        to_json(&response)
+        to_value(&response)
     }
 
     #[napi]
-    pub fn get_type_of_symbol_json_async(
+    pub fn get_type_of_symbol_async(
         &self,
         snapshot: String,
         project: String,
@@ -678,23 +675,23 @@ impl CorsaApiClient {
 
     /// Resolves the declared checker type of a symbol.
     #[napi]
-    pub fn get_declared_type_of_symbol_json(
+    pub fn get_declared_type_of_symbol(
         &self,
         snapshot: String,
         project: String,
         symbol: String,
-    ) -> Result<String> {
+    ) -> Result<Value> {
         let response = block_on(self.inner.get_declared_type_of_symbol(
             SnapshotHandle::from(snapshot.as_str()),
             ProjectHandle::from(project.as_str()),
             SymbolHandle::from(symbol.as_str()),
         ))
         .map_err(into_napi_error)?;
-        to_json(&response)
+        to_value(&response)
     }
 
     #[napi]
-    pub fn get_declared_type_of_symbol_json_async(
+    pub fn get_declared_type_of_symbol_async(
         &self,
         snapshot: String,
         project: String,
@@ -753,37 +750,26 @@ impl CorsaApiClient {
 
     /// Sends an arbitrary JSON endpoint request.
     #[napi]
-    pub fn call_json(&self, method: String, params_json: Option<String>) -> Result<String> {
-        let params = parse_optional_json(params_json)?;
+    pub fn call_json(&self, method: String, params: Option<Value>) -> Result<Value> {
+        let params = optional_value(params);
         let response = block_on(self.inner.raw_json_request(method.as_str(), params))
             .map_err(into_napi_error)?;
-        to_json(&response)
+        Ok(response)
     }
 
     /// Sends an arbitrary JSON endpoint request on a libuv worker thread.
     #[napi]
-    pub fn call_json_async(
-        &self,
-        method: String,
-        params_json: Option<String>,
-    ) -> AsyncTask<JsonApiTask> {
+    pub fn call_json_async(&self, method: String, params: Option<Value>) -> AsyncTask<JsonApiTask> {
         AsyncTask::new(JsonApiTask {
             client: self.inner.clone(),
-            kind: JsonTaskKind::CallJson {
-                method,
-                params_json,
-            },
+            kind: JsonTaskKind::CallJson { method, params },
         })
     }
 
     /// Sends an arbitrary binary endpoint request.
     #[napi]
-    pub fn call_binary(
-        &self,
-        method: String,
-        params_json: Option<String>,
-    ) -> Result<Option<Buffer>> {
-        let params = parse_optional_json(params_json)?;
+    pub fn call_binary(&self, method: String, params: Option<Value>) -> Result<Option<Buffer>> {
+        let params = optional_value(params);
         let payload = block_on(self.inner.raw_binary_request(method.as_str(), params))
             .map_err(into_napi_error)?;
         Ok(payload.map(|payload| Buffer::from(payload.into_bytes())))
@@ -794,14 +780,11 @@ impl CorsaApiClient {
     pub fn call_binary_async(
         &self,
         method: String,
-        params_json: Option<String>,
+        params: Option<Value>,
     ) -> AsyncTask<BinaryApiTask> {
         AsyncTask::new(BinaryApiTask {
             client: self.inner.clone(),
-            kind: BinaryTaskKind::CallBinary {
-                method,
-                params_json,
-            },
+            kind: BinaryTaskKind::CallBinary { method, params },
         })
     }
 

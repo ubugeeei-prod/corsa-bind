@@ -2,53 +2,55 @@
 /* eslint-disable */
 /** Thin synchronous wrapper around the Rust stdio API client. */
 export declare class CorsaApiClient {
-  /** Spawns a new client from a JSON-encoded spawn config. */
-  static spawn(optionsJson: string): CorsaApiClient
-  /** Calls `initialize` and returns the raw JSON response. */
-  initializeJson(): string
+  /** Spawns a new client from a JavaScript spawn config. */
+  static spawn(options: any): CorsaApiClient
+  /** Spawns a new client without blocking the JavaScript event loop. */
+  static spawnAsync(options: any): Promise<CorsaApiClient>
+  /** Calls `initialize` and returns the response object. */
+  initialize(): any
   /** Calls `initialize` without blocking the JavaScript event loop. */
-  initializeJsonAsync(): Promise<string>
-  /** Parses a `tsconfig` through corsa and returns the JSON response. */
-  parseConfigFileJson(file: string): string
+  initializeAsync(): Promise<unknown>
+  /** Parses a `tsconfig` through corsa and returns the response object. */
+  parseConfigFile(file: string): any
   /** Parses a `tsconfig` on a libuv worker thread. */
-  parseConfigFileJsonAsync(file: string): Promise<string>
-  /** Applies file changes and returns a serialized snapshot record. */
-  updateSnapshotJson(paramsJson?: string | undefined | null): string
+  parseConfigFileAsync(file: string): Promise<unknown>
+  /** Applies file changes and returns a snapshot record. */
+  updateSnapshot(params?: any | undefined | null): any
   /** Applies file changes on a libuv worker thread. */
-  updateSnapshotJsonAsync(paramsJson?: string | undefined | null): Promise<string>
+  updateSnapshotAsync(params?: any | undefined | null): Promise<unknown>
   /** Fetches a source file through the binary endpoint. */
   getSourceFile(snapshot: string, project: string, file: string): Buffer | null
   /** Fetches a source file on a libuv worker thread. */
   getSourceFileAsync(snapshot: string, project: string, file: string): Promise<Buffer | null>
   /** Resolves the intrinsic string type for a project. */
-  getStringTypeJson(snapshot: string, project: string): string
-  getStringTypeJsonAsync(snapshot: string, project: string): Promise<string>
+  getStringType(snapshot: string, project: string): any
+  getStringTypeAsync(snapshot: string, project: string): Promise<unknown>
   /** Resolves the checker type visible at a file position. */
-  getTypeAtPositionJson(snapshot: string, project: string, file: string, position: number): string
-  getTypeAtPositionJsonAsync(snapshot: string, project: string, file: string, position: number): Promise<string>
+  getTypeAtPosition(snapshot: string, project: string, file: string, position: number): any
+  getTypeAtPositionAsync(snapshot: string, project: string, file: string, position: number): Promise<unknown>
   /** Resolves the checker symbol visible at a file position. */
-  getSymbolAtPositionJson(snapshot: string, project: string, file: string, position: number): string
-  getSymbolAtPositionJsonAsync(snapshot: string, project: string, file: string, position: number): Promise<string>
+  getSymbolAtPosition(snapshot: string, project: string, file: string, position: number): any
+  getSymbolAtPositionAsync(snapshot: string, project: string, file: string, position: number): Promise<unknown>
   /** Resolves type arguments for type-reference objects and returns [] otherwise. */
-  getTypeArgumentsJson(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): string
-  getTypeArgumentsJsonAsync(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): Promise<string>
+  getTypeArguments(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): any
+  getTypeArgumentsAsync(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): Promise<unknown>
   /** Resolves the apparent checker type of a symbol. */
-  getTypeOfSymbolJson(snapshot: string, project: string, symbol: string): string
-  getTypeOfSymbolJsonAsync(snapshot: string, project: string, symbol: string): Promise<string>
+  getTypeOfSymbol(snapshot: string, project: string, symbol: string): any
+  getTypeOfSymbolAsync(snapshot: string, project: string, symbol: string): Promise<unknown>
   /** Resolves the declared checker type of a symbol. */
-  getDeclaredTypeOfSymbolJson(snapshot: string, project: string, symbol: string): string
-  getDeclaredTypeOfSymbolJsonAsync(snapshot: string, project: string, symbol: string): Promise<string>
+  getDeclaredTypeOfSymbol(snapshot: string, project: string, symbol: string): any
+  getDeclaredTypeOfSymbolAsync(snapshot: string, project: string, symbol: string): Promise<unknown>
   /** Renders a type back to a string representation. */
   typeToString(snapshot: string, project: string, typeHandle: string, location?: string | undefined | null, flags?: number | undefined | null): string
-  typeToStringAsync(snapshot: string, project: string, typeHandle: string, location?: string | undefined | null, flags?: number | undefined | null): Promise<string>
+  typeToStringAsync(snapshot: string, project: string, typeHandle: string, location?: string | undefined | null, flags?: number | undefined | null): Promise<unknown>
   /** Sends an arbitrary JSON endpoint request. */
-  callJson(method: string, paramsJson?: string | undefined | null): string
+  callJson(method: string, params?: any | undefined | null): any
   /** Sends an arbitrary JSON endpoint request on a libuv worker thread. */
-  callJsonAsync(method: string, paramsJson?: string | undefined | null): Promise<string>
+  callJsonAsync(method: string, params?: any | undefined | null): Promise<unknown>
   /** Sends an arbitrary binary endpoint request. */
-  callBinary(method: string, paramsJson?: string | undefined | null): Buffer | null
+  callBinary(method: string, params?: any | undefined | null): Buffer | null
   /** Sends an arbitrary binary endpoint request on a libuv worker thread. */
-  callBinaryAsync(method: string, paramsJson?: string | undefined | null): Promise<Buffer | null>
+  callBinaryAsync(method: string, params?: any | undefined | null): Promise<Buffer | null>
   /** Releases a corsa handle explicitly. */
   releaseHandle(handle: string): void
   /** Releases a corsa handle on a libuv worker thread. */
@@ -67,18 +69,18 @@ export declare class CorsaDistributedOrchestrator {
   campaign(nodeId: string): number
   /** Returns the current leader identifier. */
   leaderId(): string | null
-  /** Serializes the leader state. */
-  stateJson(): string | null
-  /** Serializes the state for a single node. */
-  nodeStateJson(nodeId: string): string | null
-  /** Serializes a replicated document if it exists. */
-  documentJson(nodeId: string, uri: string): string | null
-  /** Replicates an opened document and returns the serialized state. */
-  openVirtualDocumentJson(leaderId: string, documentJson: string): string
-  /** Applies replicated incremental changes and returns the serialized state. */
-  changeVirtualDocumentJson(leaderId: string, uri: string, changesJson: string): string
+  /** Returns the leader state. */
+  state(): any | null
+  /** Returns the state for a single node. */
+  nodeState(nodeId: string): any | null
+  /** Returns a replicated document if it exists. */
+  document(nodeId: string, uri: string): any | null
+  /** Replicates an opened document and returns the state. */
+  openVirtualDocument(document: any): any
+  /** Applies replicated incremental changes and returns the state. */
+  changeVirtualDocument(uri: string, changes: any): any
   /** Removes a replicated document. */
-  closeVirtualDocument(leaderId: string, uri: string): void
+  closeVirtualDocument(uri: string): void
 }
 
 /** Mutable virtual document mirrored through the LSP overlay layer. */
@@ -95,12 +97,12 @@ export declare class CorsaVirtualDocument {
   get version(): number
   /** Returns the current full text. */
   get text(): string
-  /** Serializes the full document state. */
-  stateJson(): string
+  /** Returns the full document state. */
+  state(): any
   /** Replaces the entire document text. */
   replace(text: string): void
-  /** Applies a batch of JSON-encoded LSP changes. */
-  applyChangesJson(changesJson: string): string
+  /** Applies a batch of LSP changes. */
+  applyChanges(changes: any): any
 }
 
 export declare function classifyTypeText(text?: string | undefined | null): string
@@ -123,16 +125,16 @@ export declare function isStringLikeTypeTexts(typeTexts: Array<string>): boolean
 
 export declare function isUnknownLikeTypeTexts(typeTexts: Array<string>): boolean
 
-export declare function isUnsafeAssignment(inputJson: string): boolean
+export declare function isUnsafeAssignment(input: any): boolean
 
-export declare function isUnsafeReturn(inputJson: string): boolean
+export declare function isUnsafeReturn(input: any): boolean
 
-export declare function nativeLintRuleMetasJson(): string
+export declare function nativeLintRuleMetas(): any
 
-export declare function runNativeLintRule(ruleName: string, nodeJson: string): string
+export declare function runNativeLintRule(ruleName: string, node: any): any
 
 /** Spawns a new client on a libuv worker thread. */
-export declare function spawnCorsaApiClientAsync(optionsJson: string): Promise<CorsaApiClient>
+export declare function spawnCorsaApiClientAsync(options: any): Promise<CorsaApiClient>
 
 export declare function splitTopLevelTypeText(text: string, delimiter: string): Array<string>
 

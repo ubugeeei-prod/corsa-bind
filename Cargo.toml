@@ -29,3 +29,13 @@ memchr = "2"
 phf = { version = "0.13", features = ["macros"] }
 rustc-hash = "2"
 smallvec = { version = "1", features = ["serde"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false
