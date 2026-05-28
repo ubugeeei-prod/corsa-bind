@@ -305,30 +305,42 @@ function implementedTypesFromTypeAndBases(
   type: CorsaType,
   checker: CorsaTypeCheckerShape,
 ): readonly CorsaType[] {
+  // Iterative DFS over the base chain so we don't pay for one closure call
+  // and one `push(...subResult)` spread per base (each spread used to copy
+  // the entire growing accumulator). Visit order doesn't matter because we
+  // dedupe by `type.id`.
   const seenTypes = new Set<string>();
   const seenImplementedTypes = new Set<string>();
-
-  function collect(current: CorsaType): CorsaType[] {
+  const implemented: CorsaType[] = [];
+  const stack: CorsaType[] = [type];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
     if (seenTypes.has(current.id)) {
-      return [];
+      continue;
     }
     seenTypes.add(current.id);
 
-    const implemented: CorsaType[] = [];
-    for (const ownType of implementedTypesFromTypeDeclaration(context, current, checker)) {
+    const ownImplemented = implementedTypesFromTypeDeclaration(context, current, checker);
+    for (let index = 0; index < ownImplemented.length; index += 1) {
+      const ownType = ownImplemented[index]!;
       if (seenImplementedTypes.has(ownType.id)) {
         continue;
       }
       seenImplementedTypes.add(ownType.id);
       implemented.push(ownType);
     }
-    for (const baseType of checker.getBaseTypes(current)) {
-      implemented.push(...collect(baseType));
-    }
-    return implemented;
-  }
 
-  return collect(type);
+    const bases = checker.getBaseTypes(current);
+    // Push in reverse so the natural visit order matches the recursive form.
+    for (let index = bases.length - 1; index >= 0; index -= 1) {
+      const baseType = bases[index]!;
+      if (seenTypes.has(baseType.id)) {
+        continue;
+      }
+      stack.push(baseType);
+    }
+  }
+  return implemented;
 }
 
 function implementedTypesFromTypeDeclaration(
