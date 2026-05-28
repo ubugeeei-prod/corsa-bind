@@ -1,6 +1,6 @@
 # Production Readiness Guide
 
-This document is the short operational checklist for running `corsa` in production-style environments.
+This document is the short operational checklist for running `corsa-bind` in production-style environments.
 
 For the current source-level gap register, see [Production Readiness Audit](./production_readiness_audit.md).
 

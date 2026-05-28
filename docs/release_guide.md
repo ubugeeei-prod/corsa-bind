@@ -1,6 +1,6 @@
 # Release Guide
 
-This document is the operational release guide for `corsa`.
+This document is the operational release guide for `corsa-bind`.
 
 ## Distribution Decisions
 

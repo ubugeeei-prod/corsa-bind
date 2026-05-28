@@ -1,6 +1,6 @@
 # Project Architecture, Strategy, and Implementation Tips
 
-This document is the high-level map for `corsa`.
+This document is the high-level map for `corsa-bind`.
 It explains what the repository is trying to achieve, which constraints shape the design, how the crates fit together, and what patterns are worth following when extending the project.
 
 If you want measured numbers, go to [performance.md](./performance.md).
@@ -9,7 +9,7 @@ If you want CI and local reproduction details, go to [ci_guide.md](./ci_guide.md
 
 ## Why This Project Exists
 
-`corsa` exists to make Corsa usable from Rust and Node.js in production-style workflows without maintaining a fork of upstream.
+`corsa-bind` exists to make Corsa usable from Rust and Node.js in production-style workflows without maintaining a fork of upstream.
 
 In practical terms, the repository is trying to provide:
 

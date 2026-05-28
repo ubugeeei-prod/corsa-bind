@@ -1,4 +1,4 @@
-# corsa
+# corsa-bind
 
 Rust bindings, orchestration layers, and JS runtime bindings for Corsa over stdio.
 
@@ -9,25 +9,27 @@ Rust bindings, orchestration layers, and JS runtime bindings for Corsa over stdi
 > cargo feature and some upstream-facing endpoints remain explicitly experimental.
 
 > [!IMPORTANT]
-> `corsa` is intentionally built around upstream-supported Corsa
+> `corsa-bind` is intentionally built around upstream-supported Corsa
 > workflows. We follow Corsa's recommended stdio/API/LSP integration points,
 > keep `ref/corsa-upstream` as an exact upstream checkout, and preserve a strict
 > `no forks, no patches` policy.
 
 ## What This Is
 
-`corsa` is a multi-crate workspace for talking to Corsa from Rust and JavaScript runtimes without patching upstream, with a Rust-backed native FFI layer that exposes Corsa API, virtual-document, and `utils` surfaces across C-family and other native languages.
+`corsa-bind` is a multi-crate workspace for talking to Corsa from Rust and JavaScript runtimes without patching upstream, with a Rust-backed native FFI layer that exposes Corsa API, virtual-document, and `utils` surfaces across C-family and other native languages.
 
 ## Naming Note
 
-`corsa` is the codename for this effort: the native TypeScript 7 implementation
-line we track here in the `typescript-go` codebase.
+`corsa-bind` is the repository and distribution name for bindings around the
+Corsa effort: the native TypeScript 7 implementation line we track here in the
+`typescript-go` codebase.
 The TypeScript roadmap describes this as the JS-based TypeScript 6 line versus
 the native TypeScript 7 line, and it also uses `Strada` for the original
 TypeScript codename and `Corsa` for this effort:
 [TypeScript Native Port: Versioning Roadmap](https://devblogs.microsoft.com/typescript/typescript-native-port/#versioning-roadmap).
-We use `corsa` here instead of the more generic `tsc` or `tsgo` labels because
-those names are easy to misread in docs, code, and release notes.
+We keep `corsa` for crate, binary, and upstream-facing labels where that matches
+the implementation surface, instead of the more generic `tsc` or `tsgo` labels
+that are easy to misread in docs, code, and release notes.
 
 In practice, that means:
 
@@ -149,12 +151,11 @@ vp run -w build
 vp check
 ```
 
-Build the Ox Content documentation site and deploy the generated static output
-with Void:
+Build the Ox Content documentation site and deploy it with Void:
 
 ```bash
 vp run -w docs_build
-vp run -w docs_deploy
+npx void deploy
 ```
 
 Repository automation scripts now assume Node `24` so they can run TypeScript

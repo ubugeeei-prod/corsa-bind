@@ -1,6 +1,6 @@
 # Performance
 
-`corsa` ships with multiple benchmark layers:
+`corsa-bind` ships with multiple benchmark layers:
 
 - Native real-Corsa benchmark: `vp run -w bench_native`
 - Native deep benchmark: `vp run -w bench_native_deep`
