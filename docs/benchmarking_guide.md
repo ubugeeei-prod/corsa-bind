@@ -213,14 +213,16 @@ Flow:
 
 1. Load datasets through the real pinned Corsa.
 2. Build temporary overlay `tsconfig` files.
-3. Run `tsc`, Corsa CLI, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` as child processes for `project_check`.
+3. Run `tsc`, Corsa CLI, `typescript-eslint`, `corsa-oxlint`, bare `oxlint`, and `tsgolint` as child processes for `project_check`.
 4. Run a live `corsa` msgpack session for `editor_workflow`.
 5. Emit timing tables and JSON.
 
 Important design choices:
 
-- `typescript-eslint`, `corsa-oxlint`, and `tsgolint` are allowed to exit with code `1` because lint findings are expected and should not invalidate timing
-- the three lint lanes use the overlapping type-aware rule set currently exported from `corsa-oxlint/rules`
+- the default tooling dataset is the pinned upstream `native-preview` package, which currently completes a clean Corsa CLI project check
+- `typescript-eslint`, `corsa-oxlint`, bare `oxlint`, and `tsgolint` are allowed to exit with code `1` because lint findings are expected and should not invalidate timing
+- `typescript-eslint`, `corsa-oxlint`, and `tsgolint` use the overlapping type-aware rule set currently exported from `corsa-oxlint/rules`
+- bare `oxlint` intentionally runs without the Corsa JS plugin or type-aware `tsgolint` bridge, so it is a raw Oxlint process baseline rather than the same rule workload
 - child processes run with timeouts
 - child stdout and stderr are suppressed during timing so the measurement focuses on the actual workload
 
@@ -282,7 +284,9 @@ For tooling benchmarks, install the exact comparison dependencies first:
 vp run -w bench_tooling_setup
 ```
 
-That keeps `typescript`, `eslint`, and `typescript-eslint` pinned for the comparison runner.
+That keeps `typescript`, `eslint`, `typescript-eslint`, and `oxlint-tsgolint`
+pinned for the comparison runner. Bare `oxlint` comes from the pinned
+`corsa-oxlint` package dependency.
 
 ## Never Forget Snapshot and Client Cleanup
 

@@ -160,12 +160,7 @@ fn default_corsa_path(root_dir: &std::path::Path) -> PathBuf {
 
 fn default_datasets(root_dir: &std::path::Path) -> SmallVec<[PathBuf; 4]> {
     let base = root_dir.join("ref/corsa-upstream");
-    let candidates = [
-        base.join("_packages/ast/tsconfig.json"),
-        base.join("_packages/native-preview/tsconfig.json"),
-        base.join("_packages/api/tsconfig.json"),
-        base.join("_extension/tsconfig.json"),
-    ];
+    let candidates = [base.join("_packages/native-preview/tsconfig.json")];
     let mut datasets = SmallVec::<[PathBuf; 4]>::new();
     for path in candidates {
         if path.exists() {
