@@ -26,7 +26,7 @@ env:
 jobs:
   benchmark:
     name: Benchmark ${{ matrix.ref-role }} TypeScript ${{ matrix.typescript.channel }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     continue-on-error: ${{ matrix.ref-role == 'base' }}
     strategy:
@@ -182,7 +182,7 @@ jobs:
 
   comment:
     name: Comment benchmark result
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs: benchmark
     steps:
       - name: Checkout
