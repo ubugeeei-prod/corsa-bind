@@ -10,34 +10,59 @@ export type RuleCreatorRule<
   TMessageIds extends string = string,
 > = {
   readonly name: string;
-  readonly meta: RuleMeta & {
-    readonly messages?: Record<TMessageIds, string>;
-  };
+  readonly meta: RuleCreatorMeta<TMessageIds>;
   readonly defaultOptions?: TOptions;
   readonly create: (context: ContextWithParserOptions) => Visitor;
 };
 
-export type RuleCreatorCreatedRule<TRule extends RuleCreatorRule> = Rule & {
-  readonly defaultOptions: TRule extends { readonly defaultOptions: infer TOptions }
-    ? TOptions
-    : readonly [];
-  readonly meta: TRule["meta"] & {
-    readonly docs: NonNullable<TRule["meta"]["docs"]> & {
+export type RuleCreatorMeta<TMessageIds extends string = string> = RuleMeta & {
+  readonly messages?: Record<TMessageIds, string>;
+};
+
+export type RuleCreatorCreatedRule<
+  TOptions extends readonly unknown[] = readonly [],
+  TMeta extends RuleMeta = RuleMeta,
+> = Rule & {
+  readonly defaultOptions: TOptions;
+  readonly meta: TMeta & {
+    readonly docs: NonNullable<TMeta["docs"]> & {
       readonly url: string;
     };
   };
 };
 
-export type RuleCreatorFactory = <TRule extends RuleCreatorRule>(
-  rule: TRule,
-) => RuleCreatorCreatedRule<TRule>;
+type RuleCreatorInput<
+  TOptions extends readonly unknown[],
+  TMessageIds extends string,
+  TMeta extends RuleCreatorMeta<TMessageIds>,
+> = Omit<RuleCreatorRule<TOptions, TMessageIds>, "defaultOptions" | "meta"> & {
+  readonly defaultOptions?: TOptions;
+  readonly meta: TMeta;
+};
+
+export interface RuleCreatorFactory {
+  <
+    TOptions extends readonly unknown[],
+    TMessageIds extends string,
+    TMeta extends RuleCreatorMeta<TMessageIds>,
+  >(
+    rule: RuleCreatorInput<TOptions, TMessageIds, TMeta> & {
+      readonly defaultOptions: TOptions;
+    },
+  ): RuleCreatorCreatedRule<TOptions, TMeta>;
+  <TMessageIds extends string, TMeta extends RuleCreatorMeta<TMessageIds>>(
+    rule: RuleCreatorInput<readonly [], TMessageIds, TMeta> & {
+      readonly defaultOptions?: undefined;
+    },
+  ): RuleCreatorCreatedRule<readonly [], TMeta>;
+}
 
 /**
  * Self-hosted type-aware utilities for Oxlint rules backed by Corsa.
  */
 export const OxlintUtils = Object.freeze({
   RuleCreator(urlCreator: (ruleName: string) => string): RuleCreatorFactory {
-    return ((rule) => {
+    return ((rule: RuleCreatorRule) => {
       const docs = rule.meta?.docs;
       return decorateRule({
         ...rule,
@@ -49,7 +74,7 @@ export const OxlintUtils = Object.freeze({
           },
         },
         defaultOptions: rule.defaultOptions ?? [],
-      } as unknown as Rule) as RuleCreatorCreatedRule<typeof rule>;
+      } as unknown as Rule) as never;
     }) as RuleCreatorFactory;
   },
   getParserServices(context: ContextWithParserOptions, allowWithoutFullTypeInformation = false) {
