@@ -297,22 +297,32 @@ function heritageTypes(
  * class still reports that interface. Without this, a rule shared between
  * oxlint (tsgo) and ESLint (this `@typescript-eslint` fallback checker) would
  * see different implemented types for the same source (GH#207).
+ *
+ * The traversal is a DFS so we can use `pop()` (O(1)) instead of a queue with
+ * `shift()` (O(n)) — visit order doesn't matter because we dedupe implemented
+ * types by identity. We also `continue` on already-visited bases before
+ * touching `Set.add`, so a deep diamond hierarchy never quadruples work.
  */
 function implementedTypesIncludingBases(
   type: unknown,
   checker: Record<string, unknown>,
 ): readonly never[] {
+  if (type === undefined || type === null) {
+    return [];
+  }
   const visited = new Set<unknown>();
   const seenImplemented = new Set<unknown>();
   const implemented: never[] = [];
-  const queue: unknown[] = [type];
-  while (queue.length > 0) {
-    const current = queue.shift();
+  const stack: unknown[] = [type];
+  while (stack.length > 0) {
+    const current = stack.pop();
     if (current === undefined || current === null || visited.has(current)) {
       continue;
     }
     visited.add(current);
-    for (const ownType of heritageTypes(current, checker, "implements")) {
+    const ownImplemented = heritageTypes(current, checker, "implements");
+    for (let index = 0; index < ownImplemented.length; index += 1) {
+      const ownType = ownImplemented[index];
       if (seenImplemented.has(ownType)) {
         continue;
       }
@@ -321,8 +331,12 @@ function implementedTypesIncludingBases(
     }
     const directBases = asReadonlyArray(callChecker(checker, "getBaseTypes", current));
     const bases = directBases.length > 0 ? directBases : heritageTypes(current, checker, "extends");
-    for (const baseType of bases) {
-      queue.push(baseType);
+    for (let index = bases.length - 1; index >= 0; index -= 1) {
+      const baseType = bases[index];
+      if (baseType === undefined || baseType === null || visited.has(baseType)) {
+        continue;
+      }
+      stack.push(baseType);
     }
   }
   return implemented;
