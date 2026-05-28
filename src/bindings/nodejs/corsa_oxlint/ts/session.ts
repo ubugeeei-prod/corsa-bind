@@ -281,7 +281,12 @@ export class CorsaProjectSession {
         }) ?? [],
       );
     } catch (error) {
-      if (isProtocolPanicError(error)) {
+      // Upstream Corsa occasionally drops a type handle from its snapshot
+      // registry after the first base-types query on a class that has no
+      // explicit `extends` clause. Treating that as "no base types" lets a
+      // follow-up `getImplementedTypesOfType` on the same handle still report
+      // the type's own `implements` clause instead of throwing (GH#206).
+      if (isProtocolPanicError(error) || isStaleHandleError(error)) {
         return [];
       }
       throw error;
@@ -848,6 +853,11 @@ function overlayTextFor(fileName: string, sourceText?: string): string | undefin
 function isProtocolPanicError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("protocol error: panic:") || message.includes("panic: runtime error");
+}
+
+function isStaleHandleError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /handle "[^"]*" not found in snapshot registry/.test(message);
 }
 
 function statMtimeMs(fileName: string): number {
