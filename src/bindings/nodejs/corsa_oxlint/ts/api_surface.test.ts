@@ -16,6 +16,7 @@ import * as tsUtilsEntry from "./ts_utils";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const declarationEmitTimeoutMs = 20_000;
+const tscBinary = process.platform === "win32" ? "tsc.cmd" : "tsc";
 
 describe("api surface", () => {
   it("re-exports the compatibility entrypoint", () => {
@@ -127,7 +128,7 @@ describe("api surface", () => {
       try {
         try {
           execFileSync(
-            resolve(workspaceRoot, "node_modules/.bin/tsc"),
+            resolve(workspaceRoot, "node_modules/.bin", tscBinary),
             ["-p", resolve(workspace, "tsconfig.json")],
             {
               cwd: workspaceRoot,
@@ -594,8 +595,14 @@ function moduleSpecifierFor(fromDirectory: string, toFile: string): string {
 }
 
 function commandOutput(error: unknown): string {
-  const output = error as { readonly stderr?: Buffer; readonly stdout?: Buffer };
-  return [output.stdout?.toString(), output.stderr?.toString()].filter(Boolean).join("\n");
+  const output = error as {
+    readonly message?: string;
+    readonly stderr?: Buffer;
+    readonly stdout?: Buffer;
+  };
+  return [output.message, output.stdout?.toString(), output.stderr?.toString()]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function findFile(directory: string, name: string): string {
