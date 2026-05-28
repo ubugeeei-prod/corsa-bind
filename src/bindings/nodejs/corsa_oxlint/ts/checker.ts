@@ -111,6 +111,14 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       if ("pos" in node) {
         return implementedTypesFromCorsaNode(context, node, this);
       }
+      const sourceText = sourceTextFor(context, node);
+      const sourceNode = sourceText ? corsaNodeFromEstree(context, node) : undefined;
+      if (sourceText && sourceNode) {
+        const implemented = implementedTypesFromSourceText(sourceNode, sourceText, this);
+        if (implemented.length > 0) {
+          return implemented;
+        }
+      }
       return implementedClauseNodes(node)
         .map((clause) => {
           const expression = implementedClauseChildNode(clause, "expression") ?? clause;
@@ -122,16 +130,7 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
         .filter((type): type is CorsaType => type !== undefined);
     },
     getImplementedTypesOfType(type) {
-      const session = sessionForContext(context).session;
-      const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
-      const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-      const declarationNode = declaration ? session.getNode(declaration) : undefined;
-      const sourceText = declarationNode
-        ? sourceTextForPath(context, declarationNode.fileName)
-        : undefined;
-      return declarationNode && sourceText
-        ? implementedTypesFromSourceText(declarationNode, sourceText, this)
-        : [];
+      return implementedTypesFromTypeAndBases(context, type, this);
     },
     getTypeArguments(type) {
       return sessionForContext(context).session.getTypeArguments(type);
@@ -281,6 +280,72 @@ function implementedTypesFromCorsaNode(
   }
   const type = checker.getTypeAtLocation(node);
   return type ? checker.getImplementedTypesOfType(type) : [];
+}
+
+function corsaNodeFromEstree(context: ContextWithParserOptions, node: Node): CorsaNode | undefined {
+  const range = (node as { readonly range?: unknown }).range;
+  if (
+    !Array.isArray(range) ||
+    range.length < 2 ||
+    typeof range[0] !== "number" ||
+    typeof range[1] !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    fileName: context.filename,
+    pos: range[0],
+    end: range[1],
+    range: [range[0], range[1]] as const,
+  };
+}
+
+function implementedTypesFromTypeAndBases(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  const seenTypes = new Set<string>();
+  const seenImplementedTypes = new Set<string>();
+
+  function collect(current: CorsaType): CorsaType[] {
+    if (seenTypes.has(current.id)) {
+      return [];
+    }
+    seenTypes.add(current.id);
+
+    const implemented: CorsaType[] = [];
+    for (const ownType of implementedTypesFromTypeDeclaration(context, current, checker)) {
+      if (seenImplementedTypes.has(ownType.id)) {
+        continue;
+      }
+      seenImplementedTypes.add(ownType.id);
+      implemented.push(ownType);
+    }
+    for (const baseType of checker.getBaseTypes(current)) {
+      implemented.push(...collect(baseType));
+    }
+    return implemented;
+  }
+
+  return collect(type);
+}
+
+function implementedTypesFromTypeDeclaration(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  const session = sessionForContext(context).session;
+  const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
+  const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+  const declarationNode = declaration ? session.getNode(declaration) : undefined;
+  const sourceText = declarationNode
+    ? sourceTextForPath(context, declarationNode.fileName)
+    : undefined;
+  return declarationNode && sourceText
+    ? implementedTypesFromSourceText(declarationNode, sourceText, checker)
+    : [];
 }
 
 function implementedTypesFromSourceText(

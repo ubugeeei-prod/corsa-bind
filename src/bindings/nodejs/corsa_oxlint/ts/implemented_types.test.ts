@@ -149,6 +149,75 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.byType).toEqual(["IChild"]);
   });
 
+  integrationCase("returns inherited implemented interfaces from class types", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "inherited-implemented-types-of-type",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise inherited implemented types resolved from a class type",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          NewExpression(node: any) {
+            const type = checker.getTypeAtLocation(node);
+            if (!type) {
+              return;
+            }
+            seen[checker.typeToString(type)] = checker
+              .getImplementedTypesOfType(type)
+              .map((implemented) => checker.typeToString(implemented));
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("inherited-implemented-types-of-type", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface IA {",
+            "  readonly a: string;",
+            "}",
+            "class Base implements IA {",
+            '  readonly a = "x";',
+            "}",
+            "class Derived extends Base {",
+            '  readonly b = "y";',
+            "}",
+            "new Base();",
+            "new Derived();",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.Base).toEqual(["IA"]);
+    expect(seen.Derived).toEqual(["IA"]);
+  });
+
   integrationCase("ignores braces in leading comments when resolving implemented types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
