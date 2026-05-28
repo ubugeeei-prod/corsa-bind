@@ -368,6 +368,50 @@ describe("corsa oxlint", () => {
     });
   });
 
+  it("accepts corsaOxlint settings on the RuleTester constructor config", () => {
+    let seen: Record<string, unknown> | undefined;
+    const tester = new RuleTester({
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            corsa: {
+              executable: realCorsaBinary,
+            },
+          },
+        },
+      },
+    });
+    tester.run(
+      "settings-config-roundtrip",
+      {
+        meta: {
+          messages: {
+            demo: "demo",
+          },
+          schema: [],
+        },
+        create(context: any) {
+          seen = {
+            languageExecutable: context.languageOptions?.parserOptions?.corsa?.executable,
+            parserExecutable: context.parserOptions?.corsa?.executable,
+            settingsExecutable: context.settings?.corsaOxlint?.parserOptions?.corsa?.executable,
+          };
+          return {};
+        },
+      } as any,
+      {
+        valid: [{ code: "const value = 1;" }],
+        invalid: [],
+      },
+    );
+
+    expect(seen).toEqual({
+      languageExecutable: realCorsaBinary,
+      parserExecutable: realCorsaBinary,
+      settingsExecutable: realCorsaBinary,
+    });
+  });
+
   const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
 
   integrationCase("runs a type-aware custom rule through oxlint RuleTester", () => {

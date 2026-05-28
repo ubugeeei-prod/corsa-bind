@@ -12,10 +12,10 @@ type TesterConfig = import("oxlint/plugins-dev").RuleTester.Config;
 type TestCase = import("oxlint/plugins-dev").RuleTester.ValidTestCase &
   Partial<import("oxlint/plugins-dev").RuleTester.InvalidTestCase>;
 type TestCases = import("oxlint/plugins-dev").RuleTester.TestCases;
-type ConfigWithSettings = TesterConfig & {
-  settings?: {
-    corsaOxlint?: CorsaOxlintSettings;
-    [key: string]: unknown;
+export type RuleTesterConfig = TesterConfig & {
+  readonly settings?: {
+    readonly corsaOxlint?: CorsaOxlintSettings;
+    readonly [key: string]: unknown;
   };
 };
 
@@ -58,9 +58,9 @@ export class RuleTester {
   }
 
   readonly #inner: OxlintRuleTester;
-  readonly #config?: TesterConfig;
+  readonly #config?: RuleTesterConfig;
 
-  constructor(config?: TesterConfig) {
+  constructor(config?: RuleTesterConfig) {
     this.#config = config;
     this.#inner = new OxlintRuleTester(config);
   }
@@ -87,7 +87,7 @@ function createWorkspace(): string {
 function prepareTestCase(
   workspace: string,
   test: string | TestCase,
-  config: TesterConfig | undefined,
+  config: RuleTesterConfig | undefined,
   group: "valid" | "invalid",
   index: number,
 ): string | TestCase {
@@ -98,7 +98,7 @@ function prepareTestCase(
   }
   const filename = resolve(workspace, test.filename ?? `${group}-${index}.ts`);
   writeFixture(filename, test.code);
-  const testerConfig = config as ConfigWithSettings | undefined;
+  const testerConfig = config;
   const baseSettings = testerConfig?.settings?.corsaOxlint;
   const caseSettings = (
     test.settings as {

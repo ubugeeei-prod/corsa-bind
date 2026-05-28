@@ -1,6 +1,7 @@
 import { RuleTester } from "./rule_tester";
 
 export { RuleTester } from "./rule_tester";
+export type { RuleTesterConfig } from "./rule_tester";
 
 export const ESLint = unsupportedTSESLintClass("ESLint");
 export const FlatESLint = unsupportedTSESLintClass("FlatESLint");

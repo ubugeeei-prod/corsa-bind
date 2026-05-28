@@ -15,6 +15,7 @@ import * as tsestreeEntry from "./ts_estree";
 import * as tsUtilsEntry from "./ts_utils";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
+const declarationEmitTimeoutMs = 20_000;
 
 describe("api surface", () => {
   it("re-exports the compatibility entrypoint", () => {
@@ -40,107 +41,111 @@ describe("api surface", () => {
     >();
   });
 
-  it("emits declarations for inferred visitor callback node types", () => {
-    const declarationsRoot = resolve(workspaceRoot, ".cache");
-    mkdirSync(declarationsRoot, { recursive: true });
-    const workspace = mkdtempSync(resolve(declarationsRoot, "corsa-oxlint-declaration-"));
-    const importPath = moduleSpecifierFor(
-      workspace,
-      resolve(workspaceRoot, "src/bindings/nodejs/corsa_oxlint/ts/index.ts"),
-    );
-    writeFileSync(
-      resolve(workspace, "rule.ts"),
-      [
-        `import { RuleCreator, definePlugin, defineRule } from "${importPath}";`,
-        "",
-        "export const r = defineRule({",
-        '  meta: { type: "problem", messages: {}, schema: [] },',
-        "  create() {",
-        "    return {",
-        "      NewExpression(node) {",
-        "        void node;",
-        "      },",
-        "    };",
-        "  },",
-        "});",
-        "",
-        "export const p = definePlugin({",
-        "  rules: {",
-        "    demo: {",
-        '      meta: { type: "problem", messages: {}, schema: [] },',
-        "      create() {",
-        "        return {",
-        "          NewExpression(node) {",
-        "            void node;",
-        "          },",
-        "        };",
-        "      },",
-        "    },",
-        "  },",
-        "});",
-        "",
-        "export const created = RuleCreator.withoutDocs({",
-        '  meta: { type: "problem", messages: {}, schema: [] },',
-        "  create() {",
-        "    return {",
-        "      NewExpression(node) {",
-        "        void node;",
-        "      },",
-        "    };",
-        "  },",
-        "});",
-        "",
-      ].join("\n"),
-    );
-    writeFileSync(
-      resolve(workspace, "tsconfig.json"),
-      JSON.stringify(
-        {
-          compilerOptions: {
-            declaration: true,
-            emitDeclarationOnly: true,
-            outDir: resolve(workspace, "out"),
-            rootDir: workspaceRoot,
-            moduleResolution: "bundler",
-            module: "esnext",
-            target: "esnext",
-            strict: true,
-            skipLibCheck: true,
-            types: ["node"],
-            typeRoots: [resolve(workspaceRoot, "node_modules/@types")],
-            baseUrl: workspaceRoot,
-            paths: {
-              "@corsa-bind/napi": ["src/bindings/nodejs/corsa_node/ts/index.ts"],
-            },
-            ignoreDeprecations: "6.0",
-          },
-          files: [resolve(workspace, "rule.ts")],
-        },
-        null,
-        2,
-      ),
-    );
-
-    try {
-      try {
-        execFileSync(
-          resolve(workspaceRoot, "node_modules/.bin/tsc"),
-          ["-p", resolve(workspace, "tsconfig.json")],
+  it(
+    "emits declarations for inferred visitor callback node types",
+    () => {
+      const declarationsRoot = resolve(workspaceRoot, ".cache");
+      mkdirSync(declarationsRoot, { recursive: true });
+      const workspace = mkdtempSync(resolve(declarationsRoot, "corsa-oxlint-declaration-"));
+      const importPath = moduleSpecifierFor(
+        workspace,
+        resolve(workspaceRoot, "src/bindings/nodejs/corsa_oxlint/ts/index.ts"),
+      );
+      writeFileSync(
+        resolve(workspace, "rule.ts"),
+        [
+          `import { RuleCreator, definePlugin, defineRule } from "${importPath}";`,
+          "",
+          "export const r = defineRule({",
+          '  meta: { type: "problem", messages: {}, schema: [] },',
+          "  create() {",
+          "    return {",
+          "      NewExpression(node) {",
+          "        void node;",
+          "      },",
+          "    };",
+          "  },",
+          "});",
+          "",
+          "export const p = definePlugin({",
+          "  rules: {",
+          "    demo: {",
+          '      meta: { type: "problem", messages: {}, schema: [] },',
+          "      create() {",
+          "        return {",
+          "          NewExpression(node) {",
+          "            void node;",
+          "          },",
+          "        };",
+          "      },",
+          "    },",
+          "  },",
+          "});",
+          "",
+          "export const created = RuleCreator.withoutDocs({",
+          '  meta: { type: "problem", messages: {}, schema: [] },',
+          "  create() {",
+          "    return {",
+          "      NewExpression(node) {",
+          "        void node;",
+          "      },",
+          "    };",
+          "  },",
+          "});",
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(
+        resolve(workspace, "tsconfig.json"),
+        JSON.stringify(
           {
-            cwd: workspaceRoot,
-            stdio: "pipe",
+            compilerOptions: {
+              declaration: true,
+              emitDeclarationOnly: true,
+              outDir: resolve(workspace, "out"),
+              rootDir: workspaceRoot,
+              moduleResolution: "bundler",
+              module: "esnext",
+              target: "esnext",
+              strict: true,
+              skipLibCheck: true,
+              types: ["node"],
+              typeRoots: [resolve(workspaceRoot, "node_modules/@types")],
+              baseUrl: workspaceRoot,
+              paths: {
+                "@corsa-bind/napi": ["src/bindings/nodejs/corsa_node/ts/index.ts"],
+              },
+              ignoreDeprecations: "6.0",
+            },
+            files: [resolve(workspace, "rule.ts")],
           },
-        );
-      } catch (error) {
-        throw new Error(`tsc declaration emit failed:\n${commandOutput(error)}`);
-      }
+          null,
+          2,
+        ),
+      );
 
-      const declarationPath = findFile(resolve(workspace, "out"), "rule.d.ts");
-      expect(readFileSync(declarationPath, "utf8")).not.toContain("NewExpression");
-    } finally {
-      rmSync(workspace, { recursive: true, force: true });
-    }
-  });
+      try {
+        try {
+          execFileSync(
+            resolve(workspaceRoot, "node_modules/.bin/tsc"),
+            ["-p", resolve(workspace, "tsconfig.json")],
+            {
+              cwd: workspaceRoot,
+              stdio: "pipe",
+            },
+          );
+        } catch (error) {
+          throw new Error(`tsc declaration emit failed:\n${commandOutput(error)}`);
+        }
+
+        const declarationPath = findFile(resolve(workspace, "out"), "rule.d.ts");
+        expect(readFileSync(declarationPath, "utf8")).not.toContain("NewExpression");
+      } finally {
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+    declarationEmitTimeoutMs,
+  );
 
   it("re-exports typescript-eslint-style utility namespaces", () => {
     expect(main.ESLintUtils.RuleCreator).toBe(main.RuleCreator);
