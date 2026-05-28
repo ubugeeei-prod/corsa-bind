@@ -106,7 +106,7 @@ describe("npm release utils", () => {
     expect(getNodeBindingBuildMatrix(nodeBindingManifest)).toEqual([
       {
         crossCompile: false,
-        os: "blacksmith-2vcpu-windows-2025",
+        os: "windows-latest",
         target: "x86_64-pc-windows-msvc",
         useNapiCross: false,
       },
@@ -118,37 +118,37 @@ describe("npm release utils", () => {
       },
       {
         crossCompile: false,
-        os: "blacksmith-2vcpu-ubuntu-2404",
+        os: "ubuntu-latest",
         target: "x86_64-unknown-linux-gnu",
         useNapiCross: true,
       },
       {
         crossCompile: false,
-        os: "blacksmith-6vcpu-macos-15",
+        os: "macos-15",
         target: "aarch64-apple-darwin",
         useNapiCross: false,
       },
       {
         crossCompile: false,
-        os: "blacksmith-2vcpu-windows-2025",
+        os: "windows-latest",
         target: "aarch64-pc-windows-msvc",
         useNapiCross: false,
       },
       {
         crossCompile: true,
-        os: "blacksmith-2vcpu-ubuntu-2404",
+        os: "ubuntu-latest",
         target: "x86_64-unknown-linux-musl",
         useNapiCross: false,
       },
       {
         crossCompile: false,
-        os: "blacksmith-2vcpu-ubuntu-2404",
+        os: "ubuntu-latest",
         target: "aarch64-unknown-linux-gnu",
         useNapiCross: true,
       },
       {
         crossCompile: true,
-        os: "blacksmith-2vcpu-ubuntu-2404",
+        os: "ubuntu-latest",
         target: "aarch64-unknown-linux-musl",
         useNapiCross: false,
       },
