@@ -76,6 +76,14 @@ async fn run(cli: args::Cli) -> corsa::Result<()> {
         println!("{line}");
     }
     println!();
+    println!("project_check requested opponent comparison");
+    println!(
+        "dataset\ttool\topponent\ttool_median_ms\topponent_median_ms\ttool_vs_opponent_x\twinner"
+    );
+    for line in report::project_check_requested_opponent_lines(&results) {
+        println!("{line}");
+    }
+    println!();
     println!("editor_workflow vs corsa CLI project_check baseline (not equivalent work)");
     println!("dataset\ttool\tmedian_ms\tcorsa_project_check_median_ms\tvs_corsa_x");
     for line in report::workflow_vs_corsa_lines(&results) {

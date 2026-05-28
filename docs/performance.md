@@ -37,7 +37,7 @@ For the reasoning behind these benchmark layers, implementation notes, and exten
 
 The tooling benchmark is the `bench_tooling_compare` binary. It tracks two workloads:
 
-- `project_check`: `tsc`, Corsa CLI, `typescript-eslint`, `corsa-oxlint`, and `tsgolint` on the same dataset
+- `project_check`: `tsc`, Corsa CLI, `typescript-eslint`, `corsa-oxlint`, bare `oxlint`, and `tsgolint` on the same dataset
 - `editor_workflow`: `corsa` msgpack cold and warm orchestration over a representative multi-query API flow
 
 Before running it for the first time, install the comparison dependencies:
@@ -55,10 +55,17 @@ cargo run --release -p corsa --bin bench_tooling_compare -- \
   --json-output .cache/bench_tooling_compare.json
 ```
 
+By default the tooling runner uses the pinned upstream `native-preview`
+package, because it is the largest bundled dataset that currently completes a
+clean Corsa CLI project check. Use `--dataset PATH` to add more projects when
+you want exploratory numbers and are prepared to handle diagnostics.
+
 `project_check` is the apples-to-apples CLI comparison.
 The lint lanes use the overlapping type-aware rules currently published by
 `corsa-oxlint/rules`, so `typescript-eslint`, `corsa-oxlint`, and `tsgolint`
 are timed against the same rule workload.
+The `oxlint-bare` lane intentionally runs plain Oxlint without the Corsa plugin
+or type-aware bridge, giving a raw process baseline for the requested comparison.
 `editor_workflow` is intentionally a different workload: it asks whether session reuse and orchestration can beat rerunning a full Corsa CLI `--noEmit` project check.
 
 The runner creates temporary overlay `tsconfig` files for CLI parity, enforces per-process timeouts, and always kills plus reaps spawned children before returning.

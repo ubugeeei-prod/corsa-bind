@@ -85,8 +85,8 @@ async fn run_project_check_suite(
     dataset: &DatasetCase,
     support: &ToolSupport,
     overlay: &OverlayConfig,
-) -> Result<SmallVec<[ToolRow; 8]>> {
-    let mut rows = SmallVec::<[ToolRow; 8]>::new();
+) -> Result<SmallVec<[ToolRow; 16]>> {
+    let mut rows = SmallVec::<[ToolRow; 16]>::new();
     let timeout = Duration::from_millis(cli.timeout_ms);
     if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:tsc", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
@@ -135,6 +135,20 @@ async fn run_project_check_suite(
     .await?
     {
         rows.push(row("project_check", dataset, "corsa-oxlint", stats));
+    }
+    if let Some(stats) = measure_row(
+        cli.allow_partial_failures,
+        "project_check:oxlint-bare",
+        || {
+            measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
+                let mut command = oxlint_bare_command(dataset, support);
+                run_command(&mut command, timeout, &[0, 1], "oxlint-bare")
+            })
+        },
+    )
+    .await?
+    {
+        rows.push(row("project_check", dataset, "oxlint-bare", stats));
     }
     if let Some(stats) = measure_row(cli.allow_partial_failures, "project_check:tsgolint", || {
         measure_with_warmup(cli.warmup_iterations, cli.iterations, || async {
@@ -263,6 +277,19 @@ fn corsa_oxlint_command(
         .env("CORSA_RS_BENCH_TSCONFIG", &overlay.path)
         .env("CORSA_RS_BENCH_EXECUTABLE", &cli.corsa_path)
         .env("CORSA_RS_BENCH_ROOT", &support.workspace_root);
+    for file in &dataset.source_files {
+        command.arg(file.as_str());
+    }
+    command
+}
+
+fn oxlint_bare_command(dataset: &DatasetCase, support: &ToolSupport) -> Command {
+    let mut command = Command::new(support.node_command.as_str());
+    command
+        .current_dir(&support.workspace_root)
+        .arg(&support.oxlint_script)
+        .arg("--disable-nested-config")
+        .arg("--silent");
     for file in &dataset.source_files {
         command.arg(file.as_str());
     }

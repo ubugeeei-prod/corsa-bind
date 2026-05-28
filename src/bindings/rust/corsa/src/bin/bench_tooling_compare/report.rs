@@ -52,6 +52,7 @@ pub fn write(path: &Path, cli: &Cli, datasets: &[DatasetCase], rows: &[ToolRow])
             "datasets": datasets,
             "rows": rows_json,
             "projectCheckVsCorsa": project_check_vs_corsa_json(rows),
+            "projectCheckRequestedOpponentComparison": project_check_requested_opponent_json(rows),
             "workflowVsCorsaCli": workflow_vs_corsa_json(rows),
         }))?,
     )?;
@@ -90,6 +91,24 @@ pub fn workflow_vs_corsa_lines(rows: &[ToolRow]) -> Vec<String> {
         .collect()
 }
 
+pub fn project_check_requested_opponent_lines(rows: &[ToolRow]) -> Vec<String> {
+    project_check_requested_opponents(rows)
+        .into_iter()
+        .map(|comparison| {
+            format!(
+                "{}\t{}\t{}\t{:.3}\t{:.3}\t{:.2}\t{}",
+                comparison.dataset,
+                comparison.tool,
+                comparison.opponent_tool,
+                comparison.tool_median_ms,
+                comparison.opponent_median_ms,
+                comparison.tool_vs_opponent_x,
+                comparison.winner
+            )
+        })
+        .collect()
+}
+
 fn project_check_vs_corsa_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
     project_check_vs_corsa(rows)
         .into_iter()
@@ -101,6 +120,23 @@ fn project_check_vs_corsa_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
                 "baselineTool": comparison.baseline_tool,
                 "baselineMedianMs": comparison.baseline_median_ms,
                 "vsBaselineX": comparison.vs_baseline_x,
+            })
+        })
+        .collect()
+}
+
+fn project_check_requested_opponent_json(rows: &[ToolRow]) -> Vec<serde_json::Value> {
+    project_check_requested_opponents(rows)
+        .into_iter()
+        .map(|comparison| {
+            json!({
+                "dataset": comparison.dataset,
+                "tool": comparison.tool,
+                "opponentTool": comparison.opponent_tool,
+                "toolMedianMs": comparison.tool_median_ms,
+                "opponentMedianMs": comparison.opponent_median_ms,
+                "toolVsOpponentX": comparison.tool_vs_opponent_x,
+                "winner": comparison.winner,
             })
         })
         .collect()
@@ -131,6 +167,16 @@ struct Comparison<'a> {
     vs_baseline_x: f64,
 }
 
+struct RequestedOpponentComparison<'a> {
+    dataset: &'a str,
+    tool: &'a str,
+    opponent_tool: &'a str,
+    tool_median_ms: f64,
+    opponent_median_ms: f64,
+    tool_vs_opponent_x: f64,
+    winner: &'a str,
+}
+
 fn project_check_vs_corsa(rows: &[ToolRow]) -> Vec<Comparison<'_>> {
     let mut items = Vec::new();
     for row in rows
@@ -154,6 +200,38 @@ fn project_check_vs_corsa(rows: &[ToolRow]) -> Vec<Comparison<'_>> {
         });
     }
     sort_comparisons(&mut items);
+    items
+}
+
+fn project_check_requested_opponents(rows: &[ToolRow]) -> Vec<RequestedOpponentComparison<'_>> {
+    let mut items = Vec::new();
+    for row in rows.iter().filter(|row| {
+        row.workload.as_str() == "project_check" && is_requested_opponent(row.tool.as_str())
+    }) {
+        let Some(corsa) = rows.iter().find(|candidate| {
+            candidate.workload.as_str() == "project_check"
+                && candidate.dataset == row.dataset
+                && candidate.tool.as_str() == "corsa"
+        }) else {
+            continue;
+        };
+        let tool_median_ms = corsa.stats.median_ms();
+        let opponent_median_ms = row.stats.median_ms();
+        items.push(RequestedOpponentComparison {
+            dataset: row.dataset.as_str(),
+            tool: corsa.tool.as_str(),
+            opponent_tool: row.tool.as_str(),
+            tool_median_ms,
+            opponent_median_ms,
+            tool_vs_opponent_x: opponent_median_ms / tool_median_ms,
+            winner: if tool_median_ms <= opponent_median_ms {
+                corsa.tool.as_str()
+            } else {
+                row.tool.as_str()
+            },
+        });
+    }
+    sort_requested_opponent_comparisons(&mut items);
     items
 }
 
@@ -183,10 +261,23 @@ fn workflow_vs_corsa(rows: &[ToolRow]) -> Vec<Comparison<'_>> {
     items
 }
 
+fn is_requested_opponent(tool: &str) -> bool {
+    matches!(tool, "typescript-eslint" | "tsgolint" | "oxlint-bare")
+}
+
 fn sort_comparisons(items: &mut [Comparison<'_>]) {
     items.sort_by(|left, right| {
         left.dataset
             .cmp(right.dataset)
             .then_with(|| left.tool.cmp(right.tool))
+    });
+}
+
+fn sort_requested_opponent_comparisons(items: &mut [RequestedOpponentComparison<'_>]) {
+    items.sort_by(|left, right| {
+        left.dataset
+            .cmp(right.dataset)
+            .then_with(|| left.tool.cmp(right.tool))
+            .then_with(|| left.opponent_tool.cmp(right.opponent_tool))
     });
 }
