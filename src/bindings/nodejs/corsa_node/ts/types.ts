@@ -181,6 +181,15 @@ export interface NativeLintRuleMeta {
   requiresTypeTexts: boolean;
 }
 
+export interface NativeStylisticRuleConfig {
+  name: string;
+  options?: unknown;
+}
+
+export interface NativeStylisticRunConfig {
+  rules: readonly NativeStylisticRuleConfig[];
+}
+
 export type TypeTextKind =
   | "any"
   | "bigint"

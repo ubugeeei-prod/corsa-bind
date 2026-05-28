@@ -15,6 +15,7 @@ export { RuleTester } from "./rule_tester";
 export type { RuleTesterConfig } from "./rule_tester";
 export { TSESLint } from "./ts_eslint";
 export * as rules from "./rules/index";
+export * as stylistic from "./stylistic";
 export { oxlintCompat } from "./oxlint_compat";
 export type ESTree = {
   NewExpression: OxlintESTree.NewExpression;
@@ -29,6 +30,7 @@ export type {
   CorsaProgramShape,
   CorsaRuntimeOptions,
   CorsaOxlintSettings,
+  CorsaStylisticSettings,
   CorsaSignature,
   CorsaSymbol,
   CorsaType,

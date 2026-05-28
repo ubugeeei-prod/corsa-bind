@@ -14,6 +14,7 @@ Ox Content.
 - `@corsa-bind/napi`
 - `corsa-oxlint`
 - `corsa-oxlint/rules`
+- `corsa-oxlint/stylistic`
 
 The generated reference pages are emitted directly into `dist/docs/api` during
 `vp run -w docs_build`. Source Markdown stays in `docs`, and the generated HTML

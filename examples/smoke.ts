@@ -9,6 +9,7 @@ import customRulesConfig from "./corsa_oxlint/custom_rules_config.ts";
 import { corsaOxlintCustomPlugin } from "./corsa_oxlint/custom_plugin.ts";
 import { noStringPlusNumberRule } from "./corsa_oxlint/custom_rule.ts";
 import nativeRulesConfig from "./corsa_oxlint/native_rules_config.ts";
+import stylisticConfig from "./corsa_oxlint/stylistic_config.ts";
 
 function ruleCount(config: readonly unknown[]): number {
   return config.reduce<number>((count, entry) => {
@@ -31,6 +32,7 @@ const result = {
   mockClient: runMockClientExample(),
   nativeRuleEntries: ruleCount(nativeRulesConfig),
   rawCalls: runRawCallsExample(),
+  stylisticEntries: ruleCount(stylisticConfig),
   unsafeTypeFlow: runUnsafeTypeFlowExample(),
   virtualDocument: runVirtualDocumentExample(),
 };

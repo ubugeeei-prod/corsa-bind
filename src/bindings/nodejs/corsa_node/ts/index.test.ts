@@ -13,8 +13,10 @@ import {
   isErrorLikeTypeTexts,
   isStringArrayLikeTypeTexts,
   isPromiseLikeTypeTexts,
+  nativeStylisticRuleMetas,
   nativeLintRuleMetas,
   runNativeLintRule,
+  runNativeStylisticLint,
   splitTopLevelTypeText,
   splitTypeText,
   isUnsafeAssignment,
@@ -177,6 +179,38 @@ describe("CorsaApiClient", () => {
       ".splice(",
       ", 1)",
     ]);
+  });
+
+  it("runs Rust-authored native stylistic rules", () => {
+    const diagnostics = runNativeStylisticLint('\u{feff}const\tlabel = "value";  \r\n\n\n', {
+      rules: [
+        { name: "unicode-bom", options: ["never"] },
+        { name: "quotes", options: ["single"] },
+        { name: "no-trailing-spaces", options: [] },
+        { name: "no-tabs", options: [] },
+        { name: "linebreak-style", options: ["unix"] },
+        { name: "no-multiple-empty-lines", options: [{ max: 1 }] },
+      ],
+    });
+
+    expect(nativeStylisticRuleMetas().map((meta) => meta.name)).toEqual([
+      "eol-last",
+      "linebreak-style",
+      "no-multiple-empty-lines",
+      "no-tabs",
+      "no-trailing-spaces",
+      "quotes",
+      "unicode-bom",
+    ]);
+    expect(diagnostics.map((diagnostic) => diagnostic.ruleName)).toEqual([
+      "unicode-bom",
+      "quotes",
+      "no-trailing-spaces",
+      "no-tabs",
+      "linebreak-style",
+      "no-multiple-empty-lines",
+    ]);
+    expect(diagnostics[1].suggestions?.[0]?.fixes[0]?.replacementText).toBe("'value'");
   });
 
   it("roundtrips through the mock corsa binary", () => {
