@@ -39,25 +39,32 @@ pub fn build_spawn_config(options: SpawnOptions) -> Result<ApiSpawnConfig> {
     Ok(config)
 }
 
-pub fn parse_json<T>(value: &str) -> Result<T>
+pub fn from_value<T>(value: Value) -> Result<T>
 where
     T: DeserializeOwned,
 {
-    serde_json::from_str(value).map_err(into_napi_error)
+    serde_json::from_value(value).map_err(into_napi_error)
 }
 
-pub fn parse_optional_json(value: Option<String>) -> Result<Value> {
+pub fn from_optional_value<T>(value: Option<Value>) -> Result<T>
+where
+    T: DeserializeOwned + Default,
+{
     match value {
-        Some(value) => parse_json(value.as_str()),
-        None => Ok(Value::Null),
+        Some(Value::Null) | None => Ok(T::default()),
+        Some(value) => from_value(value),
     }
 }
 
-pub fn to_json<T>(value: &T) -> Result<String>
+pub fn optional_value(value: Option<Value>) -> Value {
+    value.unwrap_or(Value::Null)
+}
+
+pub fn to_value<T>(value: &T) -> Result<Value>
 where
     T: Serialize,
 {
-    serde_json::to_string(value).map_err(into_napi_error)
+    serde_json::to_value(value).map_err(into_napi_error)
 }
 
 pub fn into_napi_error(error: impl Display) -> Error {
@@ -74,18 +81,12 @@ fn parse_mode(mode: &str) -> Result<ApiMode> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SpawnOptions, build_spawn_config, parse_json, parse_optional_json};
+    use super::{SpawnOptions, build_spawn_config};
     use corsa::api::ApiMode;
-    use serde_json::json;
-
-    #[test]
-    fn parse_optional_json_defaults_to_null() {
-        assert_eq!(parse_optional_json(None).unwrap(), json!(null));
-    }
 
     #[test]
     fn spawn_config_defaults_to_msgpack() {
-        let options = parse_json::<SpawnOptions>(r#"{"executable":"./corsa"}"#).unwrap();
+        let options = serde_json::from_str::<SpawnOptions>(r#"{"executable":"./corsa"}"#).unwrap();
         let config = build_spawn_config(options).unwrap();
         assert_eq!(config.mode, ApiMode::SyncMsgpackStdio);
     }
@@ -93,14 +94,15 @@ mod tests {
     #[test]
     fn spawn_config_accepts_jsonrpc_mode() {
         let options =
-            parse_json::<SpawnOptions>(r#"{"executable":"./corsa","mode":"jsonrpc"}"#).unwrap();
+            serde_json::from_str::<SpawnOptions>(r#"{"executable":"./corsa","mode":"jsonrpc"}"#)
+                .unwrap();
         let config = build_spawn_config(options).unwrap();
         assert_eq!(config.mode, ApiMode::AsyncJsonRpcStdio);
     }
 
     #[test]
     fn spawn_config_accepts_transport_limits() {
-        let options = parse_json::<SpawnOptions>(
+        let options = serde_json::from_str::<SpawnOptions>(
             r#"{"executable":"./corsa","requestTimeoutMs":5000,"shutdownTimeoutMs":250,"outboundCapacity":8,"allowUnstableUpstreamCalls":true}"#,
         )
         .unwrap();
