@@ -28,13 +28,7 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   text-rendering: optimizeLegibility;
 }
 
@@ -166,8 +160,7 @@ nav a[aria-current="page"] {
   --vmd-font-body:
     -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --vmd-font-mono:
-    "SFMono-Regular", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas,
-    monospace;
+    "SFMono-Regular", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
   --vmd-text: var(--ink);
   --vmd-text-muted: var(--muted);
   --vmd-link: var(--accent);
