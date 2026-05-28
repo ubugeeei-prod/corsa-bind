@@ -30,28 +30,34 @@ fn option_at(options: &Value, index: usize) -> Option<&Value> {
     }
 }
 
+pub(crate) struct ReplacementDiagnostic {
+    pub(crate) rule_name: &'static str,
+    pub(crate) message_id: &'static str,
+    pub(crate) message: &'static str,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) suggestion_id: &'static str,
+    pub(crate) suggestion_message: &'static str,
+}
+
 pub(crate) fn push_replacement_diagnostic(
     diagnostics: &mut Vec<LintDiagnostic>,
-    rule_name: &'static str,
-    message_id: &'static str,
-    message: &'static str,
-    start: usize,
-    end: usize,
-    suggestion_id: &'static str,
-    suggestion_message: &'static str,
+    diagnostic: ReplacementDiagnostic,
     replacement: impl Into<String>,
 ) {
     let replacement = replacement.into();
     push_diagnostic(
         diagnostics,
-        rule_name,
-        message_id,
-        message,
-        start,
-        end,
-        Some((suggestion_id, suggestion_message, move |range| {
-            LintFix::replace_range(range, replacement.clone())
-        })),
+        diagnostic.rule_name,
+        diagnostic.message_id,
+        diagnostic.message,
+        diagnostic.start,
+        diagnostic.end,
+        Some((
+            diagnostic.suggestion_id,
+            diagnostic.suggestion_message,
+            move |range| LintFix::replace_range(range, replacement.clone()),
+        )),
     );
 }
 

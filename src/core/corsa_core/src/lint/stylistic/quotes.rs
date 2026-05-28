@@ -3,7 +3,7 @@ use serde_json::Value;
 use crate::lint::LintDiagnostic;
 
 use super::helpers::{
-    is_identifier_continue, is_identifier_start, option_bool, option_str,
+    ReplacementDiagnostic, is_identifier_continue, is_identifier_start, option_bool, option_str,
     push_replacement_diagnostic,
 };
 use super::quote_convert::{contains_unescaped_quote, convert_quote_literal};
@@ -99,13 +99,15 @@ fn report_quote_if_needed(
     if let Some(replacement) = convert_quote_literal(&source_text[start..end], quote, preferred) {
         push_replacement_diagnostic(
             diagnostics,
-            "quotes",
-            "wrongQuote",
-            "String literals must use the configured quote style.",
-            start,
-            end,
-            "fixQuote",
-            "Convert quote style.",
+            ReplacementDiagnostic {
+                rule_name: "quotes",
+                message_id: "wrongQuote",
+                message: "String literals must use the configured quote style.",
+                start,
+                end,
+                suggestion_id: "fixQuote",
+                suggestion_message: "Convert quote style.",
+            },
             replacement,
         );
     }
