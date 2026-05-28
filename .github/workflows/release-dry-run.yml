@@ -19,7 +19,7 @@ env:
 jobs:
   release-dry-run:
     name: Release Dry Run
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Checkout
