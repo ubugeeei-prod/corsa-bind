@@ -4,7 +4,8 @@ use crate::lint::{LintDiagnostic, LintFix};
 
 use super::{
     helpers::{
-        option_bool, option_str, option_usize, push_diagnostic, push_replacement_diagnostic,
+        ReplacementDiagnostic, option_bool, option_str, option_usize, push_diagnostic,
+        push_replacement_diagnostic,
     },
     line_index::{LineInfo, Newline},
 };
@@ -56,13 +57,15 @@ pub(crate) fn check_eol_last(
         _ if !source_text.ends_with('\n') && !source_text.ends_with('\r') => {
             push_replacement_diagnostic(
                 diagnostics,
-                "eol-last",
-                "missing",
-                "Expected newline at end of file.",
-                source_text.len(),
-                source_text.len(),
-                "insertNewline",
-                "Insert a newline.",
+                ReplacementDiagnostic {
+                    rule_name: "eol-last",
+                    message_id: "missing",
+                    message: "Expected newline at end of file.",
+                    start: source_text.len(),
+                    end: source_text.len(),
+                    suggestion_id: "insertNewline",
+                    suggestion_message: "Insert a newline.",
+                },
                 "\n",
             );
         }
@@ -154,13 +157,15 @@ fn report_linebreak(
 ) {
     push_replacement_diagnostic(
         diagnostics,
-        "linebreak-style",
-        message_id,
-        message,
-        line.newline_start,
-        line.newline_start + line.newline_len,
-        "fixLinebreak",
-        "Replace linebreak.",
+        ReplacementDiagnostic {
+            rule_name: "linebreak-style",
+            message_id,
+            message,
+            start: line.newline_start,
+            end: line.newline_start + line.newline_len,
+            suggestion_id: "fixLinebreak",
+            suggestion_message: "Replace linebreak.",
+        },
         replacement,
     );
 }

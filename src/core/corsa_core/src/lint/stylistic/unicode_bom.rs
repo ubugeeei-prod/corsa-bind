@@ -2,7 +2,9 @@ use serde_json::Value;
 
 use crate::lint::{LintDiagnostic, LintFix};
 
-use super::helpers::{option_str, push_diagnostic, push_replacement_diagnostic};
+use super::helpers::{
+    ReplacementDiagnostic, option_str, push_diagnostic, push_replacement_diagnostic,
+};
 
 const BOM: &str = "\u{feff}";
 
@@ -17,13 +19,15 @@ pub(crate) fn check_unicode_bom(
     match (requires_bom, has_bom) {
         (true, false) => push_replacement_diagnostic(
             diagnostics,
-            "unicode-bom",
-            "expected",
-            "Expected Unicode byte order mark.",
-            0,
-            0,
-            "insertBom",
-            "Insert Unicode byte order mark.",
+            ReplacementDiagnostic {
+                rule_name: "unicode-bom",
+                message_id: "expected",
+                message: "Expected Unicode byte order mark.",
+                start: 0,
+                end: 0,
+                suggestion_id: "insertBom",
+                suggestion_message: "Insert Unicode byte order mark.",
+            },
             BOM,
         ),
         (false, true) => push_diagnostic(
