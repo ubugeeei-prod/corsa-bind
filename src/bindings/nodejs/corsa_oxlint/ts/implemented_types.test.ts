@@ -149,6 +149,88 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.byType).toEqual(["IChild"]);
   });
 
+  integrationCase(
+    "resolves implemented interfaces after getBaseTypes has been called on the same type",
+    () => {
+      const seen: Record<string, readonly string[] | undefined> = {};
+      const errors: Record<string, string | undefined> = {};
+      const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+      const rule = createRule({
+        name: "implemented-types-after-get-base-types",
+        meta: {
+          type: "problem",
+          docs: {
+            description: "exercise getImplementedTypesOfType after getBaseTypes on the same handle",
+            requiresTypeChecking: true,
+          },
+          messages: {
+            unexpected: "unexpected",
+          },
+          schema: [],
+        },
+        defaultOptions: [],
+        create(context: any) {
+          const services = OxlintUtils.getParserServices(context);
+          const checker = services.program.getTypeChecker();
+          return {
+            NewExpression(node: any) {
+              const type = checker.getTypeAtLocation(node);
+              if (!type) {
+                return;
+              }
+              const name = checker.typeToString(type);
+              // Drain the bases first to invalidate the type handle before we
+              // ask for implemented interfaces - regressing GH#206.
+              checker.getBaseTypes(type);
+              try {
+                seen[name] = checker
+                  .getImplementedTypesOfType(type)
+                  .map((implemented) => checker.typeToString(implemented));
+              } catch (error) {
+                errors[name] = error instanceof Error ? error.message : String(error);
+              }
+            },
+          };
+        },
+      });
+
+      const tester = new RuleTester();
+      tester.run("implemented-types-after-get-base-types", rule as any, {
+        valid: [
+          {
+            code: [
+              "interface IA {",
+              "  readonly a: string;",
+              "}",
+              "class Base implements IA {",
+              '  readonly a = "x";',
+              "}",
+              "class Derived extends Base {",
+              '  readonly b = "y";',
+              "}",
+              "new Base();",
+              "new Derived();",
+            ].join("\n"),
+            settings: {
+              corsaOxlint: {
+                parserOptions: {
+                  corsa: {
+                    executable: realCorsaBinary,
+                  },
+                },
+              },
+            },
+          },
+        ],
+        invalid: [],
+      });
+
+      expect(errors).toEqual({});
+      expect(seen.Base).toEqual(["IA"]);
+      expect(seen.Derived).toEqual(["IA"]);
+    },
+  );
+
   integrationCase("returns inherited implemented interfaces from class types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

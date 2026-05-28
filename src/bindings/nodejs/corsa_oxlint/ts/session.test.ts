@@ -64,4 +64,84 @@ describe("CorsaProjectSession", () => {
 
     expect(clients[0]?.updateSnapshot).toHaveBeenCalledTimes(1);
   });
+
+  // Regression for GH#206: upstream Corsa occasionally drops a type handle
+  // from its snapshot registry after a base-types query on a class with no
+  // explicit `extends` clause, which then makes a follow-up
+  // `getImplementedTypesOfType` on the same handle throw "type handle ...
+  // not found in snapshot registry". The wrapper should treat that as "no
+  // base types" so the caller can still see the type's own `implements`.
+  it("treats a 'handle not found in snapshot registry' error from getBaseTypes as no bases", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.callJson.mockImplementationOnce(() => {
+      throw new Error(
+        'protocol error: api: client error: type handle "t0000000000000057" not found in snapshot registry',
+      );
+    });
+
+    const result = session.getBaseTypes({
+      id: "type-1",
+      flags: 0,
+      texts: ["Base"],
+    } as never);
+
+    expect(result).toEqual([]);
+  });
+
+  it("rethrows unexpected errors from getBaseTypes", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.callJson.mockImplementationOnce(() => {
+      throw new Error("protocol error: api: unexpected failure");
+    });
+
+    expect(() =>
+      session.getBaseTypes({
+        id: "type-1",
+        flags: 0,
+        texts: ["Base"],
+      } as never),
+    ).toThrow(/unexpected failure/);
+  });
 });
