@@ -923,39 +923,15 @@ fn reports_dot_notation_for_literal_property() {
 
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].rule_name, "dot-notation");
-    assert_eq!(diagnostics[0].message_id, "unexpected");
+    assert_eq!(diagnostics[0].message_id, "useDot");
 }
 
-#[test]
-fn reports_duplicate_and_redundant_type_constituents() {
-    let duplicate = node_with_child_list(
-        "TSUnionType",
-        TextRange::new(0, 15),
-        "types",
-        vec![
-            node("TSStringKeyword", TextRange::new(0, 6)),
-            node("TSStringKeyword", TextRange::new(9, 15)),
-        ],
-    );
-    let diagnostics = registry()
-        .run_rule("no-duplicate-type-constituents", &duplicate)
-        .unwrap();
-    assert_eq!(diagnostics.len(), 1);
-
-    let redundant = node_with_child_list(
-        "TSUnionType",
-        TextRange::new(0, 16),
-        "types",
-        vec![
-            node("TSAnyKeyword", TextRange::new(0, 3)),
-            node("TSStringKeyword", TextRange::new(6, 12)),
-        ],
-    );
-    let diagnostics = registry()
-        .run_rule("no-redundant-type-constituents", &redundant)
-        .unwrap();
-    assert_eq!(diagnostics.len(), 1);
-}
+// Heuristic-era registry smoke tests for `no-duplicate-type-constituents`,
+// `no-redundant-type-constituents`, `require-await`, `promise-function-async`,
+// `return-await`, and `switch-exhaustiveness-check` were removed when those
+// rules graduated from the shared `pending_parity` heuristic to dedicated
+// native implementations. Each now carries its own `#[cfg(test)] mod tests`
+// with faithful parity cases against the upstream tsgolint fixtures.
 
 #[test]
 fn reports_unsafe_argument_from_expected_type_fact() {
@@ -973,38 +949,6 @@ fn reports_unsafe_argument_from_expected_type_fact() {
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].rule_name, "no-unsafe-argument");
     assert_eq!(diagnostics[0].range, TextRange::new(3, 8));
-}
-
-#[test]
-fn reports_require_await_and_promise_function_async() {
-    let mut async_function = node_with_children(
-        "FunctionDeclaration",
-        TextRange::new(0, 28),
-        [("body", node("BlockStatement", TextRange::new(20, 28)))],
-    );
-    async_function
-        .fields
-        .insert("async".to_owned(), json!(true));
-
-    let diagnostics = registry()
-        .run_rule("require-await", &async_function)
-        .unwrap();
-
-    assert_eq!(diagnostics.len(), 1);
-
-    let mut promise_function = node("FunctionDeclaration", TextRange::new(0, 34));
-    promise_function
-        .fields
-        .insert("async".to_owned(), json!(false));
-    promise_function
-        .fields
-        .insert("__returnTypeTexts".to_owned(), json!(["Promise<string>"]));
-
-    let diagnostics = registry()
-        .run_rule("promise-function-async", &promise_function)
-        .unwrap();
-
-    assert_eq!(diagnostics.len(), 1);
 }
 
 #[test]
@@ -1099,75 +1043,6 @@ fn require_await_allows_direct_promise_returns() {
     let diagnostics = registry().run_rule("require-await", &function).unwrap();
 
     assert!(diagnostics.is_empty());
-}
-
-#[test]
-fn return_await_respects_error_handling_context() {
-    let mut return_await = node_with_children(
-        "ReturnStatement",
-        TextRange::new(0, 32),
-        [(
-            "argument",
-            node_with_children(
-                "AwaitExpression",
-                TextRange::new(7, 32),
-                [("argument", promise_member_call_node("resolve", vec![]))],
-            ),
-        )],
-    );
-
-    let diagnostics = registry().run_rule("return-await", &return_await).unwrap();
-
-    assert_eq!(diagnostics.len(), 1);
-
-    return_await
-        .fields
-        .insert("__returnAwaitRequiresAwait".to_owned(), json!(true));
-    let diagnostics = registry().run_rule("return-await", &return_await).unwrap();
-
-    assert!(diagnostics.is_empty());
-
-    let mut unawaited_try_return = node_with_children(
-        "ReturnStatement",
-        TextRange::new(0, 25),
-        [("argument", promise_member_call_node("resolve", vec![]))],
-    );
-    unawaited_try_return
-        .fields
-        .insert("__returnAwaitRequiresAwait".to_owned(), json!(true));
-
-    let diagnostics = registry()
-        .run_rule("return-await", &unawaited_try_return)
-        .unwrap();
-
-    assert_eq!(diagnostics.len(), 1);
-}
-
-#[test]
-fn reports_switch_exhaustiveness_for_missing_literal_case() {
-    let mut discriminant =
-        node_with_field("Identifier", TextRange::new(8, 12), "name", json!("kind"));
-    discriminant.type_texts = vec!["'a' | 'b'".to_owned()];
-    let case_a = node_with_children(
-        "SwitchCase",
-        TextRange::new(15, 24),
-        [(
-            "test",
-            node_with_field("Literal", TextRange::new(20, 23), "value", json!("a")),
-        )],
-    );
-    let mut switch = node_with_children(
-        "SwitchStatement",
-        TextRange::new(0, 32),
-        [("discriminant", discriminant)],
-    );
-    switch.child_lists.insert("cases".to_owned(), vec![case_a]);
-
-    let diagnostics = registry()
-        .run_rule("switch-exhaustiveness-check", &switch)
-        .unwrap();
-
-    assert_eq!(diagnostics.len(), 1);
 }
 
 #[test]
