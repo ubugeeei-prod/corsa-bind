@@ -8,6 +8,10 @@
 //! or the top-level `corsa` facade, but it is also useful on its own when
 //! embedding Corsa process management in another integration.
 
+// Some rule unit tests build deeply nested `json!` lint-node fixtures that
+// exceed the default macro recursion limit during expansion.
+#![recursion_limit = "256"]
+
 mod error;
 /// Compact string/collection aliases used to keep hot paths allocation-light.
 pub mod fast;
