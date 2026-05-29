@@ -37,7 +37,7 @@ jobs:
   release-gates:
     if: ${{ (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'publish-npm' && inputs.tag != '') }}
     name: Release Gates
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -103,7 +103,7 @@ jobs:
     name: Resolve native binding targets
     needs:
       - release-gates
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -206,7 +206,7 @@ jobs:
     needs:
       - release-gates
       - build-native-bindings
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 45
     environment: release
     permissions:
