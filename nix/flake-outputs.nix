@@ -35,7 +35,7 @@ in
         src = vitePlusRuntimeSrc;
         pnpm = pnpmForVp;
         fetcherVersion = 3;
-        hash = "sha256-Ov4jbNVpNL1FH6wo4XDEJwdUQeo/pPn4BQaW77nRIRQ=";
+        hash = "sha256-RW9sV9IEKHPojm9aX8ULJjlm7BuWrcHCb63rJhSc8hM=";
       };
       vitePlusRuntime = pkgs.stdenvNoCC.mkDerivation {
         pname = "vite-plus-runtime";
