@@ -114,7 +114,7 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       const sourceText = sourceTextFor(context, node);
       const sourceNode = sourceText ? corsaNodeFromEstree(context, node) : undefined;
       if (sourceText && sourceNode) {
-        const implemented = implementedTypesFromSourceText(sourceNode, sourceText, this);
+        const implemented = implementedTypesFromSourceText(context, sourceNode, sourceText, this);
         if (implemented.length > 0) {
           return implemented;
         }
@@ -276,7 +276,7 @@ function implementedTypesFromCorsaNode(
   }
   const sourceText = sourceTextFor(context, node);
   if (sourceText) {
-    return implementedTypesFromSourceText(node, sourceText, checker);
+    return implementedTypesFromSourceText(context, node, sourceText, checker);
   }
   const type = checker.getTypeAtLocation(node);
   return type ? checker.getImplementedTypesOfType(type) : [];
@@ -356,11 +356,12 @@ function implementedTypesFromTypeDeclaration(
     ? sourceTextForPath(context, declarationNode.fileName)
     : undefined;
   return declarationNode && sourceText
-    ? implementedTypesFromSourceText(declarationNode, sourceText, checker)
+    ? implementedTypesFromSourceText(context, declarationNode, sourceText, checker)
     : [];
 }
 
 function implementedTypesFromSourceText(
+  context: ContextWithParserOptions,
   node: CorsaNode,
   sourceText: string,
   checker: CorsaTypeCheckerShape,
@@ -377,6 +378,7 @@ function implementedTypesFromSourceText(
   if (implementsIndex < 0) {
     return [];
   }
+  const session = sessionForContext(context).session;
   const clauseText = headerText.slice(implementsIndex + "implements".length);
   const clauseStart = node.pos + headerStart + implementsIndex + "implements".length;
   return splitTopLevelRanges(clauseText, ",")
@@ -396,9 +398,17 @@ function implementedTypesFromSourceText(
         range: [pos, end] as const,
       };
       const symbol = checker.getSymbolAtLocation(lookupNode);
-      return symbol
+      const type = symbol
         ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
         : checker.getTypeAtLocation(lookupNode);
+      if (type) {
+        // Implemented-interface handles come back with empty `texts`, so warm
+        // the type-text cache with the `implements` identifier. If upstream
+        // later evicts the handle, `typeToString` falls back to this name
+        // instead of throwing (GH#211).
+        session.rememberTypeText(type.id, raw.slice(leading, raw.length - trailing));
+      }
+      return type;
     })
     .filter((type): type is CorsaType => type !== undefined);
 }

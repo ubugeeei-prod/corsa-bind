@@ -14,6 +14,7 @@ class FakeClient {
     flags: 0,
     texts: ["string"],
   }));
+  readonly typeToString = vi.fn(() => "type:string");
   readonly releaseHandle = vi.fn();
   readonly close = vi.fn();
 
@@ -143,5 +144,45 @@ describe("CorsaProjectSession", () => {
         texts: ["Base"],
       } as never),
     ).toThrow(/unexpected failure/);
+  });
+
+  // Regression for GH#211 crash site 1: implemented-interface handles have
+  // empty `texts`, and upstream Corsa sometimes evicts the handle from its
+  // snapshot registry before typeToString runs. The checker warms the cache
+  // with the `implements` identifier via rememberTypeText, so typeToString
+  // should return that name instead of rethrowing the stale-handle error.
+  it("returns a remembered type text when typeToString hits a stale handle", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+
+    const type = { id: "type-7", flags: 0, texts: [] as string[] };
+    session.rememberTypeText(type.id, "Serializable");
+    client.typeToString.mockImplementationOnce(() => {
+      throw new Error(
+        'protocol error: api: client error: type handle "type-7" not found in snapshot registry',
+      );
+    });
+
+    expect(session.typeToString(type as never)).toBe("Serializable");
   });
 });

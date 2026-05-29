@@ -531,6 +531,24 @@ impl ApiClient {
         }
     }
 
+    /// Reports whether an error means the server dropped a type handle from its
+    /// snapshot registry.
+    ///
+    /// Upstream Corsa occasionally evicts a live handle mid-session (for
+    /// example after a base-types query on a class with no explicit `extends`
+    /// clause). A follow-up relation query on that handle then fails with
+    /// "type handle ... not found in snapshot registry". Relation endpoints
+    /// treat this as missing data so analysis can continue instead of aborting.
+    /// The message arrives as [`CorsaError::Protocol`] over msgpack and as
+    /// [`CorsaError::Rpc`] over JSON-RPC, so both variants are inspected.
+    pub(crate) fn is_stale_handle_error(error: &CorsaError) -> bool {
+        match error {
+            CorsaError::Rpc(rpc) => is_stale_handle_message(&rpc.message),
+            CorsaError::Protocol(message) => is_stale_handle_message(message),
+            _ => false,
+        }
+    }
+
     async fn request_after_initialize<T, P>(&self, method: &str, params: &P) -> Result<T>
     where
         T: DeserializeOwned,
@@ -639,6 +657,10 @@ fn is_unknown_api_method_message(message: &str) -> bool {
     message.contains("unknown API method")
 }
 
+fn is_stale_handle_message(message: &str) -> bool {
+    message.contains("not found in snapshot registry")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ApiClient, is_unknown_api_method_message};
@@ -684,5 +706,46 @@ mod tests {
             error,
             CorsaError::Unsupported("file diagnostics are not supported")
         ));
+    }
+
+    #[test]
+    fn recognizes_stale_handle_protocol_error() {
+        assert!(ApiClient::is_stale_handle_error(&CorsaError::Protocol(
+            CompactString::from(
+                "api: client error: type handle \"t0000000000000057\" not found in snapshot registry",
+            ),
+        )));
+    }
+
+    #[test]
+    fn recognizes_stale_handle_rpc_error() {
+        assert!(ApiClient::is_stale_handle_error(&CorsaError::Rpc(
+            RpcResponseError {
+                code: -32603,
+                message: CompactString::from(
+                    "type handle \"t00000000000000c4\" not found in snapshot registry",
+                ),
+                data: None,
+            },
+        )));
+    }
+
+    #[test]
+    fn unrelated_errors_are_not_stale_handles() {
+        assert!(!ApiClient::is_stale_handle_error(&CorsaError::Protocol(
+            CompactString::from("api: client error: unexpected failure"),
+        )));
+        assert!(!ApiClient::is_stale_handle_error(&CorsaError::Rpc(
+            RpcResponseError {
+                code: -32601,
+                message: CompactString::from(
+                    "api: invalid request: unknown API method \"getBaseTypes\"",
+                ),
+                data: None,
+            },
+        )));
+        assert!(!ApiClient::is_stale_handle_error(&CorsaError::Closed(
+            "api"
+        )));
     }
 }

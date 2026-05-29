@@ -212,6 +212,18 @@ export class CorsaProjectSession {
     }
   }
 
+  // Seeds the type-text cache from a name the caller already knows (for
+  // example the identifier in an `implements` clause). Implemented-interface
+  // handles come back with empty `texts`, and upstream Corsa sometimes evicts
+  // them from its snapshot registry before `typeToString` runs, so warming the
+  // cache here lets `typeToString` fall back to the source name instead of
+  // throwing (GH#211). Never overwrites a value the server already provided.
+  rememberTypeText(typeId: string, text: string): void {
+    if (!this.#typeTextById.has(typeId)) {
+      this.#typeTextById.set(typeId, text);
+    }
+  }
+
   getBaseTypeOfLiteralType(type: CorsaType): CorsaType | undefined {
     return this.rememberType(
       this.client().callJson("getBaseTypeOfLiteralType", {
