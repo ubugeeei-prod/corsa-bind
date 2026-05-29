@@ -9,7 +9,15 @@ const SITE_NAME = "corsa-bind";
 const NAV_GROUPS = [
   {
     title: "Start",
-    routes: ["index.html", "project_guide/index.html"],
+    routes: ["index.html", "getting_started/index.html", "project_guide/index.html"],
+  },
+  {
+    title: "Use",
+    routes: [
+      "nodejs_binding/index.html",
+      "language_bindings/index.html",
+      "oxlint_guide/index.html",
+    ],
   },
   {
     title: "Run",
@@ -41,7 +49,11 @@ const NAV_GROUPS = [
 
 const ROUTE_TITLES = new Map<string, string>([
   ["index.html", "Overview"],
+  ["getting_started/index.html", "Getting started"],
   ["project_guide/index.html", "Architecture"],
+  ["nodejs_binding/index.html", "Node.js binding"],
+  ["language_bindings/index.html", "Language bindings"],
+  ["oxlint_guide/index.html", "Type-aware Oxlint"],
   ["ci_guide/index.html", "CI and local checks"],
   ["performance/index.html", "Performance commands"],
   ["benchmarking_guide/index.html", "Benchmarking model"],
@@ -79,7 +91,7 @@ export function renderHtml(
   <div class="layout">
     <aside class="sidebar">
       <a class="brand" href="/index.html">
-        <span class="brand-mark">cb</span>
+        <span class="brand-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 15 H13 V49 H20"/><path d="M44 15 H51 V49 H44"/><path d="M24 24 L32 32 L24 40"/><path d="M33 24 L41 32 L33 40"/></svg></span>
         <span>
           <strong>${SITE_NAME}</strong>
           <small>Docs</small>

@@ -25,6 +25,27 @@ The key idea is simple:
 
 That systems layer is where most of the repository's value lives.
 
+## A Note on the Name
+
+`corsa-bind` is the repository and distribution name for bindings around the
+Corsa effort: the native TypeScript 7 implementation line tracked here in the
+`typescript-go` codebase. The TypeScript roadmap describes this as the JS-based
+TypeScript 6 line versus the native TypeScript 7 line, and it uses `Strada` for
+the original TypeScript codename and `Corsa` for this effort
+([TypeScript Native Port: Versioning Roadmap](https://devblogs.microsoft.com/typescript/typescript-native-port/#versioning-roadmap)).
+
+We keep `corsa` for crate, binary, and upstream-facing labels where that matches
+the implementation surface, instead of the more generic `tsc` or `tsgo` labels
+that are easy to misread in docs, code, and release notes. In practice that
+means:
+
+- use Corsa through the interfaces it already intends consumers to use
+- track upstream by exact commit so behavior is reproducible and auditable
+- never maintain a fork and never carry local patches against Corsa upstream
+- implement hot paths in Rust, keep them zero-cost and high-performance, and
+  expose them to JS through `napi-rs` so end users can author custom plugins
+  and custom rules in JS/TS
+
 ## Non-Negotiable Constraints
 
 Several decisions in the codebase look unusual until you read them through the repository's constraints.
