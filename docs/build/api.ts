@@ -137,7 +137,7 @@ function renderEntry(entry: ApiEntry): string {
         .join("\n")}`
     : "";
   const returns = entry.returns ? `\n\nReturns: \`${entry.returns}\`` : "";
-  return `## ${entry.name}\n\n${entry.description || "_No documentation comment yet._"}\n\n\`\`\`ts\n${entry.signature}\n\`\`\`\n\n[Source](https://github.com/ubugeeei/corsa-bind/blob/main/${entry.sourcePath}#L${entry.line})${params}${returns}`;
+  return `## ${entry.name}\n\n${entry.description || "_No documentation comment yet._"}\n\n\`\`\`ts\n${entry.signature}\n\`\`\`\n\n[Source](https://github.com/ubugeeei-prod/corsa-bind/blob/main/${entry.sourcePath}#L${entry.line})${params}${returns}`;
 }
 
 function indexPage(pages: MarkdownPage[]): MarkdownPage {

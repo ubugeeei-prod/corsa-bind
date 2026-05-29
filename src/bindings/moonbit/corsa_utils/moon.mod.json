@@ -2,7 +2,7 @@
   "name": "ubugeeei/corsa_utils",
   "version": "0.1.0",
   "readme": "README.mbt.md",
-  "repository": "https://github.com/ubugeeei/corsa-bind",
+  "repository": "https://github.com/ubugeeei-prod/corsa-bind",
   "license": "MIT",
   "keywords": ["ffi", "native", "utils", "corsa"],
   "description": "MoonBit wrapper over the Rust-based corsa utils C ABI"

@@ -14,11 +14,11 @@ members = [
 resolver = "2"
 
 [workspace.package]
-documentation = "https://github.com/ubugeeei/corsa-bind/tree/main/docs"
-homepage = "https://github.com/ubugeeei/corsa-bind"
+documentation = "https://github.com/ubugeeei-prod/corsa-bind/tree/main/docs"
+homepage = "https://github.com/ubugeeei-prod/corsa-bind"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/ubugeeei/corsa-bind"
+repository = "https://github.com/ubugeeei-prod/corsa-bind"
 rust-version = "1.85"
 
 [workspace.dependencies]

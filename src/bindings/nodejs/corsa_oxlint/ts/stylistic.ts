@@ -83,7 +83,7 @@ function createStylisticRule(ruleName: CorsaStylisticRuleName) {
       docs: {
         description: meta.docsDescription,
         requiresTypeChecking: false,
-        url: `https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/corsa_oxlint/ts/stylistic.ts`,
+        url: `https://github.com/ubugeeei-prod/corsa-bind/tree/main/src/bindings/nodejs/corsa_oxlint/ts/stylistic.ts`,
       },
       fixable: "whitespace",
       hasSuggestions: meta.hasSuggestions,

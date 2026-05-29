@@ -1,7 +1,7 @@
 import { OxlintUtils } from "corsa-oxlint";
 
 const createRule = OxlintUtils.RuleCreator(
-  (name) => `https://github.com/ubugeeei/corsa-bind/tree/main/examples/corsa_oxlint/${name}.ts`,
+  (name) => `https://github.com/ubugeeei-prod/corsa-bind/tree/main/examples/corsa_oxlint/${name}.ts`,
 );
 
 export const noStringPlusNumberRule = createRule({

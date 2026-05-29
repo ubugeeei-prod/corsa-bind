@@ -9,7 +9,7 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 const minimumNpmVersion = "11.10.0";
 const defaultRegistry = "https://registry.npmjs.org";
-const defaultRepository = "ubugeeei/corsa-bind";
+const defaultRepository = "ubugeeei-prod/corsa-bind";
 const defaultWorkflowFile = "publish-npm.yml";
 const defaultEnvironment = "release";
 

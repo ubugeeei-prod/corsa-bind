@@ -13,7 +13,7 @@ export function createNativeRule(
       ...meta,
       docs: {
         requiresTypeChecking: true,
-        url: `https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/corsa_oxlint/ts/rules/${name.replaceAll("-", "_")}.ts`,
+        url: `https://github.com/ubugeeei-prod/corsa-bind/tree/main/src/bindings/nodejs/corsa_oxlint/ts/rules/${name.replaceAll("-", "_")}.ts`,
         ...(meta.docs as object | undefined),
       },
     },

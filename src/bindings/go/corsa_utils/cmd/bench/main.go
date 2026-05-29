@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	corsautils "github.com/ubugeeei/corsa-bind/src/bindings/go/corsa_utils"
+	corsautils "github.com/ubugeeei-prod/corsa-bind/src/bindings/go/corsa_utils"
 )
 
 func main() {
