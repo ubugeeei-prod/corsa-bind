@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 64" role="img" aria-label="corsa-bind" fill="none">
+  <g stroke="#fafafa" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 15 H13 V49 H20" />
+    <path d="M44 15 H51 V49 H44" />
+    <path d="M24 24 L32 32 L24 40" />
+    <path d="M33 24 L41 32 L33 40" />
+  </g>
+  <text x="76" y="41" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="28" letter-spacing="-0.5">
+    <tspan fill="#fafafa" font-weight="700">corsa</tspan><tspan fill="#a1a1aa" font-weight="500">-bind</tspan>
+  </text>
+</svg>

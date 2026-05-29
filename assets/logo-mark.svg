@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="corsa-bind" fill="none">
+  <g stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 15 H13 V49 H20" />
+    <path d="M44 15 H51 V49 H44" />
+    <path d="M24 24 L32 32 L24 40" />
+    <path d="M33 24 L41 32 L33 40" />
+  </g>
+</svg>
