@@ -29,7 +29,7 @@ const document = {
   dataLicense: "CC0-1.0",
   SPDXID: "SPDXRef-DOCUMENT",
   name: `corsa-bind-${target}-sbom`,
-  documentNamespace: `https://github.com/ubugeeei/corsa-bind/sbom/${target}/${now}`,
+  documentNamespace: `https://github.com/ubugeeei-prod/corsa-bind/sbom/${target}/${now}`,
   creationInfo: {
     created: now,
     creators: ["Tool: scripts/generate_sbom.ts"],

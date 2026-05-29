@@ -15,17 +15,17 @@ status.
 
 | Priority | Issue                                                     | Area               | Status                                                                                    |
 | -------- | --------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
-| P0       | [#94](https://github.com/ubugeeei/corsa-bind/issues/94)   | Orchestrator       | Covered by unbounded result fan-in and regression tests for oversized batches and panics. |
-| P0       | [#98](https://github.com/ubugeeei/corsa-bind/issues/98)   | C ABI              | C strings now carry explicit lengths and tolerate interior NUL bytes.                     |
-| P1       | [#96](https://github.com/ubugeeei/corsa-bind/issues/96)   | JSON-RPC           | Connections now close outbound state and join reader threads with bounded fallback.       |
-| P1       | [#97](https://github.com/ubugeeei/corsa-bind/issues/97)   | Client lifecycle   | Initialize and capability handshakes now use singleflight caching.                        |
-| P1       | [#99](https://github.com/ubugeeei/corsa-bind/issues/99)   | FFI wrappers       | Optional byte payloads now expose explicit error, none, and some status.                  |
-| P1       | [#101](https://github.com/ubugeeei/corsa-bind/issues/101) | oxlint integration | Type-aware sessions send in-memory source overlays when the runtime supports them.        |
-| P1       | [#105](https://github.com/ubugeeei/corsa-bind/issues/105) | Semantic coverage  | Real Corsa positive and negative semantic fixtures are covered in the Rust test suite.    |
-| P2       | [#95](https://github.com/ubugeeei/corsa-bind/issues/95)   | Snapshot cleanup   | Snapshot releases flow through a bounded shared cleanup worker.                           |
-| P2       | [#100](https://github.com/ubugeeei/corsa-bind/issues/100) | Node binding       | Promise-based N-API methods are available for Corsa requests and lifecycle operations.    |
-| P2       | [#102](https://github.com/ubugeeei/corsa-bind/issues/102) | CI coverage        | CI now smoke-checks the supported C ABI, C++ header, and Go wrapper surfaces.             |
-| P2       | [#103](https://github.com/ubugeeei/corsa-bind/issues/103) | Supply chain       | Release and supply-chain workflows now generate SPDX SBOM artifacts.                      |
+| P0       | [#94](https://github.com/ubugeeei-prod/corsa-bind/issues/94)   | Orchestrator       | Covered by unbounded result fan-in and regression tests for oversized batches and panics. |
+| P0       | [#98](https://github.com/ubugeeei-prod/corsa-bind/issues/98)   | C ABI              | C strings now carry explicit lengths and tolerate interior NUL bytes.                     |
+| P1       | [#96](https://github.com/ubugeeei-prod/corsa-bind/issues/96)   | JSON-RPC           | Connections now close outbound state and join reader threads with bounded fallback.       |
+| P1       | [#97](https://github.com/ubugeeei-prod/corsa-bind/issues/97)   | Client lifecycle   | Initialize and capability handshakes now use singleflight caching.                        |
+| P1       | [#99](https://github.com/ubugeeei-prod/corsa-bind/issues/99)   | FFI wrappers       | Optional byte payloads now expose explicit error, none, and some status.                  |
+| P1       | [#101](https://github.com/ubugeeei-prod/corsa-bind/issues/101) | oxlint integration | Type-aware sessions send in-memory source overlays when the runtime supports them.        |
+| P1       | [#105](https://github.com/ubugeeei-prod/corsa-bind/issues/105) | Semantic coverage  | Real Corsa positive and negative semantic fixtures are covered in the Rust test suite.    |
+| P2       | [#95](https://github.com/ubugeeei-prod/corsa-bind/issues/95)   | Snapshot cleanup   | Snapshot releases flow through a bounded shared cleanup worker.                           |
+| P2       | [#100](https://github.com/ubugeeei-prod/corsa-bind/issues/100) | Node binding       | Promise-based N-API methods are available for Corsa requests and lifecycle operations.    |
+| P2       | [#102](https://github.com/ubugeeei-prod/corsa-bind/issues/102) | CI coverage        | CI now smoke-checks the supported C ABI, C++ header, and Go wrapper surfaces.             |
+| P2       | [#103](https://github.com/ubugeeei-prod/corsa-bind/issues/103) | Supply chain       | Release and supply-chain workflows now generate SPDX SBOM artifacts.                      |
 
 ## Readiness Gate
 

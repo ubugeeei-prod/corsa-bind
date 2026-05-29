@@ -2,14 +2,14 @@
   "name": "@corsa-bind/napi",
   "version": "0.24.0",
   "description": "Native JS runtime bindings for Corsa stdio workflows",
-  "homepage": "https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/nodejs/corsa_node",
+  "homepage": "https://github.com/ubugeeei-prod/corsa-bind/tree/main/src/bindings/nodejs/corsa_node",
   "bugs": {
-    "url": "https://github.com/ubugeeei/corsa-bind/issues"
+    "url": "https://github.com/ubugeeei-prod/corsa-bind/issues"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ubugeeei/corsa-bind.git",
+    "url": "https://github.com/ubugeeei-prod/corsa-bind.git",
     "directory": "src/bindings/nodejs/corsa_node"
   },
   "files": [

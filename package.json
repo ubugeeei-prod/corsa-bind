@@ -2,13 +2,13 @@
   "name": "corsa-workspace",
   "private": true,
   "description": "Rust, Node, and orchestration tooling for production-style Corsa workflows",
-  "homepage": "https://github.com/ubugeeei/corsa-bind",
+  "homepage": "https://github.com/ubugeeei-prod/corsa-bind",
   "bugs": {
-    "url": "https://github.com/ubugeeei/corsa-bind/issues"
+    "url": "https://github.com/ubugeeei-prod/corsa-bind/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ubugeeei/corsa-bind.git"
+    "url": "https://github.com/ubugeeei-prod/corsa-bind.git"
   },
   "type": "module",
   "devDependencies": {

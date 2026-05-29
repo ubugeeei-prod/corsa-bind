@@ -164,7 +164,7 @@ long-lived `CARGO_REGISTRY_TOKEN` secret is required after the initial release.
 After the first manual publish of each npm package, configure npm Trusted
 Publishing for each package with:
 
-- GitHub organization or user: `ubugeeei`
+- GitHub organization or user: `ubugeeei-prod`
 - repository: `corsa-bind`
 - workflow filename: `publish-npm.yml`
 - environment: `release`
@@ -244,7 +244,7 @@ vp exec node --strip-types ./scripts/setup_npm_trusted_publish.ts
 
 The npm trusted publisher must match:
 
-- GitHub organization or user: `ubugeeei`
+- GitHub organization or user: `ubugeeei-prod`
 - repository: `corsa-bind`
 - workflow filename: `publish-npm.yml`
 - environment: `release`
