@@ -6,6 +6,14 @@ import type { CompiledMarkdown, MarkdownPage } from "./types.ts";
 
 const SITE_NAME = "corsa-bind";
 
+// Public base URL of the deployed documentation site, used for absolute
+// Open Graph / Twitter card URLs. Update this to match the actual deploy
+// domain if the site moves off GitHub Pages.
+const SITE_URL = "https://ubugeeei-prod.github.io/corsa-bind";
+
+const DEFAULT_DESCRIPTION =
+  "Native Rust and JavaScript bindings for the Corsa TypeScript checker — type-aware Oxlint, stdio API + LSP, and zero-cost hot paths.";
+
 const NAV_GROUPS = [
   {
     title: "Start",
@@ -17,6 +25,7 @@ const NAV_GROUPS = [
       "nodejs_binding/index.html",
       "language_bindings/index.html",
       "oxlint_guide/index.html",
+      "native_rules/index.html",
     ],
   },
   {
@@ -54,6 +63,7 @@ const ROUTE_TITLES = new Map<string, string>([
   ["nodejs_binding/index.html", "Node.js binding"],
   ["language_bindings/index.html", "Language bindings"],
   ["oxlint_guide/index.html", "Type-aware Oxlint"],
+  ["native_rules/index.html", "Native rules"],
   ["ci_guide/index.html", "CI and local checks"],
   ["performance/index.html", "Performance commands"],
   ["benchmarking_guide/index.html", "Benchmarking model"],
@@ -78,12 +88,33 @@ export function renderHtml(
   nav: readonly MarkdownPage[],
 ): string {
   const title = compiled.title || titleFromRoute(page.route);
+  const fullTitle = title === SITE_NAME ? SITE_NAME : `${title} - ${SITE_NAME}`;
+  const frontmatterDescription = compiled.frontmatter?.description;
+  const description =
+    typeof frontmatterDescription === "string" ? frontmatterDescription : DEFAULT_DESCRIPTION;
+  const pageUrl = `${SITE_URL}/${page.route === "index.html" ? "" : page.route}`;
+  const ogImage = `${SITE_URL}/og.png`;
   return `<!doctype html>
 <html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)} - ${SITE_NAME}</title>
+  <title>${escapeHtml(fullTitle)}</title>
+  <meta name="description" content="${escapeHtml(description)}">
+  <link rel="icon" href="/logo-mark.svg" type="image/svg+xml">
+  <link rel="canonical" href="${escapeHtml(pageUrl)}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="${SITE_NAME}">
+  <meta property="og:title" content="${escapeHtml(fullTitle)}">
+  <meta property="og:description" content="${escapeHtml(description)}">
+  <meta property="og:url" content="${escapeHtml(pageUrl)}">
+  <meta property="og:image" content="${escapeHtml(ogImage)}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="1200">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${escapeHtml(fullTitle)}">
+  <meta name="twitter:description" content="${escapeHtml(description)}">
+  <meta name="twitter:image" content="${escapeHtml(ogImage)}">
   <style>${themeCss()}</style>
   <style>${siteCss()}</style>
 </head>

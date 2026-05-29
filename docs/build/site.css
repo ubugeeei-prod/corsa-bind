@@ -281,6 +281,21 @@ nav a[aria-current="page"] {
   background: var(--surface);
 }
 
+/*
+ * Pin code-block text to a fixed size. The Void theme sizes highlighted code
+ * with `0.875em`, which (a) compounds when a block is nested in a larger-font
+ * context and (b) does not apply to fenced blocks without a language (they
+ * have no `language-*` wrapper and fall back to the 16px body size), so blocks
+ * could "suddenly" render larger. A fixed px keeps every block consistent.
+ */
+.void-md pre,
+.void-md pre code,
+.void-md div[class*="language-"] pre,
+.void-md div[class*="language-"] code {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
 .void-md div[class*="language-"] .lang {
   top: 12px;
   right: 15px;
