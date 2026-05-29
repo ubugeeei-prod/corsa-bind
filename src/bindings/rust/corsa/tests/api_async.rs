@@ -494,6 +494,50 @@ fn async_api_full_surface_methods() {
     });
 }
 
+#[test]
+fn get_type_arguments_degrades_stale_handle_to_empty() {
+    block_on(async {
+        let client = ApiClient::spawn(support::api_config(ApiMode::AsyncJsonRpcStdio))
+            .await
+            .unwrap();
+        let snapshot = client
+            .update_snapshot(UpdateSnapshotParams {
+                open_project: Some("/workspace/tsconfig.json".into()),
+                file_changes: None,
+                overlay_changes: None,
+            })
+            .await
+            .unwrap();
+        let project = snapshot.projects[0].id.clone();
+
+        // A live handle returns the mock's normal single-element response.
+        let live = client
+            .get_type_arguments(
+                snapshot.handle.clone(),
+                project.clone(),
+                corsa::api::TypeHandle::from("t0000000000000001"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(live.len(), 1);
+
+        // The mock reports this sentinel handle as evicted from its snapshot
+        // registry; the client must degrade that to "no type arguments"
+        // (regression for GH#211) instead of surfacing the error.
+        let stale = client
+            .get_type_arguments(
+                snapshot.handle.clone(),
+                project.clone(),
+                corsa::api::TypeHandle::from("t00000000000000ff"),
+            )
+            .await
+            .unwrap();
+        assert!(stale.is_empty());
+
+        client.close().await.unwrap();
+    });
+}
+
 fn count_lines(path: impl AsRef<std::path::Path>) -> usize {
     fs::read_to_string(path)
         .map(|text| text.lines().count())

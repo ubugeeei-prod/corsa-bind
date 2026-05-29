@@ -1,6 +1,6 @@
 use crate::{Result, common, jsonrpc};
 use base64::Engine as _;
-use corsa::jsonrpc::{RawMessage, RequestId};
+use corsa::jsonrpc::{RawMessage, RequestId, RpcResponseError};
 use serde_json::{Value, json};
 use std::{
     fs::{OpenOptions, create_dir_all},
@@ -8,6 +8,11 @@ use std::{
     path::Path,
     time::Duration,
 };
+
+/// Type handle the mock pretends it has evicted from its snapshot registry, so
+/// integration tests can drive the stale-handle degradation path in
+/// `getTypeArguments`.
+const STALE_TYPE_HANDLE: &str = "t00000000000000ff";
 
 pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
     let stdin = std::io::stdin();
@@ -23,6 +28,11 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
         let id = message.id.clone();
         let params = message.params.unwrap_or(Value::Null);
         record_params(method.as_str(), &params);
+        if let (Some(id), Some(error)) = (id.clone(), stale_handle_error(method.as_str(), &params))
+        {
+            jsonrpc::write_message(&mut writer, &RawMessage::error(id, error))?;
+            continue;
+        }
         let response = match method.as_str() {
             "initialize" => Some(json!({
                 "useCaseSensitiveFileNames": true,
@@ -136,6 +146,24 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             jsonrpc::write_message(&mut writer, &RawMessage::response(id, response))?;
         }
     }
+}
+
+fn stale_handle_error(method: &str, params: &Value) -> Option<RpcResponseError> {
+    if method != "getTypeArguments" {
+        return None;
+    }
+    let handle = params.get("type").and_then(Value::as_str)?;
+    if handle != STALE_TYPE_HANDLE {
+        return None;
+    }
+    Some(RpcResponseError {
+        code: -32603,
+        message: format!(
+            "api: client error: type handle \"{handle}\" not found in snapshot registry"
+        )
+        .into(),
+        data: None,
+    })
 }
 
 fn record_params(method: &str, params: &Value) {

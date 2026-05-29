@@ -158,23 +158,31 @@ impl ApiClient {
 
     /// Returns the type arguments of an instantiated type.
     ///
-    /// Missing server data is normalized to an empty vector.
+    /// Missing server data is normalized to an empty vector. A stale type
+    /// handle that the server has dropped from its snapshot registry is also
+    /// treated as "no type arguments" so callers can keep analyzing the type;
+    /// see [`ApiClient::is_stale_handle_error`].
     pub async fn get_type_arguments(
         &self,
         snapshot: SnapshotHandle,
         project: ProjectHandle,
         r#type: TypeHandle,
     ) -> Result<Vec<TypeResponse>> {
-        self.call::<Option<Vec<TypeResponse>>, _>(
-            "getTypeArguments",
-            TypeProjectRequest {
-                snapshot,
-                project,
-                r#type,
-            },
-        )
-        .await
-        .map(|items| items.unwrap_or_default())
+        match self
+            .call::<Option<Vec<TypeResponse>>, _>(
+                "getTypeArguments",
+                TypeProjectRequest {
+                    snapshot,
+                    project,
+                    r#type,
+                },
+            )
+            .await
+        {
+            Ok(items) => Ok(items.unwrap_or_default()),
+            Err(error) if Self::is_stale_handle_error(&error) => Ok(Vec::new()),
+            Err(error) => Err(error),
+        }
     }
 
     /// Returns the target type underlying an instantiated or mapped type.
