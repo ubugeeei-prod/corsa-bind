@@ -202,10 +202,8 @@ impl RustLintRule for NoMisusedPromisesRule {
             }
 
             // ---- checksSpreads ----
-            "SpreadElement" => {
-                if opts.checks_spreads {
-                    check_spread(ctx, node);
-                }
+            "SpreadElement" if opts.checks_spreads => {
+                check_spread(ctx, node);
             }
             _ => {}
         }

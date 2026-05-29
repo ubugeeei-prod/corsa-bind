@@ -86,10 +86,8 @@ impl RustLintRule for PreferNullishCoalescingRule {
                     check_ternary(ctx, node, &opts);
                 }
             }
-            "IfStatement" => {
-                if !opts.ignore_if_statements {
-                    check_if_statement(ctx, node, &opts);
-                }
+            "IfStatement" if !opts.ignore_if_statements => {
+                check_if_statement(ctx, node, &opts);
             }
             _ => {}
         }
