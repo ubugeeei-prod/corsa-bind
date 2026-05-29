@@ -22,6 +22,14 @@ html {
   background: var(--page);
   color-scheme: light;
   scroll-behavior: smooth;
+  /*
+   * Disable iOS Safari's text autosizing. Without this, Safari "boosts" the
+   * font of code/pre blocks (especially after orientation change or when the
+   * block is wider than the viewport), making code suddenly render larger
+   * than the 14px we pin below.
+   */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
