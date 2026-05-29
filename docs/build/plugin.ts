@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { Plugin } from "vite";
@@ -10,6 +10,13 @@ import { loadMarkdownCompiler } from "./ox_content.ts";
 import type { MarkdownPage } from "./types.ts";
 
 const VIRTUAL_ENTRY = "\0corsa-docs-entry";
+
+/** Static brand assets copied verbatim into the docs output (served at root). */
+const STATIC_ASSETS: ReadonlyArray<readonly [string, string]> = [
+  ["og.png", "assets/og.png"],
+  ["logo.svg", "assets/logo.svg"],
+  ["logo-mark.svg", "assets/logo-mark.svg"],
+];
 
 /** Vite plugin that renders the static Ox Content documentation site. */
 export function corsaDocsPlugin(): Plugin {
@@ -47,6 +54,13 @@ export function corsaDocsPlugin(): Plugin {
         });
       }
       this.emitFile({ type: "asset", fileName: ".nojekyll", source: "" });
+      for (const [fileName, assetPath] of STATIC_ASSETS) {
+        this.emitFile({
+          type: "asset",
+          fileName,
+          source: readFileSync(resolve(rootDir, assetPath)),
+        });
+      }
     },
     closeBundle() {
       rmSync(resolve(rootDir, "dist/docs/.vite"), { force: true, recursive: true });
