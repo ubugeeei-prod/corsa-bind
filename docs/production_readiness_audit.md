@@ -13,8 +13,8 @@ status.
 
 ## Remediation Status
 
-| Priority | Issue                                                     | Area               | Status                                                                                    |
-| -------- | --------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
+| Priority | Issue                                                          | Area               | Status                                                                                    |
+| -------- | -------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
 | P0       | [#94](https://github.com/ubugeeei-prod/corsa-bind/issues/94)   | Orchestrator       | Covered by unbounded result fan-in and regression tests for oversized batches and panics. |
 | P0       | [#98](https://github.com/ubugeeei-prod/corsa-bind/issues/98)   | C ABI              | C strings now carry explicit lengths and tolerate interior NUL bytes.                     |
 | P1       | [#96](https://github.com/ubugeeei-prod/corsa-bind/issues/96)   | JSON-RPC           | Connections now close outbound state and join reader threads with bounded fallback.       |
