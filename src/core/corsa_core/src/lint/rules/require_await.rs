@@ -116,14 +116,13 @@ fn scope_has_await(node: &LintNode) -> bool {
                 found = true;
             }
             // `return <thenable>` inside an async function counts as await.
-            "ReturnStatement" => {
+            "ReturnStatement"
                 if candidate
                     .child("argument")
                     .map(strip_chain_expression)
-                    .is_some_and(is_thenable_expression)
-                {
-                    found = true;
-                }
+                    .is_some_and(is_thenable_expression) =>
+            {
+                found = true;
             }
             _ => {}
         }
