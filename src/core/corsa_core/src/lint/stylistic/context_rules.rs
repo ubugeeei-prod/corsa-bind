@@ -1186,9 +1186,9 @@ pub(crate) fn check_no_extra_semi(
         let extra = match scan.prev_significant(index) {
             None => true,
             Some(prev) => {
-                if punct_is(&tokens[prev], scan.source(), ";") {
-                    true
-                } else if punct_is(&tokens[prev], scan.source(), "{") {
+                if punct_is(&tokens[prev], scan.source(), ";")
+                    || punct_is(&tokens[prev], scan.source(), "{")
+                {
                     true
                 } else if punct_is(&tokens[prev], scan.source(), "}") {
                     scan.partner(prev)
@@ -1238,10 +1238,7 @@ pub(crate) fn check_new_parens(
         if tokens[cursor].kind != TokenKind::Identifier {
             continue; // `new (expr)()` and similar — out of this simple scope.
         }
-        loop {
-            let Some(next) = scan.next_significant(cursor) else {
-                break;
-            };
+        while let Some(next) = scan.next_significant(cursor) {
             if punct_is(&tokens[next], scan.source(), ".") {
                 let Some(name) = scan.next_significant(next) else {
                     break;
