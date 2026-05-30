@@ -159,33 +159,38 @@ function renderHero(_description: string): string {
   const s = (text: string) => `<span class="tk-s">${escapeHtml(text)}</span>`;
   const p = (text: string) => `<span class="tk-p">${escapeHtml(text)}</span>`;
   const code = [
-    `${k("import")} { corsaStylisticPlugin } ${k("from")} ${s('"corsa-oxlint/stylistic"')}${p(";")}`,
+    `${k("import")} { OxlintUtils } ${k("from")} ${s('"corsa-oxlint"')}${p(";")}`,
     ``,
-    `${k("export")} ${k("default")} ${p("[{")}`,
-    `  plugins${p(":")} { stylistic${p(":")} corsaStylisticPlugin }${p(",")}`,
-    `  rules${p(":")} ${p("{")}`,
-    `    ${s('"stylistic/quotes"')}${p(":")} ${p("[")}${s('"error"')}${p(",")} ${s('"single"')}${p("],")}`,
-    `    ${s('"stylistic/comma-dangle"')}${p(":")} ${p("[")}${s('"error"')}${p(",")} ${s('"always-multiline"')}${p("],")}`,
-    `  ${p("},")}`,
-    `${p("}];")}`,
+    `${k("export")} ${k("const")} rule = createRule({`,
+    `  create(context) {`,
+    `    ${k("const")} services = OxlintUtils.getParserServices(context)${p(";")}`,
+    `    ${k("const")} checker = services.program.getTypeChecker()${p(";")}`,
+    `    ${k("return")} {`,
+    `      AwaitExpression(node) {`,
+    `        ${k("const")} type = checker.getTypeAtLocation(node.argument)${p(";")}`,
+    `        ${k("if")} (!isThenable(type)) context.report({ node })${p(";")}`,
+    `      },`,
+    `    };`,
+    `  },`,
+    `});`,
   ].join("\n");
   return `<header class="hero">
     <div class="hero-copy">
       <span class="hero-eyebrow"><span class="hero-mark" aria-hidden="true">${mark}</span>Rust · Node · C ABI</span>
       <h1 class="hero-title"><span>corsa</span><span class="hero-title-dim">-bind</span></h1>
-      <p class="hero-tagline">Type-aware Oxlint, a stdio API&nbsp;+ LSP, and zero-cost hot paths for the <strong>Corsa</strong> TypeScript checker — no forks, no patches.</p>
+      <p class="hero-tagline">Author <strong>type-aware lint rules</strong> with real <strong>Corsa</strong> types — plus a stdio API&nbsp;+ LSP and zero-cost hot paths. No forks, no patches.</p>
       <div class="hero-actions">
         <a class="hero-button primary" href="/getting_started/">Get started</a>
         <a class="hero-button" href="https://github.com/ubugeeei/corsa-bind">GitHub<span class="hero-arrow" aria-hidden="true">↗</span></a>
       </div>
       <ul class="hero-badges" aria-label="Highlights">
-        <li>42 native stylistic rules</li>
-        <li>~20× faster than @stylistic</li>
-        <li>type-aware lint in Rust</li>
+        <li>type-aware custom rules</li>
+        <li>59 tsgolint-parity rules</li>
+        <li>real types from Corsa</li>
       </ul>
     </div>
-    <figure class="hero-code" aria-label="corsa-oxlint stylistic config example">
-      <figcaption class="hero-code-bar"><span></span><span></span><span></span><em>eslint.config.js</em></figcaption>
+    <figure class="hero-code" aria-label="Authoring a type-aware custom rule with corsa-oxlint">
+      <figcaption class="hero-code-bar"><span></span><span></span><span></span><em>no-floating-await.ts</em></figcaption>
       <pre><code>${code}</code></pre>
     </figure>
   </header>`;
