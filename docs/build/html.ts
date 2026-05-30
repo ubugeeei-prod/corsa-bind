@@ -104,9 +104,7 @@ export function renderHtml(
   const pageUrl = `${SITE_URL}/${page.route === "index.html" ? "" : page.route}`;
   const ogImage = `${SITE_URL}${ogImagePath}`;
   const isHome = page.route === "index.html";
-  const mainContent = isHome
-    ? `${renderHero(description)}${rewriteMarkdownLinks(compiled.html)}`
-    : rewriteMarkdownLinks(compiled.html);
+  const body = rewriteMarkdownLinks(compiled.html);
   return `<!doctype html>
 <html lang="en" data-theme="light">
 <head>
@@ -144,8 +142,9 @@ export function renderHtml(
       </a>
       <nav aria-label="Documentation">${renderNav(nav, page.route)}</nav>
     </aside>
-    <div class="content-shell">
-      <main class="void-md${isHome ? " is-home" : ""}">${mainContent}</main>
+    <div class="content-shell${isHome ? " is-home-shell" : ""}">
+      ${isHome ? renderHero(description) : ""}
+      <main class="void-md${isHome ? " is-home" : ""}">${body}</main>
       ${renderPager(nav, page.route)}
     </div>
   </div>
@@ -153,23 +152,42 @@ export function renderHtml(
 </html>`;
 }
 
-/** The landing-page hero rendered above the Markdown overview content. */
-function renderHero(description: string): string {
+/** The landing-page hero: a two-column intro with a live code sample. */
+function renderHero(_description: string): string {
   const mark = `<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 15 H13 V49 H20"/><path d="M44 15 H51 V49 H44"/><path d="M24 24 L32 32 L24 40"/><path d="M33 24 L41 32 L33 40"/></svg>`;
+  const k = (text: string) => `<span class="tk-k">${text}</span>`;
+  const s = (text: string) => `<span class="tk-s">${escapeHtml(text)}</span>`;
+  const p = (text: string) => `<span class="tk-p">${escapeHtml(text)}</span>`;
+  const code = [
+    `${k("import")} { corsaStylisticPlugin } ${k("from")} ${s('"corsa-oxlint/stylistic"')}${p(";")}`,
+    ``,
+    `${k("export")} ${k("default")} ${p("[{")}`,
+    `  plugins${p(":")} { stylistic${p(":")} corsaStylisticPlugin }${p(",")}`,
+    `  rules${p(":")} ${p("{")}`,
+    `    ${s('"stylistic/quotes"')}${p(":")} ${p("[")}${s('"error"')}${p(",")} ${s('"single"')}${p("],")}`,
+    `    ${s('"stylistic/comma-dangle"')}${p(":")} ${p("[")}${s('"error"')}${p(",")} ${s('"always-multiline"')}${p("],")}`,
+    `  ${p("},")}`,
+    `${p("}];")}`,
+  ].join("\n");
   return `<header class="hero">
-    <span class="hero-mark" aria-hidden="true">${mark}</span>
-    <h1 class="hero-title"><span>corsa</span><span class="hero-title-dim">-bind</span></h1>
-    <p class="hero-tagline">${escapeHtml(description)}</p>
-    <div class="hero-actions">
-      <a class="hero-button primary" href="/getting_started/">Get started</a>
-      <a class="hero-button" href="https://github.com/ubugeeei/corsa-bind">GitHub ↗</a>
+    <div class="hero-copy">
+      <span class="hero-eyebrow"><span class="hero-mark" aria-hidden="true">${mark}</span>Rust · Node · C ABI</span>
+      <h1 class="hero-title"><span>corsa</span><span class="hero-title-dim">-bind</span></h1>
+      <p class="hero-tagline">Type-aware Oxlint, a stdio API&nbsp;+ LSP, and zero-cost hot paths for the <strong>Corsa</strong> TypeScript checker — no forks, no patches.</p>
+      <div class="hero-actions">
+        <a class="hero-button primary" href="/getting_started/">Get started</a>
+        <a class="hero-button" href="https://github.com/ubugeeei/corsa-bind">GitHub<span class="hero-arrow" aria-hidden="true">↗</span></a>
+      </div>
+      <ul class="hero-badges" aria-label="Highlights">
+        <li>42 native stylistic rules</li>
+        <li>~20× faster than @stylistic</li>
+        <li>type-aware lint in Rust</li>
+      </ul>
     </div>
-    <ul class="hero-badges" aria-label="Highlights">
-      <li>type-aware Oxlint</li>
-      <li>stdio API + LSP</li>
-      <li>zero-cost hot paths</li>
-      <li>no forks, no patches</li>
-    </ul>
+    <figure class="hero-code" aria-label="corsa-oxlint stylistic config example">
+      <figcaption class="hero-code-bar"><span></span><span></span><span></span><em>eslint.config.js</em></figcaption>
+      <pre><code>${code}</code></pre>
+    </figure>
   </header>`;
 }
 
