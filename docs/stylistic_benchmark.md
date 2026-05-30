@@ -7,8 +7,8 @@ description: Throughput of the native corsa stylistic engine versus the upstream
 
 This benchmark compares the native corsa stylistic engine (Rust, single source
 scan) against the **real upstream [`@stylistic`](https://eslint.style) ESLint
-plugin** (JavaScript, ESLint + a TypeScript parser) on the *same* corpus and the
-*same* rule set.
+plugin** (JavaScript, ESLint + a TypeScript parser) on the _same_ corpus and the
+_same_ rule set.
 
 Run it with:
 
@@ -38,10 +38,10 @@ prefix (the same approach as the conformance oracle), then writes
 
 Median milliseconds to lint the whole corpus once (120 iterations, warm):
 
-| engine       | median ms |   p95 ms |   MB/s | diagnostics |
-| ------------ | --------: | -------: | -----: | ----------: |
-| **corsa**    |     12.66 |    13.14 |  27.60 |       3 662 |
-| `@stylistic` |    259.95 |   288.98 |   1.34 |       3 710 |
+| engine       | median ms | p95 ms |  MB/s | diagnostics |
+| ------------ | --------: | -----: | ----: | ----------: |
+| **corsa**    |     12.66 |  13.14 | 27.60 |       3 662 |
+| `@stylistic` |    259.95 | 288.98 |  1.34 |       3 710 |
 
 **corsa is ≈20× faster** than `@stylistic` on this workload (the ratio runs
 20–25× across machines; corsa's time is steady while ESLint's varies with V8

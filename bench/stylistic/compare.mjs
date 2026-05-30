@@ -11,42 +11,43 @@
 // `@stylistic` + `eslint` + `@typescript-eslint/parser` are bootstrapped into
 // `.cache/bench_stylistic/` on first run (mirrors the differential oracle), so
 // no committed node_modules and no workspace install are required.
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-} from 'node:fs';
-import { performance } from 'node:perf_hooks';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { performance } from "node:perf_hooks";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (flag, fallback) => {
   const index = process.argv.indexOf(flag);
   return index === -1 ? fallback : process.argv[index + 1];
 };
-const corpusDir = join(root, arg('--corpus', 'src/bindings/nodejs/corsa_oxlint/ts'));
-const iterations = Number(arg('--iterations', '50'));
+const corpusDir = join(root, arg("--corpus", "src/bindings/nodejs/corsa_oxlint/ts"));
+const iterations = Number(arg("--iterations", "50"));
 
 /** Installs the comparison toolchain into an isolated, git-ignored prefix. */
 function ensureUpstream() {
-  const dir = join(root, '.cache', 'bench_stylistic');
-  const stylistic = join(dir, 'node_modules', '@stylistic', 'eslint-plugin');
+  const dir = join(root, ".cache", "bench_stylistic");
+  const stylistic = join(dir, "node_modules", "@stylistic", "eslint-plugin");
   if (!existsSync(stylistic)) {
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'package.json'), '{"name":"bench-stylistic","private":true}\n');
-    console.error('installing @stylistic toolchain into .cache/bench_stylistic …');
+    writeFileSync(join(dir, "package.json"), '{"name":"bench-stylistic","private":true}\n');
+    console.error("installing @stylistic toolchain into .cache/bench_stylistic …");
     execFileSync(
-      'npm',
-      ['install', '--no-audit', '--no-fund', '@stylistic/eslint-plugin', 'eslint', '@typescript-eslint/parser'],
-      { cwd: dir, stdio: 'inherit' },
+      "npm",
+      [
+        "install",
+        "--no-audit",
+        "--no-fund",
+        "@stylistic/eslint-plugin",
+        "eslint",
+        "@typescript-eslint/parser",
+      ],
+      { cwd: dir, stdio: "inherit" },
     );
   }
-  return createRequire(join(dir, 'noop.js'));
+  return createRequire(join(dir, "noop.js"));
 }
 
 function readCorpus(dir) {
@@ -57,8 +58,8 @@ function readCorpus(dir) {
     )) {
       const full = join(current, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (/\.(ts|tsx|js|jsx|mts|cts)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
-        files.push(readFileSync(full, 'utf8'));
+      else if (/\.(ts|tsx|js|jsx|mts|cts)$/.test(entry.name) && !entry.name.endsWith(".d.ts")) {
+        files.push(readFileSync(full, "utf8"));
       }
     }
   };
@@ -71,16 +72,28 @@ function quantile(sorted, q) {
 }
 
 const require = ensureUpstream();
-const { Linter } = require('eslint');
-const stylistic = require('@stylistic/eslint-plugin').default ?? require('@stylistic/eslint-plugin');
-const tsParser = require('@typescript-eslint/parser').default ?? require('@typescript-eslint/parser');
+const { Linter } = require("eslint");
+const stylistic =
+  require("@stylistic/eslint-plugin").default ?? require("@stylistic/eslint-plugin");
+const tsParser =
+  require("@typescript-eslint/parser").default ?? require("@typescript-eslint/parser");
 
 // Rule set = corsa's implemented rules ∩ @stylistic's shipped rules.
 const corsaRules = JSON.parse(
   execFileSync(
-    'cargo',
-    ['run', '--release', '-q', '-p', 'corsa', '--bin', 'bench_stylistic_compare', '--', '--list-rules'],
-    { cwd: root, encoding: 'utf8' },
+    "cargo",
+    [
+      "run",
+      "--release",
+      "-q",
+      "-p",
+      "corsa",
+      "--bin",
+      "bench_stylistic_compare",
+      "--",
+      "--list-rules",
+    ],
+    { cwd: root, encoding: "utf8" },
   ).trim(),
 );
 const sharedRules = corsaRules.filter((name) => stylistic.rules[name]);
@@ -92,18 +105,19 @@ const bytes = sources.reduce((sum, source) => sum + Buffer.byteLength(source), 0
 const linter = new Linter();
 const config = [
   {
-    files: ['**/*.tsx'],
+    files: ["**/*.tsx"],
     languageOptions: {
       parser: tsParser,
-      parserOptions: { ecmaFeatures: { jsx: true }, sourceType: 'module' },
+      parserOptions: { ecmaFeatures: { jsx: true }, sourceType: "module" },
     },
-    plugins: { '@stylistic': stylistic },
-    rules: Object.fromEntries(sharedRules.map((name) => [`@stylistic/${name}`, 'error'])),
+    plugins: { "@stylistic": stylistic },
+    rules: Object.fromEntries(sharedRules.map((name) => [`@stylistic/${name}`, "error"])),
   },
 ];
 const lintAll = () => {
   let total = 0;
-  for (const source of sources) total += linter.verify(source, config, { filename: 'file.tsx' }).length;
+  for (const source of sources)
+    total += linter.verify(source, config, { filename: "file.tsx" }).length;
   return total;
 };
 const upstreamDiagnostics = lintAll(); // warm-up + diagnostic count
@@ -117,7 +131,7 @@ upstreamSamples.sort((a, b) => a - b);
 const upstreamMedian = quantile(upstreamSamples, 0.5);
 const mb = bytes / (1024 * 1024);
 const upstream = {
-  engine: '@stylistic',
+  engine: "@stylistic",
   files: sources.length,
   bytes,
   rules: sharedRules.length,
@@ -131,30 +145,48 @@ const upstream = {
 // ---- native corsa side -------------------------------------------------------
 const corsa = JSON.parse(
   execFileSync(
-    'cargo',
+    "cargo",
     [
-      'run', '--release', '-q', '-p', 'corsa', '--bin', 'bench_stylistic_compare', '--',
-      '--corpus', corpusDir,
-      '--iterations', String(iterations),
-      '--rules', sharedRules.join(','),
+      "run",
+      "--release",
+      "-q",
+      "-p",
+      "corsa",
+      "--bin",
+      "bench_stylistic_compare",
+      "--",
+      "--corpus",
+      corpusDir,
+      "--iterations",
+      String(iterations),
+      "--rules",
+      sharedRules.join(","),
     ],
-    { cwd: root, encoding: 'utf8' },
+    { cwd: root, encoding: "utf8" },
   ).trim(),
 );
 
 // ---- report ------------------------------------------------------------------
 const speedup = upstream.medianMs / corsa.medianMs;
-const report = { corpus: corpusDir, rules: sharedRules.length, corsa, upstream, speedup: Number(speedup.toFixed(1)) };
-mkdirSync(join(root, '.cache'), { recursive: true });
-writeFileSync(join(root, '.cache', 'bench_stylistic.json'), JSON.stringify(report, null, 2) + '\n');
+const report = {
+  corpus: corpusDir,
+  rules: sharedRules.length,
+  corsa,
+  upstream,
+  speedup: Number(speedup.toFixed(1)),
+};
+mkdirSync(join(root, ".cache"), { recursive: true });
+writeFileSync(join(root, ".cache", "bench_stylistic.json"), JSON.stringify(report, null, 2) + "\n");
 
 const pad = (value, width) => String(value).padStart(width);
-console.log(`\nstylistic throughput — ${corsa.files} files, ${(bytes / 1024).toFixed(0)} KB, ${sharedRules.length} rules, ${iterations} iters`);
-console.log('  engine        median ms    p95 ms    MB/s    diagnostics');
+console.log(
+  `\nstylistic throughput — ${corsa.files} files, ${(bytes / 1024).toFixed(0)} KB, ${sharedRules.length} rules, ${iterations} iters`,
+);
+console.log("  engine        median ms    p95 ms    MB/s    diagnostics");
 for (const row of [corsa, upstream]) {
   console.log(
     `  ${row.engine.padEnd(12)} ${pad(row.medianMs, 9)} ${pad(row.p95Ms, 9)} ${pad(row.mbPerSec, 7)} ${pad(row.diagnostics, 14)}`,
   );
 }
 console.log(`\n  corsa is ${speedup.toFixed(1)}× faster than @stylistic on this workload.`);
-console.log('  wrote .cache/bench_stylistic.json');
+console.log("  wrote .cache/bench_stylistic.json");
