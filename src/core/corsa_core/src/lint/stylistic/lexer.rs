@@ -294,7 +294,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn consume_digits(&mut self) {
-        while self.peek(0).is_some_and(|b| b.is_ascii_digit() || b == b'_') {
+        while self
+            .peek(0)
+            .is_some_and(|b| b.is_ascii_digit() || b == b'_')
+        {
             self.pos += 1;
         }
     }
@@ -400,7 +403,7 @@ impl<'a> Lexer<'a> {
                 b'/' if !in_class => {
                     self.pos += 1;
                     // Consume flag identifier characters.
-                    while self.peek(0).is_some_and(|b| is_ident_continue(b)) {
+                    while self.peek(0).is_some_and(is_ident_continue) {
                         self.pos += 1;
                     }
                     self.push(TokenKind::Regex, start, self.pos);
@@ -482,7 +485,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn last_significant_token(&self) -> Option<&Token> {
-        self.tokens.iter().rev().find(|token| !token.kind.is_comment())
+        self.tokens
+            .iter()
+            .rev()
+            .find(|token| !token.kind.is_comment())
     }
 
     fn token_str(&self, token: &Token) -> &str {
@@ -504,7 +510,9 @@ fn is_ident_continue(byte: u8) -> bool {
 /// the longest valid operator. Always returns at least 1 for any input.
 fn punctuator_len(rest: &[u8]) -> usize {
     const FOUR: &[&[u8]] = &[b">>>="];
-    const THREE: &[&[u8]] = &[b"===", b"!==", b">>>", b"**=", b"<<=", b">>=", b"&&=", b"||=", b"??=", b"..."];
+    const THREE: &[&[u8]] = &[
+        b"===", b"!==", b">>>", b"**=", b"<<=", b">>=", b"&&=", b"||=", b"??=", b"...",
+    ];
     const TWO: &[&[u8]] = &[
         b"=>", b"==", b"!=", b"<=", b">=", b"&&", b"||", b"??", b"?.", b"++", b"--", b"+=", b"-=",
         b"*=", b"/=", b"%=", b"&=", b"|=", b"^=", b"<<", b">>", b"**",
@@ -657,10 +665,7 @@ mod tests {
     fn regex_after_return_keyword() {
         assert_eq!(
             kinds("return /x/"),
-            vec![
-                (TokenKind::Identifier, "return"),
-                (TokenKind::Regex, "/x/"),
-            ]
+            vec![(TokenKind::Identifier, "return"), (TokenKind::Regex, "/x/"),]
         );
     }
 }

@@ -50,8 +50,8 @@ pub(crate) fn check_quotes(
                 // `@stylistic` (with allowTemplateLiterals off, the default)
                 // flags a plain template literal that could be a regular string:
                 // no `${…}` substitution, no line break, and not tagged.
-                let tagged = matches!(previous_significant, Some(b'I' | b'T' | b'S' | b'R')) ||
-                    matches!(previous_significant, Some(b')') | Some(b']'));
+                let tagged = matches!(previous_significant, Some(b'I' | b'T' | b'S' | b'R'))
+                    || matches!(previous_significant, Some(b')') | Some(b']'));
                 if !allow_template_literals
                     && !tagged
                     && end >= start + 2

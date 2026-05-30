@@ -15,8 +15,8 @@ use serde_json::Value;
 use crate::lint::LintDiagnostic;
 
 use super::context::{
-    has_newline, is_whitespace, option_keyword, option_object_bool, punct_is, report_missing_space,
-    report_replace, report_unexpected_space, Scan,
+    Scan, has_newline, is_whitespace, option_keyword, option_object_bool, punct_is,
+    report_missing_space, report_replace, report_unexpected_space,
 };
 use super::lexer::TokenKind;
 
@@ -38,7 +38,11 @@ pub(crate) fn check_arrow_spacing(
         if !punct_is(token, scan.source(), "=>") {
             continue;
         }
-        if let Some(prev) = scan.tokens().get(index.wrapping_sub(1)).filter(|_| index > 0) {
+        if let Some(prev) = scan
+            .tokens()
+            .get(index.wrapping_sub(1))
+            .filter(|_| index > 0)
+        {
             let gap = scan.gap(prev, token);
             if before && gap.is_empty() {
                 report_missing_space(
@@ -361,7 +365,11 @@ pub(crate) fn check_template_curly_spacing(
             _ => {}
         }
         // `}` lives at the start of a middle/tail chunk: check the gap before.
-        if matches!(token.kind, TokenKind::TemplateMiddle | TokenKind::TemplateTail) && index > 0 {
+        if matches!(
+            token.kind,
+            TokenKind::TemplateMiddle | TokenKind::TemplateTail
+        ) && index > 0
+        {
             let Some(prev) = scan.tokens().get(index - 1) else {
                 continue;
             };
@@ -695,7 +703,10 @@ mod tests {
 
     #[test]
     fn comma_spacing_defaults() {
-        assert_eq!(ids(&run(check_comma_spacing, "[1 ,2]", Value::Null)), ["unexpected", "missing"]);
+        assert_eq!(
+            ids(&run(check_comma_spacing, "[1 ,2]", Value::Null)),
+            ["unexpected", "missing"]
+        );
         assert!(run(check_comma_spacing, "[1, 2]", Value::Null).is_empty());
         // Trailing comma before close bracket is exempt for the after-check.
         assert!(run(check_comma_spacing, "[1, 2,]", Value::Null).is_empty());
@@ -703,7 +714,10 @@ mod tests {
 
     #[test]
     fn semi_spacing_defaults() {
-        assert_eq!(ids(&run(check_semi_spacing, "a ;b", Value::Null)), ["unexpected", "missing"]);
+        assert_eq!(
+            ids(&run(check_semi_spacing, "a ;b", Value::Null)),
+            ["unexpected", "missing"]
+        );
         assert!(run(check_semi_spacing, "a; b", Value::Null).is_empty());
         assert!(run(check_semi_spacing, "for (;;) {}", Value::Null).is_empty());
     }
@@ -752,12 +766,23 @@ mod tests {
     #[test]
     fn no_whitespace_before_property_flags_space() {
         assert_eq!(
-            ids(&run(check_no_whitespace_before_property, "foo .bar", Value::Null)),
+            ids(&run(
+                check_no_whitespace_before_property,
+                "foo .bar",
+                Value::Null
+            )),
             ["unexpectedWhitespace"]
         );
         assert!(run(check_no_whitespace_before_property, "foo.bar", Value::Null).is_empty());
         // Newline before the dot is left to dot-location, not this rule.
-        assert!(run(check_no_whitespace_before_property, "foo\n.bar", Value::Null).is_empty());
+        assert!(
+            run(
+                check_no_whitespace_before_property,
+                "foo\n.bar",
+                Value::Null
+            )
+            .is_empty()
+        );
     }
 
     #[test]

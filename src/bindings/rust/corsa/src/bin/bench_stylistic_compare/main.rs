@@ -21,7 +21,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use corsa_core::lint::{run_stylistic_lint, stylistic_rule_metas, StylisticRuleConfig, StylisticRunConfig};
+use corsa_core::lint::{
+    StylisticRuleConfig, StylisticRunConfig, run_stylistic_lint, stylistic_rule_metas,
+};
 use serde_json::json;
 
 fn main() {
@@ -35,8 +37,12 @@ fn main() {
     let iterations: usize = arg_value(&args, "--iterations")
         .and_then(|value| value.parse().ok())
         .unwrap_or(50);
-    let rule_filter: Option<Vec<String>> = arg_value(&args, "--rules")
-        .map(|value| value.split(',').map(|name| name.trim().to_owned()).collect());
+    let rule_filter: Option<Vec<String>> = arg_value(&args, "--rules").map(|value| {
+        value
+            .split(',')
+            .map(|name| name.trim().to_owned())
+            .collect()
+    });
 
     let rules = select_rules(rule_filter);
     let config = StylisticRunConfig {
@@ -63,7 +69,9 @@ fn main() {
     // Warm-up pass (also captures a stable diagnostic count).
     let mut diagnostics = 0usize;
     for source in &sources {
-        diagnostics += run_stylistic_lint(source, &config).map(|d| d.len()).unwrap_or(0);
+        diagnostics += run_stylistic_lint(source, &config)
+            .map(|d| d.len())
+            .unwrap_or(0);
     }
 
     let mut samples = Vec::with_capacity(iterations);
@@ -80,7 +88,11 @@ fn main() {
     let mean = samples.iter().sum::<f64>() / samples.len() as f64;
     let p95 = samples[((samples.len() as f64 * 0.95) as usize).min(samples.len() - 1)];
     let mb = bytes as f64 / (1024.0 * 1024.0);
-    let mb_per_sec = if median > 0.0 { mb / (median / 1000.0) } else { 0.0 };
+    let mb_per_sec = if median > 0.0 {
+        mb / (median / 1000.0)
+    } else {
+        0.0
+    };
 
     let report = json!({
         "engine": "corsa",

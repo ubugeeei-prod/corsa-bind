@@ -15,7 +15,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{run_stylistic_lint, StylisticRuleConfig, StylisticRunConfig};
+use super::{StylisticRuleConfig, StylisticRunConfig, run_stylistic_lint};
 
 const GOLDEN: &str = include_str!("stylistic_golden.json");
 
@@ -49,7 +49,10 @@ fn stylistic_rules_match_committed_golden_corpus() {
                 .filter(|diagnostic| diagnostic.rule_name == case.rule)
                 .count() as u64,
             Err(err) => {
-                failures.push(format!("{}: run error {err} for {:?}", case.rule, case.code));
+                failures.push(format!(
+                    "{}: run error {err} for {:?}",
+                    case.rule, case.code
+                ));
                 continue;
             }
         };
