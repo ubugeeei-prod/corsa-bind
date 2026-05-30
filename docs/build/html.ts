@@ -148,8 +148,35 @@ export function renderHtml(
       ${renderPager(nav, page.route)}
     </div>
   </div>
+  ${mermaidScript()}
 </body>
 </html>`;
+}
+
+/**
+ * Client-side Mermaid renderer. The static pipeline emits ```mermaid fences as
+ * ordinary `language-mermaid` code blocks; this turns them into rendered SVG in
+ * the browser. Mermaid is only fetched on pages that actually contain a
+ * diagram, and the source is read from the inner `<code>` so the language label
+ * and copy button never leak into the graph definition.
+ */
+function mermaidScript(): string {
+  return `<script type="module">
+  const wrappers = [...document.querySelectorAll('[class*="language-mermaid"]')]
+    .filter((el) => !(el.parentElement && el.parentElement.closest('[class*="language-mermaid"]')));
+  if (wrappers.length) {
+    const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' });
+    for (const wrapper of wrappers) {
+      const code = wrapper.querySelector('code') ?? wrapper;
+      const pre = document.createElement('pre');
+      pre.className = 'mermaid';
+      pre.textContent = code.textContent.replace(/\\n+$/, '');
+      wrapper.replaceWith(pre);
+    }
+    await mermaid.run({ querySelector: 'pre.mermaid' });
+  }
+</script>`;
 }
 
 /** The landing-page hero: a two-column intro with a live code sample. */
