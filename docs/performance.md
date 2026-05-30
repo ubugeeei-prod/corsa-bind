@@ -10,6 +10,7 @@
 - Node binding benchmark: `vp run -w bench_ts`
 - Combined benchmark + budget guard: `vp run -w bench_verify`
 - Combined all-in benchmark entrypoint: `vp run -w bench`
+- Stylistic vs upstream `@stylistic` throughput: `node bench/stylistic/compare.mjs` (see [Stylistic benchmark](./stylistic_benchmark.md))
 
 For day-to-day formatting, linting, and testing, prefer `vp fmt`, `vp lint`,
 and `vp check`. Those go through Vite+'s `oxfmt` / `oxlint` toolchain. The

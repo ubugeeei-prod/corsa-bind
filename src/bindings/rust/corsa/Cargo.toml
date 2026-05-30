@@ -31,6 +31,10 @@ path = "src/bin/bench_real_corsa/main.rs"
 name = "bench_tooling_compare"
 path = "src/bin/bench_tooling_compare/main.rs"
 
+[[bin]]
+name = "bench_stylistic_compare"
+path = "src/bin/bench_stylistic_compare/main.rs"
+
 [[example]]
 name = "minimal_start"
 path = "../../../../examples/rust/minimal_start.rs"
