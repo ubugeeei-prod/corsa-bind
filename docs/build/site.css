@@ -334,6 +334,21 @@ nav a[aria-current="page"] {
   font-size: 0.9em;
 }
 
+/* Mermaid diagrams, rendered client-side from `language-mermaid` blocks. */
+.void-md .mermaid {
+  margin: 26px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: center;
+  line-height: 0;
+}
+
+.void-md .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .void-md table {
   display: block;
   width: 100%;
