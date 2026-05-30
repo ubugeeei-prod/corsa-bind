@@ -102,34 +102,30 @@ impl RustLintRule for NoMisusedPromisesRule {
 
         match node.kind.as_str() {
             // ---- checksConditionals: test-expression positions ----
-            "IfStatement" | "WhileStatement" | "DoWhileStatement" => {
-                if opts.checks_conditionals {
+            "IfStatement" | "WhileStatement" | "DoWhileStatement"
+                if opts.checks_conditionals => {
                     if let Some(test) = node.child("test") {
                         check_conditional(ctx, test, true);
                     }
                 }
-            }
-            "ForStatement" => {
-                if opts.checks_conditionals {
+            "ForStatement"
+                if opts.checks_conditionals => {
                     if let Some(test) = node.child("test") {
                         check_conditional(ctx, test, true);
                     }
                 }
-            }
-            "ConditionalExpression" => {
-                if opts.checks_conditionals {
+            "ConditionalExpression"
+                if opts.checks_conditionals => {
                     if let Some(test) = node.child("test") {
                         check_conditional(ctx, test, true);
                     }
                 }
-            }
-            "UnaryExpression" => {
-                if opts.checks_conditionals && node.field_str("operator") == Some("!") {
+            "UnaryExpression"
+                if opts.checks_conditionals && node.field_str("operator") == Some("!") => {
                     if let Some(argument) = node.child("argument") {
                         check_conditional(ctx, argument, true);
                     }
                 }
-            }
             "LogicalExpression" => {
                 // PARITY GAP (blocked on a host fact): Go registers the
                 // BinaryExpression listener which calls `checkConditional(node,
@@ -148,58 +144,49 @@ impl RustLintRule for NoMisusedPromisesRule {
                 // standalone-logical conditional case is not reported.
                 let _ = opts.checks_conditionals;
             }
-            "MemberExpression" => {
+            "MemberExpression"
                 // Array predicate methods: `arr.filter(async ...)` etc.
-                if opts.checks_conditionals {
+                if opts.checks_conditionals => {
                     check_array_predicate(ctx, node);
                 }
-            }
 
             // ---- checksVoidReturn ----
-            "CallExpression" | "NewExpression" => {
-                if opts.checks_void_return.arguments {
+            "CallExpression" | "NewExpression"
+                if opts.checks_void_return.arguments => {
                     check_arguments(ctx, node);
                 }
-            }
-            "JSXAttribute" => {
-                if opts.checks_void_return.attributes {
+            "JSXAttribute"
+                if opts.checks_void_return.attributes => {
                     check_jsx_attribute(ctx, node);
                 }
-            }
-            "ClassDeclaration" | "ClassExpression" | "TSInterfaceDeclaration" => {
-                if opts.checks_void_return.inherited_methods {
+            "ClassDeclaration" | "ClassExpression" | "TSInterfaceDeclaration"
+                if opts.checks_void_return.inherited_methods => {
                     check_class_like_or_interface(ctx, node);
                 }
-            }
-            "Property" => {
-                if opts.checks_void_return.properties {
+            "Property"
+                if opts.checks_void_return.properties => {
                     check_property(ctx, node);
                 }
-            }
-            "MethodDefinition" => {
+            "MethodDefinition"
                 // Object-literal method shorthand surfaces as MethodDefinition in some
                 // TS-ESTree shapes; only object-literal members are relevant.
                 if opts.checks_void_return.properties
                     && node.field_str("__parentKind") == Some("ObjectExpression")
-                {
+                => {
                     check_method(ctx, node);
                 }
-            }
-            "ReturnStatement" => {
-                if opts.checks_void_return.returns {
+            "ReturnStatement"
+                if opts.checks_void_return.returns => {
                     check_return_statement(ctx, node);
                 }
-            }
-            "VariableDeclarator" => {
-                if opts.checks_void_return.variables {
+            "VariableDeclarator"
+                if opts.checks_void_return.variables => {
                     check_variable_declarator(ctx, node);
                 }
-            }
-            "AssignmentExpression" => {
-                if opts.checks_void_return.variables {
+            "AssignmentExpression"
+                if opts.checks_void_return.variables => {
                     check_assignment(ctx, node);
                 }
-            }
 
             // ---- checksSpreads ----
             "SpreadElement" if opts.checks_spreads => {

@@ -71,20 +71,14 @@ impl RustLintRule for PreferNullishCoalescingRule {
         }
 
         match node.kind.as_str() {
-            "LogicalExpression" => {
-                if node.field_str("operator") == Some("||") {
-                    check_prefer_over_or(ctx, node, &opts);
-                }
+            "LogicalExpression" if node.field_str("operator") == Some("||") => {
+                check_prefer_over_or(ctx, node, &opts);
             }
-            "AssignmentExpression" => {
-                if node.field_str("operator") == Some("||=") {
-                    check_prefer_over_or(ctx, node, &opts);
-                }
+            "AssignmentExpression" if node.field_str("operator") == Some("||=") => {
+                check_prefer_over_or(ctx, node, &opts);
             }
-            "ConditionalExpression" => {
-                if !opts.ignore_ternary_tests {
-                    check_ternary(ctx, node, &opts);
-                }
+            "ConditionalExpression" if !opts.ignore_ternary_tests => {
+                check_ternary(ctx, node, &opts);
             }
             "IfStatement" if !opts.ignore_if_statements => {
                 check_if_statement(ctx, node, &opts);

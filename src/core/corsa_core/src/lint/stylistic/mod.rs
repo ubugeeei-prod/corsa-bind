@@ -76,10 +76,22 @@ const SEMI_SPACING_MESSAGES: &[(&str, &str)] = &[
     ("removeSpace", "Remove the whitespace."),
 ];
 const SPACE_IN_PARENS_MESSAGES: &[(&str, &str)] = &[
-    ("missingOpeningSpace", "There must be a space after this paren."),
-    ("missingClosingSpace", "There must be a space before this paren."),
-    ("rejectedOpeningSpace", "There should be no space after this paren."),
-    ("rejectedClosingSpace", "There should be no space before this paren."),
+    (
+        "missingOpeningSpace",
+        "There must be a space after this paren.",
+    ),
+    (
+        "missingClosingSpace",
+        "There must be a space before this paren.",
+    ),
+    (
+        "rejectedOpeningSpace",
+        "There should be no space after this paren.",
+    ),
+    (
+        "rejectedClosingSpace",
+        "There should be no space before this paren.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
@@ -92,8 +104,14 @@ const TEMPLATE_CURLY_SPACING_MESSAGES: &[(&str, &str)] = &[
     ("removeSpace", "Remove the whitespace."),
 ];
 const REST_SPREAD_SPACING_MESSAGES: &[(&str, &str)] = &[
-    ("expectedWhitespace", "Expected whitespace after spread operator."),
-    ("unexpectedWhitespace", "Unexpected whitespace after spread operator."),
+    (
+        "expectedWhitespace",
+        "Expected whitespace after spread operator.",
+    ),
+    (
+        "unexpectedWhitespace",
+        "Unexpected whitespace after spread operator.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
@@ -102,41 +120,71 @@ const NO_MULTI_SPACES_MESSAGES: &[(&str, &str)] = &[
     ("collapseSpace", "Collapse to a single space."),
 ];
 const NO_WHITESPACE_BEFORE_PROPERTY_MESSAGES: &[(&str, &str)] = &[
-    ("unexpectedWhitespace", "Unexpected whitespace before property."),
+    (
+        "unexpectedWhitespace",
+        "Unexpected whitespace before property.",
+    ),
     ("removeSpace", "Remove the whitespace."),
 ];
 const DOT_LOCATION_MESSAGES: &[(&str, &str)] = &[
-    ("expectedDotAfterObject", "Expected dot to be on same line as object."),
-    ("expectedDotBeforeProperty", "Expected dot to be on same line as property."),
+    (
+        "expectedDotAfterObject",
+        "Expected dot to be on same line as object.",
+    ),
+    (
+        "expectedDotBeforeProperty",
+        "Expected dot to be on same line as property.",
+    ),
     ("moveDot", "Move the dot."),
 ];
 const SPACED_COMMENT_MESSAGES: &[(&str, &str)] = &[
     ("expectedSpaceAfter", "Expected space after comment marker."),
-    ("unexpectedSpaceAfter", "Unexpected space after comment marker."),
+    (
+        "unexpectedSpaceAfter",
+        "Unexpected space after comment marker.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
 const OBJECT_CURLY_SPACING_MESSAGES: &[(&str, &str)] = &[
     ("requireSpaceBefore", "A space is required before '}'."),
     ("requireSpaceAfter", "A space is required after '{'."),
-    ("unexpectedSpaceBefore", "There should be no space before '}'."),
-    ("unexpectedSpaceAfter", "There should be no space after '{'."),
+    (
+        "unexpectedSpaceBefore",
+        "There should be no space before '}'.",
+    ),
+    (
+        "unexpectedSpaceAfter",
+        "There should be no space after '{'.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
 const ARRAY_BRACKET_SPACING_MESSAGES: &[(&str, &str)] = &[
     ("missingSpaceBefore", "A space is required before ']'."),
     ("missingSpaceAfter", "A space is required after '['."),
-    ("unexpectedSpaceBefore", "There should be no space before ']'."),
-    ("unexpectedSpaceAfter", "There should be no space after '['."),
+    (
+        "unexpectedSpaceBefore",
+        "There should be no space before ']'.",
+    ),
+    (
+        "unexpectedSpaceAfter",
+        "There should be no space after '['.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
 const COMPUTED_PROPERTY_SPACING_MESSAGES: &[(&str, &str)] = &[
     ("missingSpaceBefore", "A space is required before ']'."),
     ("missingSpaceAfter", "A space is required after '['."),
-    ("unexpectedSpaceBefore", "There should be no space before ']'."),
-    ("unexpectedSpaceAfter", "There should be no space after '['."),
+    (
+        "unexpectedSpaceBefore",
+        "There should be no space before ']'.",
+    ),
+    (
+        "unexpectedSpaceAfter",
+        "There should be no space after '['.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
@@ -154,24 +202,42 @@ const SPACE_BEFORE_BLOCKS_MESSAGES: &[(&str, &str)] = &[
 ];
 const FUNCTION_CALL_SPACING_MESSAGES: &[(&str, &str)] = &[
     ("missing", "Missing space between function name and paren."),
-    ("unexpectedWhitespace", "Unexpected whitespace between function name and paren."),
+    (
+        "unexpectedWhitespace",
+        "Unexpected whitespace between function name and paren.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
 const SPACE_BEFORE_FUNCTION_PAREN_MESSAGES: &[(&str, &str)] = &[
     ("missingSpace", "Missing space before function parentheses."),
-    ("unexpectedSpace", "Unexpected space before function parentheses."),
+    (
+        "unexpectedSpace",
+        "Unexpected space before function parentheses.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
 const NO_FLOATING_DECIMAL_MESSAGES: &[(&str, &str)] = &[
-    ("leading", "A leading decimal point can be confused with a dot."),
-    ("trailing", "A trailing decimal point can be confused with a dot."),
+    (
+        "leading",
+        "A leading decimal point can be confused with a dot.",
+    ),
+    (
+        "trailing",
+        "A trailing decimal point can be confused with a dot.",
+    ),
     ("addZero", "Add a zero."),
 ];
 const TEMPLATE_TAG_SPACING_MESSAGES: &[(&str, &str)] = &[
-    ("unexpectedSpace", "Unexpected space between template tag and template literal."),
-    ("missingSpace", "Expected space between template tag and template literal."),
+    (
+        "unexpectedSpace",
+        "Unexpected space between template tag and template literal.",
+    ),
+    (
+        "missingSpace",
+        "Expected space between template tag and template literal.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
@@ -203,10 +269,16 @@ const SPACE_INFIX_OPS_MESSAGES: &[(&str, &str)] = &[
 ];
 const MAX_LEN_MESSAGES: &[(&str, &str)] = &[
     ("tooLong", "This line exceeds the maximum allowed length."),
-    ("tooLongComment", "This comment line exceeds the maximum allowed length."),
+    (
+        "tooLongComment",
+        "This comment line exceeds the maximum allowed length.",
+    ),
 ];
 const SEMI_STYLE_MESSAGES: &[(&str, &str)] = &[
-    ("expectedSemiColon", "Expected this semicolon to be at the line's edge."),
+    (
+        "expectedSemiColon",
+        "Expected this semicolon to be at the line's edge.",
+    ),
     ("moveSemi", "Move the semicolon."),
 ];
 const COMMA_STYLE_MESSAGES: &[(&str, &str)] = &[
@@ -215,8 +287,14 @@ const COMMA_STYLE_MESSAGES: &[(&str, &str)] = &[
     ("moveComma", "Move the comma."),
 ];
 const ARROW_PARENS_MESSAGES: &[(&str, &str)] = &[
-    ("expectedParens", "Expected parentheses around arrow function argument."),
-    ("unexpectedParens", "Unexpected parentheses around single function argument."),
+    (
+        "expectedParens",
+        "Expected parentheses around arrow function argument.",
+    ),
+    (
+        "unexpectedParens",
+        "Unexpected parentheses around single function argument.",
+    ),
     ("addParens", "Add parentheses."),
 ];
 const SWITCH_COLON_SPACING_MESSAGES: &[(&str, &str)] = &[
@@ -232,31 +310,67 @@ const NO_EXTRA_SEMI_MESSAGES: &[(&str, &str)] = &[
     ("removeSemi", "Remove the semicolon."),
 ];
 const NEW_PARENS_MESSAGES: &[(&str, &str)] = &[
-    ("missing", "Missing parentheses invoking a constructor with no arguments."),
-    ("unexpected", "Unnecessary parentheses invoking a constructor with no arguments."),
+    (
+        "missing",
+        "Missing parentheses invoking a constructor with no arguments.",
+    ),
+    (
+        "unexpected",
+        "Unnecessary parentheses invoking a constructor with no arguments.",
+    ),
     ("addParens", "Add parentheses."),
 ];
 const SPACE_UNARY_OPS_MESSAGES: &[(&str, &str)] = &[
-    ("wordOperatorAfter", "Unary word operator must be followed by whitespace."),
-    ("nonwordOperatorAfter", "Unary operator must not be separated from its operand."),
-    ("nonwordOperatorBefore", "Unary operator must not be separated from its operand."),
+    (
+        "wordOperatorAfter",
+        "Unary word operator must be followed by whitespace.",
+    ),
+    (
+        "nonwordOperatorAfter",
+        "Unary operator must not be separated from its operand.",
+    ),
+    (
+        "nonwordOperatorBefore",
+        "Unary operator must not be separated from its operand.",
+    ),
     ("insertSpace", "Insert a space."),
     ("removeSpace", "Remove the whitespace."),
 ];
 const WRAP_REGEX_MESSAGES: &[(&str, &str)] = &[
-    ("requireParens", "Wrap the regexp literal in parentheses to disambiguate the slash operator."),
+    (
+        "requireParens",
+        "Wrap the regexp literal in parentheses to disambiguate the slash operator.",
+    ),
     ("wrapRegex", "Wrap in parentheses."),
 ];
 const IMPLICIT_ARROW_LINEBREAK_MESSAGES: &[(&str, &str)] = &[
-    ("unexpectedLinebreak", "Expected no linebreak before arrow body."),
-    ("missingLinebreak", "Expected a linebreak before arrow body."),
+    (
+        "unexpectedLinebreak",
+        "Expected no linebreak before arrow body.",
+    ),
+    (
+        "missingLinebreak",
+        "Expected a linebreak before arrow body.",
+    ),
     ("joinLine", "Remove the linebreak."),
 ];
 const OPERATOR_LINEBREAK_MESSAGES: &[(&str, &str)] = &[
-    ("operatorAtBeginning", "Operator should be placed at the end of the line."),
-    ("operatorAtEnd", "Operator should be placed at the beginning of the line."),
-    ("badLinebreak", "Bad line breaking before and after operator."),
-    ("noLinebreak", "There should be no line break before or after the operator."),
+    (
+        "operatorAtBeginning",
+        "Operator should be placed at the end of the line.",
+    ),
+    (
+        "operatorAtEnd",
+        "Operator should be placed at the beginning of the line.",
+    ),
+    (
+        "badLinebreak",
+        "Bad line breaking before and after operator.",
+    ),
+    (
+        "noLinebreak",
+        "There should be no line break before or after the operator.",
+    ),
     ("moveOperator", "Move the operator."),
 ];
 const KEYWORD_SPACING_MESSAGES: &[(&str, &str)] = &[
@@ -691,9 +805,7 @@ fn run_token_rule(
         "template-tag-spacing" => {
             context_rules::check_template_tag_spacing(scan, options, diagnostics)
         }
-        "yield-star-spacing" => {
-            context_rules::check_yield_star_spacing(scan, options, diagnostics)
-        }
+        "yield-star-spacing" => context_rules::check_yield_star_spacing(scan, options, diagnostics),
         "generator-star-spacing" => {
             context_rules::check_generator_star_spacing(scan, options, diagnostics)
         }
@@ -712,9 +824,7 @@ fn run_token_rule(
         "implicit-arrow-linebreak" => {
             context_rules::check_implicit_arrow_linebreak(scan, options, diagnostics)
         }
-        "operator-linebreak" => {
-            context_rules::check_operator_linebreak(scan, options, diagnostics)
-        }
+        "operator-linebreak" => context_rules::check_operator_linebreak(scan, options, diagnostics),
         "keyword-spacing" => context_rules::check_keyword_spacing(scan, options, diagnostics),
         _ => {}
     }

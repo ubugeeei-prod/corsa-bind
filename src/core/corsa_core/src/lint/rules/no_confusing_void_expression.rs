@@ -207,32 +207,29 @@ fn find_invalid_ancestor(chain: &[Ancestor<'_>], opts: Options) -> Option<usize>
                 }
                 // Other binary operators (incl. comma handled below) fall through.
             }
-            "SequenceExpression" => {
+            "SequenceExpression"
                 // ts-eslint's comma handling: `a, console.log(b)` where the void
                 // expression is the LEFT operand is valid.
-                if parent.child_is_left() {
+                if parent.child_is_left() => {
                     return None;
                 }
                 // Right operand of a sequence falls through (invalid).
-            }
             "ExpressionStatement" => {
                 // e.g. `{ console.log("foo"); }` -- always valid.
                 return None;
             }
-            "ConditionalExpression" => {
-                if parent.child_is_branch() {
+            "ConditionalExpression"
+                if parent.child_is_branch() => {
                     // e.g. `cond ? console.log(true) : console.log(false)` --
                     // valid only if the next ancestor is valid.
                     index += 1;
                     continue;
                 }
-            }
-            "ArrowFunctionExpression" => {
-                if opts.ignore_arrow_shorthand {
+            "ArrowFunctionExpression"
+                if opts.ignore_arrow_shorthand => {
                     // e.g. `() => console.log("foo")` -- valid with the option.
                     return None;
                 }
-            }
             "UnaryExpression"
                 // The TS-ESTree representation of the `void` operator.
                 if parent.operator() == Some("void") && opts.ignore_void_operator => {

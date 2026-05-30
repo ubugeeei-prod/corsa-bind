@@ -19,10 +19,13 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use super::{run_stylistic_lint, StylisticRuleConfig, StylisticRunConfig};
+use super::{StylisticRuleConfig, StylisticRunConfig, run_stylistic_lint};
 
 fn specs_dir() -> PathBuf {
-    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../.cache/stylistic_specs"))
+    PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../.cache/stylistic_specs"
+    ))
 }
 
 /// Rules whose conformance we have already driven to a known level. The test
@@ -147,7 +150,10 @@ fn stylistic_rules_match_spec_vectors() {
     for (rule, (pass, count)) in &per_rule {
         total_pass += pass;
         total += count;
-        eprintln!("  {rule:32} {pass:3}/{count:<3} ({:.0}%)", 100.0 * *pass as f64 / *count as f64);
+        eprintln!(
+            "  {rule:32} {pass:3}/{count:<3} ({:.0}%)",
+            100.0 * *pass as f64 / *count as f64
+        );
     }
     eprintln!(
         "  {:32} {total_pass:3}/{total:<3} ({:.0}%)",

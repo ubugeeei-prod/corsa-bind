@@ -14,7 +14,7 @@
 
 use serde_json::Value;
 
-use crate::lint::stylistic::lexer::{tokenize, Token, TokenKind};
+use crate::lint::stylistic::lexer::{Token, TokenKind, tokenize};
 use crate::lint::{LintDiagnostic, LintFix, LintSuggestion, TextRange};
 
 /// How an opening `{` is being used.
@@ -76,10 +76,12 @@ fn ends_expression(token: &Token, text: &str) -> bool {
         | TokenKind::Regex
         | TokenKind::NoSubTemplate
         | TokenKind::TemplateTail => true,
-        TokenKind::Identifier => matches!(
-            text,
-            "this" | "super" | "true" | "false" | "null" | "undefined"
-        ) || !is_reserved_operator_word(text),
+        TokenKind::Identifier => {
+            matches!(
+                text,
+                "this" | "super" | "true" | "false" | "null" | "undefined"
+            ) || !is_reserved_operator_word(text)
+        }
         TokenKind::Punctuator => matches!(text, ")" | "]" | "}"),
         _ => false,
     }
@@ -184,7 +186,10 @@ impl<'a> Scan<'a> {
 
     /// The matching bracket token index for an open/close bracket token.
     pub(crate) fn partner(&self, index: usize) -> Option<usize> {
-        self.partner.get(index).copied().filter(|&p| p != NO_PARTNER)
+        self.partner
+            .get(index)
+            .copied()
+            .filter(|&p| p != NO_PARTNER)
     }
 
     /// Classifies an opening `{` token.
@@ -342,10 +347,7 @@ fn match_brackets(source: &str, tokens: &[Token]) -> Vec<usize> {
 }
 
 fn brackets_match(open: &str, close: &str) -> bool {
-    matches!(
-        (open, close),
-        ("(", ")") | ("[", "]") | ("{", "}")
-    )
+    matches!((open, close), ("(", ")") | ("[", "]") | ("{", "}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -513,13 +515,31 @@ mod tests {
 
     #[test]
     fn classifies_object_vs_block_braces() {
-        assert_eq!(open_brace_kinds("const o = { a: 1 };"), vec![BraceKind::ObjectLike]);
-        assert_eq!(open_brace_kinds("function f() { return 1; }"), vec![BraceKind::Block]);
+        assert_eq!(
+            open_brace_kinds("const o = { a: 1 };"),
+            vec![BraceKind::ObjectLike]
+        );
+        assert_eq!(
+            open_brace_kinds("function f() { return 1; }"),
+            vec![BraceKind::Block]
+        );
         assert_eq!(open_brace_kinds("if (x) { y(); }"), vec![BraceKind::Block]);
-        assert_eq!(open_brace_kinds("const f = () => { g(); };"), vec![BraceKind::Block]);
-        assert_eq!(open_brace_kinds("class C { m() {} }"), vec![BraceKind::Block, BraceKind::Block]);
-        assert_eq!(open_brace_kinds("f({ a: 1 });"), vec![BraceKind::ObjectLike]);
-        assert_eq!(open_brace_kinds("return { a: 1 };"), vec![BraceKind::ObjectLike]);
+        assert_eq!(
+            open_brace_kinds("const f = () => { g(); };"),
+            vec![BraceKind::Block]
+        );
+        assert_eq!(
+            open_brace_kinds("class C { m() {} }"),
+            vec![BraceKind::Block, BraceKind::Block]
+        );
+        assert_eq!(
+            open_brace_kinds("f({ a: 1 });"),
+            vec![BraceKind::ObjectLike]
+        );
+        assert_eq!(
+            open_brace_kinds("return { a: 1 };"),
+            vec![BraceKind::ObjectLike]
+        );
     }
 
     #[test]
@@ -547,7 +567,12 @@ mod tests {
             .collect();
         assert_eq!(
             uses,
-            vec![ParenUse::Control, ParenUse::Call, ParenUse::FuncDef, ParenUse::Grouping]
+            vec![
+                ParenUse::Control,
+                ParenUse::Call,
+                ParenUse::FuncDef,
+                ParenUse::Grouping
+            ]
         );
     }
 

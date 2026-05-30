@@ -47,7 +47,10 @@ pub(crate) fn check_max_len(
         let width = display_width(bytes, line.start, line.content_end, tab_width);
         if width > limit {
             let (message_id, message): (&str, &str) = if line.is_comment_only {
-                ("tooLongComment", "This comment line exceeds the maximum allowed length.")
+                (
+                    "tooLongComment",
+                    "This comment line exceeds the maximum allowed length.",
+                )
             } else {
                 ("tooLong", "This line exceeds the maximum allowed length.")
             };
