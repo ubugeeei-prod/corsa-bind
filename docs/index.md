@@ -65,6 +65,7 @@ Rust, Node.js, and type-aware Oxlint entry points from a clean checkout.
 - [Language bindings](./language_bindings.md) — the `corsa_ffi` C ABI for C, C++, Go, Zig, C#, Swift, MoonBit.
 - [Type-aware Oxlint](./oxlint_guide.md) — `corsa-oxlint` rule authoring, native rules, and stylistic rules.
 - [Native rules](./native_rules.md) — the full set of type-aware rules implemented natively in Rust.
+- [Stylistic rules](./stylistic_rules.md) — the Rust-backed `@stylistic`-compatible formatting rules.
 
 ## Run and ship
 

@@ -86,6 +86,7 @@ export function renderHtml(
   page: MarkdownPage,
   compiled: CompiledMarkdown,
   nav: readonly MarkdownPage[],
+  ogImagePath = "/og.png",
 ): string {
   const title = compiled.title || titleFromRoute(page.route);
   const fullTitle = title === SITE_NAME ? SITE_NAME : `${title} - ${SITE_NAME}`;
@@ -93,7 +94,11 @@ export function renderHtml(
   const description =
     typeof frontmatterDescription === "string" ? frontmatterDescription : DEFAULT_DESCRIPTION;
   const pageUrl = `${SITE_URL}/${page.route === "index.html" ? "" : page.route}`;
-  const ogImage = `${SITE_URL}/og.png`;
+  const ogImage = `${SITE_URL}${ogImagePath}`;
+  const isHome = page.route === "index.html";
+  const mainContent = isHome
+    ? `${renderHero(description)}${rewriteMarkdownLinks(compiled.html)}`
+    : rewriteMarkdownLinks(compiled.html);
   return `<!doctype html>
 <html lang="en" data-theme="light">
 <head>
@@ -110,7 +115,8 @@ export function renderHtml(
   <meta property="og:url" content="${escapeHtml(pageUrl)}">
   <meta property="og:image" content="${escapeHtml(ogImage)}">
   <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="${escapeHtml(fullTitle)}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapeHtml(fullTitle)}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
@@ -131,12 +137,32 @@ export function renderHtml(
       <nav aria-label="Documentation">${renderNav(nav, page.route)}</nav>
     </aside>
     <div class="content-shell">
-      <main class="void-md">${rewriteMarkdownLinks(compiled.html)}</main>
+      <main class="void-md${isHome ? " is-home" : ""}">${mainContent}</main>
       ${renderPager(nav, page.route)}
     </div>
   </div>
 </body>
 </html>`;
+}
+
+/** The landing-page hero rendered above the Markdown overview content. */
+function renderHero(description: string): string {
+  const mark = `<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 15 H13 V49 H20"/><path d="M44 15 H51 V49 H44"/><path d="M24 24 L32 32 L24 40"/><path d="M33 24 L41 32 L33 40"/></svg>`;
+  return `<header class="hero">
+    <span class="hero-mark" aria-hidden="true">${mark}</span>
+    <h1 class="hero-title"><span>corsa</span><span class="hero-title-dim">-bind</span></h1>
+    <p class="hero-tagline">${escapeHtml(description)}</p>
+    <div class="hero-actions">
+      <a class="hero-button primary" href="/getting_started/">Get started</a>
+      <a class="hero-button" href="https://github.com/ubugeeei/corsa-bind">GitHub ↗</a>
+    </div>
+    <ul class="hero-badges" aria-label="Highlights">
+      <li>type-aware Oxlint</li>
+      <li>stdio API + LSP</li>
+      <li>zero-cost hot paths</li>
+      <li>no forks, no patches</li>
+    </ul>
+  </header>`;
 }
 
 function renderNav(pages: readonly MarkdownPage[], activeRoute: string): string {

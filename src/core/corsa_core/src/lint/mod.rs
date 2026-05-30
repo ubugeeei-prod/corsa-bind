@@ -6,6 +6,10 @@ mod registry;
 mod rules;
 mod stylistic;
 #[cfg(test)]
+mod stylistic_conformance;
+#[cfg(test)]
+mod stylistic_golden;
+#[cfg(test)]
 mod tests;
 mod types;
 

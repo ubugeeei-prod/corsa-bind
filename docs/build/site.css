@@ -507,3 +507,129 @@ nav a[aria-current="page"] {
     font-size: 32px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Landing hero
+ * ------------------------------------------------------------------------- */
+
+.hero {
+  margin: 4px 0 56px;
+  padding-bottom: 44px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+
+.hero-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 26px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgb(24 24 27 / 6%);
+}
+
+.hero-mark svg {
+  width: 38px;
+  height: 38px;
+}
+
+.hero-title {
+  margin: 0;
+  font-family: var(--vmd-font-mono, ui-monospace, Menlo, monospace);
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.hero-title-dim {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.hero-tagline {
+  max-width: 600px;
+  margin: 22px auto 0;
+  color: var(--ink-soft);
+  font-size: 20px;
+  line-height: 1.55;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 32px;
+}
+
+.hero-button {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 560;
+  text-decoration: none;
+}
+
+.hero-button:hover {
+  border-color: var(--ink);
+}
+
+.hero-button.primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+.hero-button.primary:hover {
+  background: var(--accent-hover);
+}
+
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-badges li {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-family: var(--vmd-font-mono, ui-monospace, Menlo, monospace);
+  font-size: 13px;
+}
+
+/* The hero already states the title and tagline, so drop the Markdown
+ * overview's leading H1 and its description paragraph on the home page. */
+.void-md.is-home > h1:first-of-type,
+.void-md.is-home > h1:first-of-type + p {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .hero-title {
+    font-size: 46px;
+  }
+
+  .hero-tagline {
+    font-size: 17px;
+  }
+}
