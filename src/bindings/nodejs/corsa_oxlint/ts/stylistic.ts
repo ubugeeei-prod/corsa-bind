@@ -22,7 +22,42 @@ export type CorsaStylisticRuleName =
   | "no-tabs"
   | "no-trailing-spaces"
   | "quotes"
-  | "unicode-bom";
+  | "unicode-bom"
+  | "arrow-spacing"
+  | "comma-spacing"
+  | "semi-spacing"
+  | "space-in-parens"
+  | "template-curly-spacing"
+  | "rest-spread-spacing"
+  | "no-multi-spaces"
+  | "no-whitespace-before-property"
+  | "dot-location"
+  | "spaced-comment"
+  | "object-curly-spacing"
+  | "array-bracket-spacing"
+  | "computed-property-spacing"
+  | "block-spacing"
+  | "space-before-blocks"
+  | "function-call-spacing"
+  | "space-before-function-paren"
+  | "no-floating-decimal"
+  | "template-tag-spacing"
+  | "yield-star-spacing"
+  | "generator-star-spacing"
+  | "comma-dangle"
+  | "space-infix-ops"
+  | "max-len"
+  | "semi-style"
+  | "comma-style"
+  | "arrow-parens"
+  | "switch-colon-spacing"
+  | "no-extra-semi"
+  | "new-parens"
+  | "space-unary-ops"
+  | "wrap-regex"
+  | "implicit-arrow-linebreak"
+  | "operator-linebreak"
+  | "keyword-spacing";
 
 export type CorsaStylisticRuleOptions = readonly unknown[];
 
@@ -52,6 +87,41 @@ export const implementedStylisticRuleNames = [
   "no-trailing-spaces",
   "quotes",
   "unicode-bom",
+  "arrow-spacing",
+  "comma-spacing",
+  "semi-spacing",
+  "space-in-parens",
+  "template-curly-spacing",
+  "rest-spread-spacing",
+  "no-multi-spaces",
+  "no-whitespace-before-property",
+  "dot-location",
+  "spaced-comment",
+  "object-curly-spacing",
+  "array-bracket-spacing",
+  "computed-property-spacing",
+  "block-spacing",
+  "space-before-blocks",
+  "function-call-spacing",
+  "space-before-function-paren",
+  "no-floating-decimal",
+  "template-tag-spacing",
+  "yield-star-spacing",
+  "generator-star-spacing",
+  "comma-dangle",
+  "space-infix-ops",
+  "max-len",
+  "semi-style",
+  "comma-style",
+  "arrow-parens",
+  "switch-colon-spacing",
+  "no-extra-semi",
+  "new-parens",
+  "space-unary-ops",
+  "wrap-regex",
+  "implicit-arrow-linebreak",
+  "operator-linebreak",
+  "keyword-spacing",
 ] as const satisfies readonly CorsaStylisticRuleName[];
 
 /**

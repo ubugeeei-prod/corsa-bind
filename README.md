@@ -80,6 +80,8 @@ Full guides live under [`docs/`](./docs/index.md):
 | [Node.js binding](./docs/nodejs_binding.md)            | `@corsa-bind/napi` for Node, Deno, and Bun                    |
 | [Language bindings](./docs/language_bindings.md)       | The `corsa_ffi` C ABI for C, C++, Go, Zig, C#, Swift, MoonBit |
 | [Type-aware Oxlint](./docs/oxlint_guide.md)            | `corsa-oxlint` rule authoring, native and stylistic rules     |
+| [Native rules](./docs/native_rules.md)                 | The type-aware Rust lint rules and their options              |
+| [Stylistic rules](./docs/stylistic_rules.md)           | The Rust-backed `@stylistic`-compatible formatting rules      |
 | [Performance](./docs/performance.md)                   | Benchmark entry points and measured numbers                   |
 | [CI and local checks](./docs/ci_guide.md)              | Reproduce the GitHub checks locally                           |
 | [Production readiness](./docs/production_readiness.md) | Runtime controls and release gates                            |

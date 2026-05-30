@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::lint::{LintDiagnostic, LintFix};
+use crate::lint::{LintDiagnostic, LintFix, TextRange};
 
 use super::{
     helpers::{
@@ -9,6 +9,108 @@ use super::{
     },
     line_index::{LineInfo, Newline},
 };
+
+/// `max-len`: report lines whose display width exceeds the configured maximum.
+///
+/// Implements the most-used options: `code`, `tabWidth`, `comments`,
+/// `ignoreComments`, and `ignoreUrls`. The positional legacy forms
+/// `[code]` and `[code, tabWidth]` are accepted alongside the object form.
+pub(crate) fn check_max_len(
+    source_text: &str,
+    lines: &[LineInfo],
+    options: &Value,
+    diagnostics: &mut Vec<LintDiagnostic>,
+) {
+    let code = max_len_number(options, 0, "code").unwrap_or(80);
+    let tab_width = max_len_number(options, 1, "tabWidth").unwrap_or(4).max(1);
+    let comment_limit = max_len_object(options)
+        .and_then(|object| object.get("comments"))
+        .and_then(Value::as_u64)
+        .map(|value| value as usize);
+    let ignore_comments = max_len_flag(options, "ignoreComments");
+    let ignore_urls = max_len_flag(options, "ignoreUrls");
+
+    let bytes = source_text.as_bytes();
+    for line in lines {
+        let text = &source_text[line.start..line.content_end];
+        if ignore_comments && line.is_comment_only {
+            continue;
+        }
+        if ignore_urls && text.contains("://") {
+            continue;
+        }
+        let limit = if line.is_comment_only {
+            comment_limit.unwrap_or(code)
+        } else {
+            code
+        };
+        let width = display_width(bytes, line.start, line.content_end, tab_width);
+        if width > limit {
+            let (message_id, message): (&str, &str) = if line.is_comment_only {
+                ("tooLongComment", "This comment line exceeds the maximum allowed length.")
+            } else {
+                ("tooLong", "This line exceeds the maximum allowed length.")
+            };
+            diagnostics.push(LintDiagnostic {
+                rule_name: "max-len".to_owned(),
+                message_id: message_id.to_owned(),
+                message: message.to_owned(),
+                range: TextRange::new(line.start as u32, line.content_end as u32),
+                suggestions: Vec::new(),
+            });
+        }
+    }
+}
+
+/// Counts the display columns of `[start, end)`, expanding tabs to `tab_width`
+/// columns each and counting every other UTF-8 scalar as one column.
+fn display_width(bytes: &[u8], start: usize, end: usize, tab_width: usize) -> usize {
+    let mut width = 0;
+    let mut index = start;
+    while index < end {
+        let byte = bytes[index];
+        if byte == b'\t' {
+            width += tab_width;
+            index += 1;
+        } else {
+            // Advance one UTF-8 scalar; continuation bytes are 0b10xxxxxx.
+            width += 1;
+            index += 1;
+            while index < end && (bytes[index] & 0xC0) == 0x80 {
+                index += 1;
+            }
+        }
+    }
+    width
+}
+
+fn max_len_object(options: &Value) -> Option<&serde_json::Map<String, Value>> {
+    match options {
+        Value::Array(items) => items.iter().find_map(Value::as_object),
+        Value::Object(object) => Some(object),
+        _ => None,
+    }
+}
+
+/// Reads a `max-len` number from either the positional slot or the object form.
+fn max_len_number(options: &Value, position: usize, key: &str) -> Option<usize> {
+    if let Value::Array(items) = options {
+        if let Some(value) = items.get(position).and_then(Value::as_u64) {
+            return Some(value as usize);
+        }
+    }
+    max_len_object(options)
+        .and_then(|object| object.get(key))
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+}
+
+fn max_len_flag(options: &Value, key: &str) -> bool {
+    max_len_object(options)
+        .and_then(|object| object.get(key))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
 
 pub(crate) fn check_no_trailing_spaces(
     source_text: &str,
@@ -203,21 +305,24 @@ fn report_extra_blank_lines(
     if blank_lines.len() <= allowed {
         return;
     }
-    for line in &blank_lines[allowed..] {
-        push_diagnostic(
-            diagnostics,
-            "no-multiple-empty-lines",
-            "tooMany",
-            "Too many blank lines.",
-            line.start,
-            line.end,
-            Some((
-                "removeBlankLine",
-                "Remove extra blank line.",
-                LintFix::remove_range,
-            )),
-        );
-    }
+    // `@stylistic` reports one violation for the whole excess run, not one per
+    // blank line. The fix removes the surplus lines.
+    let excess = &blank_lines[allowed..];
+    let start = excess[0].start;
+    let end = excess[excess.len() - 1].end;
+    push_diagnostic(
+        diagnostics,
+        "no-multiple-empty-lines",
+        "tooMany",
+        "Too many blank lines.",
+        start,
+        end,
+        Some((
+            "removeBlankLine",
+            "Remove extra blank line.",
+            LintFix::remove_range,
+        )),
+    );
 }
 
 fn trim_ascii_space_end(bytes: &[u8], start: usize, end: usize) -> usize {

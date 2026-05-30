@@ -38,6 +38,40 @@ The exact set is also exported programmatically as `implementedNativeRuleNames`
 from `corsa-oxlint/rules`, so presets and tooling can enumerate it without
 instantiating the plugin.
 
+## Rule options
+
+Native rules accept the **same options as their upstream `typescript-eslint`
+counterparts**, in the same `["error", { … }]` shape. Options flow end to end:
+the JS bridge attaches the option payload to the node facts it sends to Rust,
+and each rule deserializes and applies them with the upstream defaults.
+
+```ts
+export default [
+  {
+    plugins: { typescript: corsaOxlintPlugin },
+    rules: {
+      // object-form options
+      "typescript/no-misused-promises": [
+        "error",
+        { checksConditionals: true, checksVoidReturn: { arguments: false } },
+      ],
+      "typescript/strict-boolean-expressions": [
+        "error",
+        { allowNullableObject: false, allowNumber: false },
+      ],
+      "typescript/switch-exhaustiveness-check": [
+        "error",
+        { considerDefaultExhaustiveForUnions: true },
+      ],
+    },
+  },
+];
+```
+
+If a rule needs a type fact that the bridge does not yet surface, it **degrades
+conservatively** — it stays silent rather than emit a false positive — until
+that fact lands. This keeps the native lane safe to enable incrementally.
+
 ## Supported rules
 
 | Rule                                     | Description                                                                                    |
@@ -108,7 +142,38 @@ instantiating the plugin.
 > checker fact is not yet surfaced, the rule degrades conservatively (it
 > prefers silence over false positives) until that fact lands.
 
+## How the bridge feeds each rule
+
+General-purpose rules are implemented in Rust yet ship as ordinary Oxlint JS
+plugin rules. For each visited node the bridge:
+
+1. Collects compact node facts (kind, ranges, child structure) plus the type
+   texts and property names the rule declared it needs.
+2. Calls `corsa::lint::RustLintRule` through `@corsa-bind/napi`.
+3. Receives Oxlint-shaped diagnostics, suggestions, and fixes, and reports them
+   via `context.report()`.
+
+Each rule declares *how much* type information it needs (depth and whether type
+texts/property names are required), so the bridge only pays for the facts that
+rule consumes. Rules that need no type information at all (for example
+`no-array-delete`) run as pure syntactic checks.
+
+## Parity and testing
+
+Native rules are verified at three levels:
+
+- **Rust unit tests** (`corsa_core::lint::tests`) exercise each rule's decision
+  logic directly against synthesized node facts, including option permutations.
+- **`RuleTester`** runs rules end to end against the real pinned Corsa binary
+  with `valid`/`invalid` cases, the same model as `typescript-eslint`'s tester
+  (see [Testing rules](./oxlint_guide.md#testing-rules-with-ruletester)).
+- **Parity tracking** asserts that `implementedNativeRuleNames +
+  pendingNativeRuleNames` exactly equals the upstream `tsgolint/internal/rules`
+  surface, so the supported set can never silently drift from the parity target.
+  `pendingNativeRuleNames` is intentionally empty.
+
 ## See also
 
 - [Type-aware Oxlint](./oxlint_guide.md) — authoring model, native rules, and stylistic rules
+- [Stylistic rules](./stylistic_rules.md) — the Rust-backed `@stylistic`-compatible formatting rules
 - [Node.js binding](./nodejs_binding.md) — the underlying `@corsa-bind/napi` surface

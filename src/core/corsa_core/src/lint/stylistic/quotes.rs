@@ -18,6 +18,7 @@ pub(crate) fn check_quotes(
         _ => b'"',
     };
     let avoid_escape = option_bool(options, 1, "avoidEscape", false);
+    let allow_template_literals = option_bool(options, 1, "allowTemplateLiterals", false);
     let bytes = source_text.as_bytes();
     let mut cursor = 0;
     let mut previous_significant = None;
@@ -44,7 +45,21 @@ pub(crate) fn check_quotes(
                 );
             }
             b'`' => {
-                cursor = scan_template_literal(bytes, cursor).unwrap_or(cursor + 1);
+                let start = cursor;
+                let end = scan_template_literal(bytes, cursor).unwrap_or(cursor + 1);
+                // `@stylistic` (with allowTemplateLiterals off, the default)
+                // flags a plain template literal that could be a regular string:
+                // no `${…}` substitution, no line break, and not tagged.
+                let tagged = matches!(previous_significant, Some(b'I' | b'T' | b'S' | b'R')) ||
+                    matches!(previous_significant, Some(b')') | Some(b']'));
+                if !allow_template_literals
+                    && !tagged
+                    && end >= start + 2
+                    && is_plain_template(&bytes[start + 1..end - 1])
+                {
+                    report_template_quote(source_text, start, end, preferred, diagnostics);
+                }
+                cursor = end;
                 previous_significant = Some(b'T');
             }
             b'/' if bytes.get(cursor + 1) == Some(&b'/') => {
@@ -111,6 +126,72 @@ fn report_quote_if_needed(
             replacement,
         );
     }
+}
+
+/// Whether template inner bytes contain neither a `${` substitution nor a line
+/// break (so the literal could be rewritten as an ordinary string).
+fn is_plain_template(inner: &[u8]) -> bool {
+    let mut cursor = 0;
+    while cursor < inner.len() {
+        match inner[cursor] {
+            b'\\' => cursor += 2,
+            b'\n' | b'\r' => return false,
+            b'$' if inner.get(cursor + 1) == Some(&b'{') => return false,
+            _ => cursor += 1,
+        }
+    }
+    true
+}
+
+fn report_template_quote(
+    source_text: &str,
+    start: usize,
+    end: usize,
+    preferred: u8,
+    diagnostics: &mut Vec<LintDiagnostic>,
+) {
+    let quote = preferred as char;
+    let inner = &source_text[start + 1..end - 1];
+    // Re-escape the chosen quote and collapse template-only escapes.
+    let mut replacement = String::with_capacity(inner.len() + 2);
+    replacement.push(quote);
+    let mut chars = inner.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\\' => {
+                if let Some(&next) = chars.peek() {
+                    if next == '`' {
+                        replacement.push('`');
+                        chars.next();
+                        continue;
+                    }
+                }
+                replacement.push('\\');
+                if let Some(next) = chars.next() {
+                    replacement.push(next);
+                }
+            }
+            c if c == quote => {
+                replacement.push('\\');
+                replacement.push(c);
+            }
+            c => replacement.push(c),
+        }
+    }
+    replacement.push(quote);
+    push_replacement_diagnostic(
+        diagnostics,
+        ReplacementDiagnostic {
+            rule_name: "quotes",
+            message_id: "wrongQuote",
+            message: "String literals must use the configured quote style.",
+            start,
+            end,
+            suggestion_id: "fixQuote",
+            suggestion_message: "Convert quote style.",
+        },
+        replacement,
+    );
 }
 
 fn scan_string_literal(bytes: &[u8], start: usize, quote: u8) -> Option<usize> {
