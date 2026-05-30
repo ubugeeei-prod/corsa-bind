@@ -220,4 +220,5 @@ explicitly rather than silently.
 
 - [Type-aware Oxlint](./oxlint_guide.md) — authoring model and configuration.
 - [Native rules](./native_rules.md) — the type-aware Rust rule set.
+- [Stylistic benchmark](./stylistic_benchmark.md) — throughput vs the upstream `@stylistic` plugin.
 - [Performance](./performance.md) — the single-scan stylistic performance model.

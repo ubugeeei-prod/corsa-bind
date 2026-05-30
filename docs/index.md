@@ -71,6 +71,7 @@ Rust, Node.js, and type-aware Oxlint entry points from a clean checkout.
 
 - [CI and local checks](./ci_guide.md) — reproduce the GitHub checks locally.
 - [Performance commands](./performance.md) — benchmark entrypoints and the artifacts they write.
+- [Stylistic benchmark](./stylistic_benchmark.md) — native stylistic throughput vs the upstream `@stylistic` plugin.
 - [Release process](./release_guide.md) — package publishing and release verification.
 - [API index](./api/index.md) — generated reference pages for the public Node entrypoints.
 
