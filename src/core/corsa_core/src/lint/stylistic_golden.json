@@ -17,17 +17,13 @@
   {
     "rule": "eol-last",
     "code": "const x = 1;",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 0
   },
   {
     "rule": "eol-last",
     "code": "const x = 1;\n",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 1
   },
   {
@@ -53,17 +49,13 @@
   {
     "rule": "linebreak-style",
     "code": "a;\r\nb;\r\n",
-    "options": [
-      "windows"
-    ],
+    "options": ["windows"],
     "errors": 0
   },
   {
     "rule": "linebreak-style",
     "code": "a;\nb;\n",
-    "options": [
-      "windows"
-    ],
+    "options": ["windows"],
     "errors": 2
   },
   {
@@ -165,17 +157,13 @@
   {
     "rule": "quotes",
     "code": "const s = \"double\";",
-    "options": [
-      "single"
-    ],
+    "options": ["single"],
     "errors": 1
   },
   {
     "rule": "quotes",
     "code": "const s = 'single';",
-    "options": [
-      "single"
-    ],
+    "options": ["single"],
     "errors": 0
   },
   {
@@ -192,9 +180,7 @@
   {
     "rule": "quotes",
     "code": "const s = `template`;",
-    "options": [
-      "single"
-    ],
+    "options": ["single"],
     "errors": 1
   },
   {
@@ -295,25 +281,19 @@
   {
     "rule": "space-in-parens",
     "code": "foo(a)",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 2
   },
   {
     "rule": "space-in-parens",
     "code": "foo( a )",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
     "rule": "space-in-parens",
     "code": "foo( )",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
@@ -334,17 +314,13 @@
   {
     "rule": "template-curly-spacing",
     "code": "`${x}`",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 2
   },
   {
     "rule": "template-curly-spacing",
     "code": "`${ x }`",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
@@ -365,17 +341,13 @@
   {
     "rule": "rest-spread-spacing",
     "code": "foo(... args)",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
     "rule": "rest-spread-spacing",
     "code": "foo(...args)",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 1
   },
   {
@@ -441,17 +413,13 @@
   {
     "rule": "dot-location",
     "code": "foo.\nbar",
-    "options": [
-      "property"
-    ],
+    "options": ["property"],
     "errors": 1
   },
   {
     "rule": "dot-location",
     "code": "foo\n.bar",
-    "options": [
-      "property"
-    ],
+    "options": ["property"],
     "errors": 0
   },
   {
@@ -482,17 +450,13 @@
   {
     "rule": "spaced-comment",
     "code": "//bad",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 0
   },
   {
     "rule": "spaced-comment",
     "code": "// space",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 1
   },
   {
@@ -523,17 +487,13 @@
   {
     "rule": "object-curly-spacing",
     "code": "const o = {a: 1};",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 2
   },
   {
     "rule": "object-curly-spacing",
     "code": "const o = { a: 1 };",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
@@ -559,17 +519,13 @@
   {
     "rule": "array-bracket-spacing",
     "code": "const a = [1, 2];",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 2
   },
   {
     "rule": "array-bracket-spacing",
     "code": "const a = [ 1, 2 ];",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
@@ -585,17 +541,13 @@
   {
     "rule": "computed-property-spacing",
     "code": "a[0]",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 2
   },
   {
     "rule": "computed-property-spacing",
     "code": "a[ 0 ]",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
@@ -626,17 +578,13 @@
   {
     "rule": "block-spacing",
     "code": "function f() {return 1;}",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 0
   },
   {
     "rule": "block-spacing",
     "code": "function f() { return 1; }",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 2
   },
   {
@@ -672,9 +620,7 @@
   {
     "rule": "space-before-blocks",
     "code": "if (x){ y(); }",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 0
   },
   {
@@ -690,17 +636,13 @@
   {
     "rule": "function-call-spacing",
     "code": "foo();",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 1
   },
   {
     "rule": "function-call-spacing",
     "code": "foo ();",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
@@ -756,17 +698,13 @@
   {
     "rule": "space-before-function-paren",
     "code": "function f() {}",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 0
   },
   {
     "rule": "space-before-function-paren",
     "code": "function f () {}",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 1
   },
   {
@@ -812,17 +750,13 @@
   {
     "rule": "template-tag-spacing",
     "code": "tag`x`",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 1
   },
   {
     "rule": "template-tag-spacing",
     "code": "tag `x`",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
@@ -878,41 +812,31 @@
   {
     "rule": "comma-dangle",
     "code": "[1, 2]",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 1
   },
   {
     "rule": "comma-dangle",
     "code": "[1, 2,]",
-    "options": [
-      "always"
-    ],
+    "options": ["always"],
     "errors": 0
   },
   {
     "rule": "comma-dangle",
     "code": "[\n  1,\n  2\n]",
-    "options": [
-      "always-multiline"
-    ],
+    "options": ["always-multiline"],
     "errors": 1
   },
   {
     "rule": "comma-dangle",
     "code": "[\n  1,\n  2,\n]",
-    "options": [
-      "always-multiline"
-    ],
+    "options": ["always-multiline"],
     "errors": 0
   },
   {
     "rule": "comma-dangle",
     "code": "[1, 2,]",
-    "options": [
-      "always-multiline"
-    ],
+    "options": ["always-multiline"],
     "errors": 1
   },
   {
@@ -968,25 +892,19 @@
   {
     "rule": "max-len",
     "code": "const x = 1;",
-    "options": [
-      10
-    ],
+    "options": [10],
     "errors": 1
   },
   {
     "rule": "max-len",
     "code": "const x = 1;",
-    "options": [
-      100
-    ],
+    "options": [100],
     "errors": 0
   },
   {
     "rule": "max-len",
     "code": "const x = 1; // short",
-    "options": [
-      120
-    ],
+    "options": [120],
     "errors": 0
   },
   {
@@ -1042,17 +960,13 @@
   {
     "rule": "arrow-parens",
     "code": "const f = a => a;",
-    "options": [
-      "as-needed"
-    ],
+    "options": ["as-needed"],
     "errors": 0
   },
   {
     "rule": "arrow-parens",
     "code": "const f = (a) => a;",
-    "options": [
-      "as-needed"
-    ],
+    "options": ["as-needed"],
     "errors": 1
   },
   {
@@ -1138,17 +1052,13 @@
   {
     "rule": "new-parens",
     "code": "new Person();",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 1
   },
   {
     "rule": "new-parens",
     "code": "new Person;",
-    "options": [
-      "never"
-    ],
+    "options": ["never"],
     "errors": 0
   },
   {
@@ -1234,17 +1144,13 @@
   {
     "rule": "implicit-arrow-linebreak",
     "code": "(foo) =>\n  bar",
-    "options": [
-      "below"
-    ],
+    "options": ["below"],
     "errors": 0
   },
   {
     "rule": "implicit-arrow-linebreak",
     "code": "(foo) => bar",
-    "options": [
-      "below"
-    ],
+    "options": ["below"],
     "errors": 1
   },
   {
@@ -1265,17 +1171,13 @@
   {
     "rule": "operator-linebreak",
     "code": "const x = 1 +\n  2;",
-    "options": [
-      "before"
-    ],
+    "options": ["before"],
     "errors": 1
   },
   {
     "rule": "operator-linebreak",
     "code": "const x = 1\n  + 2;",
-    "options": [
-      "before"
-    ],
+    "options": ["before"],
     "errors": 0
   },
   {

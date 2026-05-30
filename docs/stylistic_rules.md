@@ -34,7 +34,7 @@ to the checker; instead the engine builds, lazily and at most once per source:
    longest-match punctuators, identifiers/keywords, numeric/string literals,
    template literals with nested `${…}` substitutions, regular-expression
    literals (resolved from the previous significant token), and both comment
-   forms. Whitespace is *not* tokenized — rules recover it from the gaps between
+   forms. Whitespace is _not_ tokenized — rules recover it from the gaps between
    adjacent token ranges.
 
 2. **A structural context** (`stylistic/context.rs`, `Scan`) — bracket matching
@@ -54,10 +54,10 @@ to the checker; instead the engine builds, lazily and at most once per source:
 
 Three rule families are layered on top:
 
-| Layer | Module | Needs |
-| --- | --- | --- |
-| Line rules | `line_rules.rs` | line index only (e.g. `max-len`, `eol-last`) |
-| Token rules | `token_rules.rs` | the token stream (e.g. `comma-spacing`) |
+| Layer         | Module             | Needs                                                                             |
+| ------------- | ------------------ | --------------------------------------------------------------------------------- |
+| Line rules    | `line_rules.rs`    | line index only (e.g. `max-len`, `eol-last`)                                      |
+| Token rules   | `token_rules.rs`   | the token stream (e.g. `comma-spacing`)                                           |
 | Context rules | `context_rules.rs` | the token stream **and** the structural classifiers (e.g. `object-curly-spacing`) |
 
 A rule is only charged for the work it needs: the line index and the
@@ -128,61 +128,61 @@ explicit options.
 
 ### Whitespace and lines
 
-| Rule | Description | Default |
-| --- | --- | --- |
-| `eol-last` | Require or disallow a newline at the end of files. | `always` |
-| `linebreak-style` | Enforce consistent linebreak characters. | `unix` |
-| `no-multiple-empty-lines` | Limit consecutive blank lines. | `max: 2` |
-| `no-trailing-spaces` | Disallow whitespace at the end of lines. | — |
-| `no-tabs` | Disallow tab characters. | — |
-| `no-multi-spaces` | Disallow multiple spaces between tokens. | — |
-| `max-len` | Enforce a maximum line length. | `code: 80, tabWidth: 4` |
-| `unicode-bom` | Require or disallow a Unicode byte order mark. | `never` |
+| Rule                      | Description                                        | Default                 |
+| ------------------------- | -------------------------------------------------- | ----------------------- |
+| `eol-last`                | Require or disallow a newline at the end of files. | `always`                |
+| `linebreak-style`         | Enforce consistent linebreak characters.           | `unix`                  |
+| `no-multiple-empty-lines` | Limit consecutive blank lines.                     | `max: 2`                |
+| `no-trailing-spaces`      | Disallow whitespace at the end of lines.           | —                       |
+| `no-tabs`                 | Disallow tab characters.                           | —                       |
+| `no-multi-spaces`         | Disallow multiple spaces between tokens.           | —                       |
+| `max-len`                 | Enforce a maximum line length.                     | `code: 80, tabWidth: 4` |
+| `unicode-bom`             | Require or disallow a Unicode byte order mark.     | `never`                 |
 
 ### Spacing around tokens and operators
 
-| Rule | Description | Default |
-| --- | --- | --- |
-| `arrow-spacing` | Spacing before/after the `=>` of arrow functions. | `before: true, after: true` |
-| `comma-spacing` | Spacing before/after commas. | `before: false, after: true` |
-| `semi-spacing` | Spacing before/after semicolons. | `before: false, after: true` |
-| `space-in-parens` | Spacing just inside parentheses. | `never` |
-| `space-infix-ops` | Require spacing around infix operators. | — |
-| `space-unary-ops` | Spacing around unary operators. | `words: true, nonwords: false` |
-| `template-curly-spacing` | Spacing inside template `${…}`. | `never` |
-| `rest-spread-spacing` | Spacing after a rest/spread `...`. | `never` |
-| `template-tag-spacing` | Spacing between a template tag and its literal. | `never` |
-| `switch-colon-spacing` | Spacing around `case`/`default` colons. | `after: true, before: false` |
-| `yield-star-spacing` | Spacing around the `*` in `yield*`. | `before: false, after: true` |
-| `generator-star-spacing` | Spacing around the `*` in generators. | `before: true, after: false` |
-| `no-whitespace-before-property` | Disallow whitespace before a `.property`. | — |
-| `dot-location` | Newline placement around the member `.`. | `object` |
+| Rule                            | Description                                       | Default                        |
+| ------------------------------- | ------------------------------------------------- | ------------------------------ |
+| `arrow-spacing`                 | Spacing before/after the `=>` of arrow functions. | `before: true, after: true`    |
+| `comma-spacing`                 | Spacing before/after commas.                      | `before: false, after: true`   |
+| `semi-spacing`                  | Spacing before/after semicolons.                  | `before: false, after: true`   |
+| `space-in-parens`               | Spacing just inside parentheses.                  | `never`                        |
+| `space-infix-ops`               | Require spacing around infix operators.           | —                              |
+| `space-unary-ops`               | Spacing around unary operators.                   | `words: true, nonwords: false` |
+| `template-curly-spacing`        | Spacing inside template `${…}`.                   | `never`                        |
+| `rest-spread-spacing`           | Spacing after a rest/spread `...`.                | `never`                        |
+| `template-tag-spacing`          | Spacing between a template tag and its literal.   | `never`                        |
+| `switch-colon-spacing`          | Spacing around `case`/`default` colons.           | `after: true, before: false`   |
+| `yield-star-spacing`            | Spacing around the `*` in `yield*`.               | `before: false, after: true`   |
+| `generator-star-spacing`        | Spacing around the `*` in generators.             | `before: true, after: false`   |
+| `no-whitespace-before-property` | Disallow whitespace before a `.property`.         | —                              |
+| `dot-location`                  | Newline placement around the member `.`.          | `object`                       |
 
 ### Brackets, blocks, and calls
 
-| Rule | Description | Default |
-| --- | --- | --- |
-| `object-curly-spacing` | Spacing inside object/destructuring/import braces. | `never` |
-| `array-bracket-spacing` | Spacing inside array literal brackets. | `never` |
-| `computed-property-spacing` | Spacing inside computed member brackets. | `never` |
-| `block-spacing` | Spacing inside single-line blocks. | `always` |
-| `space-before-blocks` | Spacing before a block's opening brace. | `always` |
-| `function-call-spacing` | Spacing between a callee and its call `(`. | `never` |
-| `space-before-function-paren` | Spacing before a function/method/catch `(`. | `always` |
+| Rule                          | Description                                        | Default  |
+| ----------------------------- | -------------------------------------------------- | -------- |
+| `object-curly-spacing`        | Spacing inside object/destructuring/import braces. | `never`  |
+| `array-bracket-spacing`       | Spacing inside array literal brackets.             | `never`  |
+| `computed-property-spacing`   | Spacing inside computed member brackets.           | `never`  |
+| `block-spacing`               | Spacing inside single-line blocks.                 | `always` |
+| `space-before-blocks`         | Spacing before a block's opening brace.            | `always` |
+| `function-call-spacing`       | Spacing between a callee and its call `(`.         | `never`  |
+| `space-before-function-paren` | Spacing before a function/method/catch `(`.        | `always` |
 
 ### Punctuation and syntax
 
-| Rule | Description | Default |
-| --- | --- | --- |
-| `quotes` | Enforce single or double quotes for strings. | `double` |
-| `comma-dangle` | Require or disallow trailing commas. | `never` |
-| `comma-style` | Comma at the end vs. start of a line. | `last` |
-| `semi-style` | Semicolon at the end vs. start of a line. | `last` |
-| `no-extra-semi` | Disallow unnecessary semicolons. | — |
-| `arrow-parens` | Parentheses around a single arrow parameter. | `always` |
-| `new-parens` | Parentheses on an argument-less `new`. | `always` |
-| `no-floating-decimal` | Disallow leading/trailing decimal points. | — |
-| `spaced-comment` | Spacing after a `//` or `/*` marker. | `always` |
+| Rule                  | Description                                  | Default  |
+| --------------------- | -------------------------------------------- | -------- |
+| `quotes`              | Enforce single or double quotes for strings. | `double` |
+| `comma-dangle`        | Require or disallow trailing commas.         | `never`  |
+| `comma-style`         | Comma at the end vs. start of a line.        | `last`   |
+| `semi-style`          | Semicolon at the end vs. start of a line.    | `last`   |
+| `no-extra-semi`       | Disallow unnecessary semicolons.             | —        |
+| `arrow-parens`        | Parentheses around a single arrow parameter. | `always` |
+| `new-parens`          | Parentheses on an argument-less `new`.       | `always` |
+| `no-floating-decimal` | Disallow leading/trailing decimal points.    | —        |
+| `spaced-comment`      | Spacing after a `//` or `/*` marker.         | `always` |
 
 ## Parity verification
 

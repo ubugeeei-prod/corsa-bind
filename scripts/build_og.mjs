@@ -6,46 +6,39 @@
 // assets/og/ and copied verbatim into the built site by the docs Vite plugin.
 //
 // Usage: node scripts/build_og.mjs
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const docsDir = join(root, 'docs');
-const outDir = join(root, 'assets', 'og');
-const tmpDir = join(root, '.cache', 'og-tmp');
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const docsDir = join(root, "docs");
+const outDir = join(root, "assets", "og");
+const tmpDir = join(root, ".cache", "og-tmp");
 
-const SITE = 'corsa-bind';
-const URL = 'github.com/ubugeeei/corsa-bind';
+const SITE = "corsa-bind";
+const URL = "github.com/ubugeeei/corsa-bind";
 
 /** Finds the Chromium headless shell that Playwright installs. */
 function findChromeShell() {
   if (process.env.CHROME_HEADLESS_SHELL) return process.env.CHROME_HEADLESS_SHELL;
-  const base = join(homedir(), 'Library', 'Caches', 'ms-playwright');
+  const base = join(homedir(), "Library", "Caches", "ms-playwright");
   if (!existsSync(base)) {
     throw new Error(`Playwright cache not found at ${base}; set CHROME_HEADLESS_SHELL.`);
   }
   const versions = readdirSync(base)
-    .filter((name) => name.startsWith('chromium_headless_shell-'))
+    .filter((name) => name.startsWith("chromium_headless_shell-"))
     .sort()
     .reverse();
   for (const version of versions) {
     const dir = join(base, version);
     for (const arch of readdirSync(dir)) {
-      const candidate = join(dir, arch, 'chrome-headless-shell');
+      const candidate = join(dir, arch, "chrome-headless-shell");
       if (existsSync(candidate)) return candidate;
     }
   }
-  throw new Error('chrome-headless-shell not found; run `npx playwright install chromium`.');
+  throw new Error("chrome-headless-shell not found; run `npx playwright install chromium`.");
 }
 
 /** Minimal YAML front-matter reader for `title` / `description`. */
@@ -53,16 +46,17 @@ function frontmatter(markdown) {
   const match = markdown.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
   const fields = {};
-  for (const line of match[1].split('\n')) {
+  for (const line of match[1].split("\n")) {
     const kv = line.match(/^(\w+):\s*(.*)$/);
-    if (kv) fields[kv[1]] = kv[2].replace(/^["']|["']$/g, '').trim();
+    if (kv) fields[kv[1]] = kv[2].replace(/^["']|["']$/g, "").trim();
   }
   return fields;
 }
 
 function escapeXml(value) {
-  return value.replace(/[&<>"']/g, (ch) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[ch],
+  return value.replace(
+    /[&<>"']/g,
+    (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch],
   );
 }
 
@@ -70,7 +64,7 @@ function escapeXml(value) {
 function wrap(text, maxChars, maxLines) {
   const words = text.split(/\s+/);
   const lines = [];
-  let line = '';
+  let line = "";
   for (const word of words) {
     const candidate = line ? `${line} ${word}` : word;
     if (candidate.length > maxChars && line) {
@@ -83,8 +77,8 @@ function wrap(text, maxChars, maxLines) {
   }
   if (line && lines.length < maxLines) lines.push(line);
   if (lines.length === maxLines) {
-    const used = lines.join(' ').split(/\s+/).length;
-    if (used < words.length) lines[maxLines - 1] = `${lines[maxLines - 1].replace(/[.,]$/, '')}…`;
+    const used = lines.join(" ").split(/\s+/).length;
+    if (used < words.length) lines[maxLines - 1] = `${lines[maxLines - 1].replace(/[.,]$/, "")}…`;
   }
   return lines;
 }
@@ -113,11 +107,11 @@ function pageSvg(title, description) {
   const titleY = 250;
   const title_tspans = titleLines
     .map((line, i) => `<tspan x="90" dy="${i === 0 ? 0 : 84}">${escapeXml(line)}</tspan>`)
-    .join('');
+    .join("");
   const descY = titleY + titleLines.length * 84 + 30;
   const desc_tspans = descLines
     .map((line, i) => `<tspan x="90" dy="${i === 0 ? 0 : 42}">${escapeXml(line)}</tspan>`)
-    .join('');
+    .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect width="1200" height="630" fill="#fafafa"/>
   <rect x="40" y="40" width="1120" height="550" rx="28" fill="#ffffff" stroke="#e4e4e7" stroke-width="2"/>
@@ -132,8 +126,8 @@ function pageSvg(title, description) {
 }
 
 function routeSlug(fileName) {
-  const base = fileName.replace(/\.md$/, '');
-  return base === 'index' ? 'index' : base.replace(/\//g, '-');
+  const base = fileName.replace(/\.md$/, "");
+  return base === "index" ? "index" : base.replace(/\//g, "-");
 }
 
 function rasterize(chrome, svg, outPath, label) {
@@ -142,15 +136,15 @@ function rasterize(chrome, svg, outPath, label) {
   execFileSync(
     chrome,
     [
-      '--headless',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      '--force-color-profile=srgb',
+      "--headless",
+      "--disable-gpu",
+      "--hide-scrollbars",
+      "--force-color-profile=srgb",
       `--screenshot=${outPath}`,
-      '--window-size=1200,630',
+      "--window-size=1200,630",
       `file://${svgPath}`,
     ],
-    { stdio: 'ignore' },
+    { stdio: "ignore" },
   );
 }
 
@@ -159,15 +153,15 @@ mkdirSync(outDir, { recursive: true });
 mkdirSync(tmpDir, { recursive: true });
 
 const DEFAULT_DESCRIPTION =
-  'Native Rust and JavaScript bindings for the Corsa TypeScript checker — type-aware Oxlint, stdio API + LSP, and zero-cost hot paths.';
+  "Native Rust and JavaScript bindings for the Corsa TypeScript checker — type-aware Oxlint, stdio API + LSP, and zero-cost hot paths.";
 
 let count = 0;
 for (const entry of readdirSync(docsDir)) {
-  if (!entry.endsWith('.md')) continue;
+  if (!entry.endsWith(".md")) continue;
   const slug = routeSlug(entry);
-  const fields = frontmatter(readFileSync(join(docsDir, entry), 'utf8'));
-  if (slug === 'index') {
-    rasterize(chrome, landingSvg(), join(root, 'assets', 'og.png'), 'index');
+  const fields = frontmatter(readFileSync(join(docsDir, entry), "utf8"));
+  if (slug === "index") {
+    rasterize(chrome, landingSvg(), join(root, "assets", "og.png"), "index");
     count++;
     continue;
   }

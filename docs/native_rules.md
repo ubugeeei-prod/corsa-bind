@@ -153,7 +153,7 @@ plugin rules. For each visited node the bridge:
 3. Receives Oxlint-shaped diagnostics, suggestions, and fixes, and reports them
    via `context.report()`.
 
-Each rule declares *how much* type information it needs (depth and whether type
+Each rule declares _how much_ type information it needs (depth and whether type
 texts/property names are required), so the bridge only pays for the facts that
 rule consumes. Rules that need no type information at all (for example
 `no-array-delete`) run as pure syntactic checks.
@@ -168,7 +168,7 @@ Native rules are verified at three levels:
   with `valid`/`invalid` cases, the same model as `typescript-eslint`'s tester
   (see [Testing rules](./oxlint_guide.md#testing-rules-with-ruletester)).
 - **Parity tracking** asserts that `implementedNativeRuleNames +
-  pendingNativeRuleNames` exactly equals the upstream `tsgolint/internal/rules`
+pendingNativeRuleNames` exactly equals the upstream `tsgolint/internal/rules`
   surface, so the supported set can never silently drift from the parity target.
   `pendingNativeRuleNames` is intentionally empty.
 
