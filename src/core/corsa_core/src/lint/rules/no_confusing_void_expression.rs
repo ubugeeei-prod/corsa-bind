@@ -233,12 +233,11 @@ fn find_invalid_ancestor(chain: &[Ancestor<'_>], opts: Options) -> Option<usize>
                     return None;
                 }
             }
-            "UnaryExpression" => {
+            "UnaryExpression"
                 // The TS-ESTree representation of the `void` operator.
-                if parent.operator() == Some("void") && opts.ignore_void_operator {
+                if parent.operator() == Some("void") && opts.ignore_void_operator => {
                     return None;
                 }
-            }
             _ => {}
         }
         break;
