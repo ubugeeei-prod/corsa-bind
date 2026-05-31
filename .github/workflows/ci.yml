@@ -20,7 +20,7 @@ env:
 jobs:
   js-format:
     name: JS/TS Format
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 15
     if: ${{ github.event_name != 'pull_request' }}
     steps:
@@ -41,7 +41,7 @@ jobs:
 
   js-lint-types:
     name: JS/TS Lint and Types
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 15
     if: ${{ github.event_name != 'pull_request' }}
     steps:
@@ -62,7 +62,7 @@ jobs:
 
   rust-format:
     name: Rust Format
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 15
     if: ${{ github.event_name != 'pull_request' }}
     steps:
@@ -81,7 +81,7 @@ jobs:
 
   rust-lint:
     name: Rust Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 30
     if: ${{ github.event_name != 'pull_request' }}
     steps:
@@ -108,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","macos-15","windows-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["blacksmith-32vcpu-ubuntu-2404"]' || '["blacksmith-32vcpu-ubuntu-2404","macos-15","blacksmith-32vcpu-windows-2025"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -153,9 +153,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - blacksmith-32vcpu-ubuntu-2404
           - macos-15
-          - windows-latest
+          - blacksmith-32vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -180,7 +180,7 @@ jobs:
 
   public-facade:
     name: Public Facade
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 30
     if: ${{ github.event_name != 'pull_request' }}
     steps:
@@ -203,7 +203,7 @@ jobs:
 
   non-node-bindings:
     name: Non-Node Bindings
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 20
     if: ${{ github.event_name != 'pull_request' }}
     steps:
@@ -256,7 +256,7 @@ jobs:
 
   quality:
     name: Quality
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 5
     needs:
       - js-format
@@ -308,9 +308,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - blacksmith-32vcpu-ubuntu-2404
           - macos-15
-          - windows-latest
+          - blacksmith-32vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -352,7 +352,7 @@ jobs:
 
   bench-corsa-ref:
     name: Corsa Ref Bench
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 60
     if: ${{ github.event_name != 'pull_request' }}
     steps:
