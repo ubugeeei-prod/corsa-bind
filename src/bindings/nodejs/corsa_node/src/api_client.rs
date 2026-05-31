@@ -13,7 +13,7 @@ use napi::{
     bindgen_prelude::{AsyncTask, Buffer, Unknown},
 };
 use napi_derive::napi;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::util::{
@@ -31,6 +31,15 @@ struct SnapshotState<'a> {
     projects: &'a [corsa::api::ProjectResponse],
     #[serde(skip_serializing_if = "Option::is_none")]
     changes: &'a Option<corsa::api::SnapshotChanges>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TypeProjectParams {
+    snapshot: String,
+    project: String,
+    #[serde(rename = "type")]
+    type_handle: String,
 }
 
 type SnapshotStore = Arc<Mutex<FastMap<CompactString, ManagedSnapshot>>>;
@@ -275,10 +284,7 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                 Ok(Value::String(text))
             }
             JsonTaskKind::CallJson { method, params } => {
-                let params = optional_value(params.take());
-                let response = block_on(self.client.raw_json_request(method.as_str(), params))
-                    .map_err(into_napi_error)?;
-                Ok(response)
+                call_json_blocking(&self.client, method.as_str(), params.take())
             }
         }
     }
@@ -806,10 +812,7 @@ impl CorsaApiClient {
     /// Sends an arbitrary JSON endpoint request.
     #[napi]
     pub fn call_json(&self, method: String, params: Option<Value>) -> Result<Value> {
-        let params = optional_value(params);
-        let response = block_on(self.inner.raw_json_request(method.as_str(), params))
-            .map_err(into_napi_error)?;
-        Ok(response)
+        call_json_blocking(&self.inner, method.as_str(), params)
     }
 
     /// Sends an arbitrary JSON endpoint request on a libuv worker thread.
@@ -892,4 +895,22 @@ impl CorsaApiClient {
             },
         })
     }
+}
+
+fn call_json_blocking(client: &ApiClient, method: &str, params: Option<Value>) -> Result<Value> {
+    if method == "getBaseTypes" {
+        let params = params.ok_or_else(|| into_napi_error("getBaseTypes requires params"))?;
+        let params = from_value::<TypeProjectParams>(params)?;
+        let response = block_on(client.get_base_types(
+            SnapshotHandle::from(params.snapshot.as_str()),
+            ProjectHandle::from(params.project.as_str()),
+            TypeHandle::from(params.type_handle.as_str()),
+        ))
+        .map_err(into_napi_error)?;
+        return to_value(&response);
+    }
+
+    let response = block_on(client.raw_json_request(method, optional_value(params)))
+        .map_err(into_napi_error)?;
+    Ok(response)
 }
