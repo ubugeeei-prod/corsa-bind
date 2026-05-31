@@ -22,6 +22,7 @@ use crate::util::{
 };
 
 const OBJECT_FLAGS_REFERENCE: u32 = 1 << 2;
+const OBJECT_FLAGS_MAPPED: u32 = 1 << 5;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -195,7 +196,9 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                 type_handle,
                 object_flags,
             } => {
-                if object_flags.unwrap_or_default() & OBJECT_FLAGS_REFERENCE == 0 {
+                if object_flags.unwrap_or_default() & (OBJECT_FLAGS_REFERENCE | OBJECT_FLAGS_MAPPED)
+                    == 0
+                {
                     return to_value(&Vec::<corsa::api::TypeResponse>::new());
                 }
                 let response = block_on(self.client.get_type_arguments(
@@ -608,7 +611,7 @@ impl CorsaApiClient {
         type_handle: String,
         object_flags: Option<u32>,
     ) -> Result<Value> {
-        if object_flags.unwrap_or_default() & OBJECT_FLAGS_REFERENCE == 0 {
+        if object_flags.unwrap_or_default() & (OBJECT_FLAGS_REFERENCE | OBJECT_FLAGS_MAPPED) == 0 {
             return to_value(&Vec::<corsa::api::TypeResponse>::new());
         }
         let response = block_on(self.inner.get_type_arguments(

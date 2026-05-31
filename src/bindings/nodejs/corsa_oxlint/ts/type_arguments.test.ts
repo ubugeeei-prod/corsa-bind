@@ -82,4 +82,73 @@ describe("corsa oxlint type arguments", () => {
     expect(seen.object).toEqual([]);
     expect(seen.list).toEqual(["string"]);
   });
+
+  integrationCase("returns type arguments for mapped type references", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "mapped-type-arguments",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise mapped type argument lookups",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          VariableDeclarator(node: any) {
+            const name = node.id?.name;
+            if (!name) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node.id);
+            seen[name] = type
+              ? checker.getTypeArguments(type).map((argument) => checker.typeToString(argument))
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("mapped-type-arguments", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface Box<T> {",
+            "  value: T;",
+            "}",
+            "type MyReadonly<T> = { readonly [K in keyof T]: T[K] };",
+            "const wrap: Box<{ a: number }> = { value: { a: 1 } };",
+            'const readonlyFoo: Readonly<{ a: number; b: string }> = { a: 1, b: "x" };',
+            "const partialFoo: Partial<{ a: number; b: string }> = {};",
+            "const wrap2: MyReadonly<{ a: number }> = { a: 1 };",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.wrap).toEqual(["{ a: number; }"]);
+    expect(seen.readonlyFoo).toEqual(["{ a: number; b: string; }"]);
+    expect(seen.partialFoo).toEqual(["{ a: number; b: string; }"]);
+    expect(seen.wrap2).toEqual(["{ a: number; }"]);
+  });
 });
