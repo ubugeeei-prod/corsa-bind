@@ -222,6 +222,86 @@ describe("corsa oxlint type locations", () => {
     expect(seen.pet).toEqual(["Animal"]);
   });
 
+  integrationCase("falls back for constructor and intersection base types", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "non-instance-base-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise non-instance base type fallback lookups",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          VariableDeclarator(node: any) {
+            if (node.id?.name !== "ctor") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node.id);
+            seen.constructorBases = type
+              ? checker.getBaseTypes(type).map((base) => checker.typeToString(base))
+              : undefined;
+          },
+          ClassDeclaration(node: any) {
+            if (node.id?.name !== "MixedFoo") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node.id);
+            const directBases = type ? checker.getBaseTypes(type) : [];
+            seen.mixedBases = directBases.map((base) => checker.typeToString(base));
+            seen.intersectionBases = directBases.flatMap((base) =>
+              checker.getBaseTypes(base).map((nestedBase) => checker.typeToString(nestedBase)),
+            );
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("non-instance-base-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Animal {}",
+            "class Dog extends Animal {}",
+            "const ctor = Dog;",
+            "function Mixin<T extends new (...args: any[]) => {}>(Base: T) {",
+            "  return class extends Base {",
+            "    readonly mixed = true;",
+            "  };",
+            "}",
+            "class MixedFoo extends Mixin(Animal) {}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.constructorBases).toContain("Animal");
+    expect(seen.mixedBases?.[0]).toContain("Animal");
+    expect(seen.intersectionBases).toContain("Animal");
+  });
+
   integrationCase("resolves symbol and node handles exposed by signatures and types", () => {
     const seen: Record<string, unknown> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
