@@ -22,6 +22,7 @@ struct SpawnOptions {
     request_timeout_ms: Option<u64>,
     shutdown_timeout_ms: Option<u64>,
     outbound_capacity: Option<usize>,
+    env: Option<HashMap<String, String>>,
     allow_unstable_upstream_calls: Option<bool>,
 }
 
@@ -57,6 +58,11 @@ fn build_spawn_config(options: SpawnOptions) -> Result<ApiSpawnConfig, String> {
     }
     if let Some(capacity) = options.outbound_capacity {
         config = config.with_outbound_capacity(capacity);
+    }
+    if let Some(env) = options.env {
+        for (key, value) in env {
+            config = config.with_env(key, value);
+        }
     }
     if let Some(allow) = options.allow_unstable_upstream_calls {
         config = config.with_allow_unstable_upstream_calls(allow);
@@ -165,10 +171,19 @@ fn close_client(client: &CorsaApiClient) -> Result<(), String> {
             .lock()
             .map_err(|_| "corsa api client state poisoned".to_owned())?,
     );
+    let mut first_error = None;
     for snapshot in snapshots.into_values() {
-        block_on(snapshot.release()).map_err(|error| error.to_string())?;
+        if let Err(error) = block_on(snapshot.release()) {
+            first_error.get_or_insert_with(|| error.to_string());
+        }
     }
-    block_on(client.inner.close()).map_err(|error| error.to_string())
+    if let Err(error) = block_on(client.inner.close()) {
+        first_error.get_or_insert_with(|| error.to_string());
+    }
+    match first_error {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -614,22 +629,22 @@ pub unsafe extern "C" fn corsa_api_client_release_handle(
     let Some(handle) = read_required_text(handle, "handle") else {
         return false;
     };
-    let snapshot = {
+    {
         let Ok(mut snapshots) = client.snapshots.lock() else {
             set_last_error("corsa api client state poisoned");
             return false;
         };
-        snapshots.remove(handle.as_str())
-    };
-    if let Some(snapshot) = snapshot {
-        match block_on(snapshot.release()) {
-            Ok(()) => {
-                clear_last_error();
-                return true;
-            }
-            Err(error) => {
-                set_last_error(error);
-                return false;
+        if let Some(snapshot) = snapshots.get(handle.as_str()) {
+            match block_on(snapshot.release()) {
+                Ok(()) => {
+                    snapshots.remove(handle.as_str());
+                    clear_last_error();
+                    return true;
+                }
+                Err(error) => {
+                    set_last_error(error);
+                    return false;
+                }
             }
         }
     }

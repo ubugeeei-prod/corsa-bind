@@ -6,7 +6,8 @@ use crate::{
         corsa_api_client_get_declared_type_of_symbol_json, corsa_api_client_get_string_type_json,
         corsa_api_client_get_symbol_at_position_json, corsa_api_client_get_type_arguments_json,
         corsa_api_client_get_type_at_position_json, corsa_api_client_get_type_of_symbol_json,
-        corsa_api_client_spawn, corsa_api_client_update_snapshot_json,
+        corsa_api_client_release_handle, corsa_api_client_spawn,
+        corsa_api_client_update_snapshot_json,
     },
     error::corsa_error_message_take,
     types::{
@@ -447,6 +448,42 @@ fn resolves_type_arguments_over_ffi() {
     });
     let reference_arguments: serde_json::Value = serde_json::from_str(&reference_json).unwrap();
     assert_eq!(reference_arguments[0]["id"], "t0000000000000001");
+
+    assert!(unsafe { corsa_api_client_close(client) });
+    unsafe {
+        corsa_api_client_free(client);
+    }
+}
+
+#[test]
+fn retries_failed_snapshot_release_over_ffi() {
+    let Some(binary) = mock_corsa_binary() else {
+        return;
+    };
+    let options = serde_json::json!({
+        "executable": binary.display().to_string(),
+        "cwd": workspace_root().display().to_string(),
+        "mode": "jsonrpc",
+        "env": {
+            "CORSA_MOCK_FAIL_RELEASE_ONCE": "1"
+        },
+    })
+    .to_string();
+    let client = unsafe { corsa_api_client_spawn(text_ref(&options)) };
+    assert!(!client.is_null());
+
+    let snapshot_json = take_string(unsafe {
+        corsa_api_client_update_snapshot_json(
+            client,
+            text_ref(r#"{"openProject":"/workspace/tsconfig.json"}"#),
+        )
+    });
+    let snapshot: serde_json::Value = serde_json::from_str(&snapshot_json).unwrap();
+    let snapshot_id = snapshot["snapshot"].as_str().unwrap();
+
+    assert!(!unsafe { corsa_api_client_release_handle(client, text_ref(snapshot_id)) });
+    assert!(take_string(corsa_error_message_take()).contains("mock release failure"));
+    assert!(unsafe { corsa_api_client_release_handle(client, text_ref(snapshot_id)) });
 
     assert!(unsafe { corsa_api_client_close(client) });
     unsafe {
