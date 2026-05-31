@@ -17,7 +17,6 @@ const docsDir = join(root, "docs");
 const outDir = join(root, "assets", "og");
 const tmpDir = join(root, ".cache", "og-tmp");
 
-const SITE = "corsa-bind";
 const URL = "github.com/ubugeeei/corsa-bind";
 
 /** Finds the Chromium headless shell that Playwright installs. */
