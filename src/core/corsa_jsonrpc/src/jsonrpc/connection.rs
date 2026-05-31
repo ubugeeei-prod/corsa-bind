@@ -25,6 +25,8 @@ use super::{
 };
 
 const DEFAULT_READER_JOIN_TIMEOUT: Duration = Duration::from_millis(250);
+const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
+const JSONRPC_INTERNAL_ERROR: i64 = -32603;
 type ReaderResult = thread::Result<()>;
 
 /// Locally registered callback for a JSON-RPC method.
@@ -250,7 +252,7 @@ impl JsonRpcConnection {
                 let panic_inner = Arc::clone(&read_inner);
                 let result = catch_unwind(AssertUnwindSafe(|| read_inner.read_loop(reader)));
                 if result.is_err() {
-                    panic_inner.fail_pending(CorsaError::Join(CompactString::from(
+                    panic_inner.fail_transport(CorsaError::Join(CompactString::from(
                         "jsonrpc reader thread panicked",
                     )));
                 }
@@ -365,11 +367,10 @@ impl JsonRpcConnection {
 
     /// Signals writer shutdown and fails outstanding requests without waiting for the reader.
     pub fn begin_close(&self) -> Result<()> {
-        if self.inner.closed.swap(true, Ordering::SeqCst) {
-            return Ok(());
+        if !self.inner.closed.swap(true, Ordering::SeqCst) {
+            self.inner
+                .fail_pending(CorsaError::Closed("jsonrpc connection"));
         }
-        self.inner
-            .fail_pending(CorsaError::Closed("jsonrpc connection"));
         self.inner.outbound.lock().take();
         if let Some(task) = self.inner.write_task.lock().take() {
             let _ = task.join();
@@ -419,14 +420,14 @@ impl Inner {
             let payload = match read_frame(&mut reader) {
                 Ok(payload) => payload,
                 Err(err) => {
-                    self.fail_pending(err);
+                    self.fail_transport(err);
                     return;
                 }
             };
             let message: RawMessage = match serde_json::from_slice(&payload) {
                 Ok(message) => message,
                 Err(err) => {
-                    self.fail_pending(err.into());
+                    self.fail_transport(err.into());
                     return;
                 }
             };
@@ -441,21 +442,27 @@ impl Inner {
                 }
                 Ok(MessageKind::Request { id, method, params }) => {
                     if let Some(handler) = self.handlers.get(method.as_str()) {
-                        let response = (handler)(params);
+                        let response = self.invoke_handler(method.as_str(), handler, params);
                         let message = match response {
                             Ok(value) => RawMessage::response(id, value),
                             Err(error) => RawMessage::error(id, error),
                         };
                         let _ = self.send_outbound(message);
                     } else {
-                        let _ = self
-                            .events
-                            .send(InboundEvent::Request { id, method, params });
+                        let delivered = self.events.send(InboundEvent::Request {
+                            id: id.clone(),
+                            method: method.clone(),
+                            params,
+                        });
+                        if delivered == 0 {
+                            let _ = self
+                                .send_outbound(RawMessage::error(id, method_not_found(&method)));
+                        }
                     }
                 }
                 Ok(MessageKind::Notification { method, params }) => {
                     if let Some(handler) = self.handlers.get(method.as_str()) {
-                        let _ = (handler)(params);
+                        let _ = self.invoke_handler(method.as_str(), handler, params);
                     } else {
                         let _ = self
                             .events
@@ -463,7 +470,7 @@ impl Inner {
                     }
                 }
                 Err(err) => {
-                    self.fail_pending(err);
+                    self.fail_transport(err);
                     return;
                 }
             }
@@ -478,12 +485,12 @@ impl Inner {
             let body = match serde_json::to_vec(&message) {
                 Ok(body) => body,
                 Err(err) => {
-                    self.fail_pending(err.into());
+                    self.fail_transport(err.into());
                     return;
                 }
             };
             if let Err(err) = write_frame(&mut writer, &body) {
-                self.fail_pending(err);
+                self.fail_transport(err);
                 return;
             }
         }
@@ -508,6 +515,33 @@ impl Inner {
         }
     }
 
+    fn invoke_handler(
+        &self,
+        method: &str,
+        handler: &RpcHandler,
+        params: Value,
+    ) -> std::result::Result<Value, RpcResponseError> {
+        match catch_unwind(AssertUnwindSafe(|| (handler)(params))) {
+            Ok(result) => result,
+            Err(_) => {
+                warn!("jsonrpc local handler `{method}` panicked");
+                observe(
+                    self.observer.as_ref(),
+                    CorsaEvent::JsonRpcLocalHandlerPanicked {
+                        method: CompactString::from(method),
+                    },
+                );
+                Err(handler_panic_error(method))
+            }
+        }
+    }
+
+    fn fail_transport(&self, error: CorsaError) {
+        self.closed.store(true, Ordering::SeqCst);
+        self.outbound.lock().take();
+        self.fail_pending(error);
+    }
+
     fn fail_pending(&self, error: CorsaError) {
         if !matches!(error, CorsaError::Closed(_)) {
             warn!("jsonrpc transport failing pending requests: {error}");
@@ -526,5 +560,21 @@ impl Inner {
         for (_, tx) in pending.drain() {
             let _ = tx.send(Err(error.clone_for_pending()));
         }
+    }
+}
+
+fn method_not_found(method: &str) -> RpcResponseError {
+    RpcResponseError {
+        code: JSONRPC_METHOD_NOT_FOUND,
+        message: compact_format(format_args!("method not found: {method}")),
+        data: None,
+    }
+}
+
+fn handler_panic_error(method: &str) -> RpcResponseError {
+    RpcResponseError {
+        code: JSONRPC_INTERNAL_ERROR,
+        message: compact_format(format_args!("local JSON-RPC handler `{method}` panicked")),
+        data: None,
     }
 }

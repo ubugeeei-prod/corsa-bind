@@ -77,6 +77,36 @@ fn request_times_out_when_no_response_arrives() {
 }
 
 #[test]
+fn unhandled_request_without_subscriber_returns_method_not_found() {
+    let (client_socket, server_socket) = UnixStream::pair().unwrap();
+    let client = JsonRpcConnection::try_spawn_with_options(
+        BufReader::new(client_socket.try_clone().unwrap()),
+        client_socket,
+        RpcHandlerMap::default(),
+        JsonRpcConnectionOptions::new().with_request_timeout(Some(Duration::from_secs(5))),
+    )
+    .unwrap();
+    let server = JsonRpcConnection::try_spawn(
+        BufReader::new(server_socket.try_clone().unwrap()),
+        server_socket,
+        RpcHandlerMap::default(),
+    )
+    .unwrap();
+
+    let error =
+        corsa_runtime::block_on(server.request_value("missing", json!({"value": 1}))).unwrap_err();
+
+    assert!(matches!(
+        error,
+        crate::CorsaError::Rpc(error)
+            if error.code == -32601 && error.message.contains("method not found: missing")
+    ));
+
+    let _ = corsa_runtime::block_on(client.close());
+    let _ = corsa_runtime::block_on(server.close());
+}
+
+#[test]
 fn close_joins_reader_after_peer_closes() {
     let (client_socket, server_socket) = UnixStream::pair().unwrap();
     let client = JsonRpcConnection::try_spawn(
@@ -107,7 +137,60 @@ fn close_uses_bounded_reader_join_when_peer_stays_open() {
 }
 
 #[test]
-fn reader_panic_fails_pending_requests() {
+fn request_handler_panic_returns_error_and_keeps_connection_alive() {
+    let (client_socket, server_socket) = UnixStream::pair().unwrap();
+    let observer = Arc::new(EventCollector::default());
+    let mut handlers = RpcHandlerMap::default();
+    handlers.insert(
+        "boom".into(),
+        Arc::new(
+            |_| -> std::result::Result<serde_json::Value, crate::RpcResponseError> {
+                panic!("jsonrpc test handler panic");
+            },
+        ),
+    );
+    handlers.insert("echo".into(), Arc::new(Ok));
+    let client = JsonRpcConnection::try_spawn_with_options(
+        BufReader::new(client_socket.try_clone().unwrap()),
+        client_socket,
+        handlers,
+        JsonRpcConnectionOptions::new()
+            .with_request_timeout(Some(Duration::from_secs(5)))
+            .with_observer(observer.clone()),
+    )
+    .unwrap();
+    let server = JsonRpcConnection::try_spawn(
+        BufReader::new(server_socket.try_clone().unwrap()),
+        server_socket,
+        RpcHandlerMap::default(),
+    )
+    .unwrap();
+
+    let error =
+        corsa_runtime::block_on(server.request_value("boom", json!({"value": 1}))).unwrap_err();
+    assert!(matches!(
+        error,
+        crate::CorsaError::Rpc(error)
+            if error.code == -32603
+                && error.message.contains("local JSON-RPC handler `boom` panicked")
+    ));
+
+    let response: serde_json::Value =
+        corsa_runtime::block_on(server.request_value("echo", json!({"value": 2}))).unwrap();
+    assert_eq!(response, json!({"value": 2}));
+    assert_eq!(
+        observer.events.lock().unwrap().as_slice(),
+        &[CorsaEvent::JsonRpcLocalHandlerPanicked {
+            method: "boom".into(),
+        }]
+    );
+
+    let _ = corsa_runtime::block_on(client.close());
+    let _ = corsa_runtime::block_on(server.close());
+}
+
+#[test]
+fn notification_handler_panic_does_not_fail_pending_requests() {
     let (client_socket, server_socket) = UnixStream::pair().unwrap();
     let mut handlers = RpcHandlerMap::default();
     handlers.insert(
@@ -137,23 +220,20 @@ fn reader_panic_fails_pending_requests() {
         corsa_runtime::block_on(pending_client.request_value("never", json!({})))
     });
 
-    match server_events
+    let id = match server_events
         .recv_timeout(Duration::from_secs(1))
         .expect("server should receive pending request")
     {
-        InboundEvent::Request { method, .. } => assert_eq!(method.as_str(), "never"),
+        InboundEvent::Request { id, method, .. } => {
+            assert_eq!(method.as_str(), "never");
+            id
+        }
         _ => panic!("unexpected event"),
-    }
+    };
 
-    let started = std::time::Instant::now();
     server.notify("boom", json!({})).unwrap();
-    let error = waiter.join().unwrap().unwrap_err();
-
-    assert!(started.elapsed() < Duration::from_secs(1));
-    assert!(matches!(
-        error,
-        crate::CorsaError::Join(message) if message.contains("jsonrpc reader thread panicked")
-    ));
+    server.respond(id, json!({"ok": true})).unwrap();
+    assert_eq!(waiter.join().unwrap().unwrap(), json!({"ok": true}));
 
     let _ = corsa_runtime::block_on(client.close());
     let _ = corsa_runtime::block_on(server.close());
