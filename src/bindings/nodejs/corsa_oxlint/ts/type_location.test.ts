@@ -157,6 +157,71 @@ describe("corsa oxlint type locations", () => {
     expect(seen.usage).toBe("Foo");
   });
 
+  integrationCase("falls back for instantiated generic base types", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "generic-base-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise generic base type fallback lookups",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSPropertySignature(node: any) {
+            if (node.key?.name !== "pet") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.pet = type
+              ? checker.getBaseTypes(type).map((base) => checker.typeToString(base))
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("generic-base-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Animal {}",
+            "class Dog<T extends string> extends Animal {",
+            "  readonly breed!: T;",
+            "}",
+            "interface Container {",
+            '  pet: Dog<"corgi">;',
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.pet).toEqual(["Animal"]);
+  });
+
   integrationCase("resolves symbol and node handles exposed by signatures and types", () => {
     const seen: Record<string, unknown> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
