@@ -85,16 +85,70 @@ impl ApiClient {
         project: ProjectHandle,
         r#type: TypeHandle,
     ) -> Result<Vec<TypeResponse>> {
-        self.call::<Option<Vec<TypeResponse>>, _>(
-            "getBaseTypes",
-            TypeProjectRequest {
-                snapshot,
-                project,
-                r#type,
-            },
-        )
-        .await
-        .map(|items| items.unwrap_or_default())
+        let bases = self
+            .get_base_types_direct(snapshot.clone(), project.clone(), r#type.clone())
+            .await?;
+        if !bases.is_empty() {
+            return Ok(bases);
+        }
+
+        if let Some(target) = self
+            .get_target_of_type_or_none(snapshot.clone(), r#type.clone())
+            .await?
+            .filter(|target| target.id != r#type)
+        {
+            let target_bases = self
+                .get_base_types_direct(snapshot, project, target.id)
+                .await?;
+            if !target_bases.is_empty() {
+                return Ok(target_bases);
+            }
+        }
+
+        Ok(Vec::new())
+    }
+
+    async fn get_base_types_direct(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        match self
+            .call::<Option<Vec<TypeResponse>>, _>(
+                "getBaseTypes",
+                TypeProjectRequest {
+                    snapshot,
+                    project,
+                    r#type,
+                },
+            )
+            .await
+        {
+            Ok(items) => Ok(items.unwrap_or_default()),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(Vec::new())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn get_target_of_type_or_none(
+        &self,
+        snapshot: SnapshotHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        match self.get_target_of_type(snapshot, r#type).await {
+            Ok(target) => Ok(target),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// Returns the properties exposed by a type.
