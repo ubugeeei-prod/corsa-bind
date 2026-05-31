@@ -119,6 +119,35 @@ jobs:
       - name: Lint Rust
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+  rust-docs:
+    name: Rust Docs
+    runs-on: blacksmith-32vcpu-ubuntu-2404
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-rust-docs
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          cache-targets: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Check Rust documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps
+
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -312,6 +341,7 @@ jobs:
       - js-lint-types
       - rust-format
       - rust-lint
+      - rust-docs
       - build
       - test
       - public-facade
@@ -324,6 +354,7 @@ jobs:
           JS_LINT_TYPES: ${{ needs['js-lint-types'].result }}
           RUST_FORMAT: ${{ needs['rust-format'].result }}
           RUST_LINT: ${{ needs['rust-lint'].result }}
+          RUST_DOCS: ${{ needs['rust-docs'].result }}
           BUILD: ${{ needs.build.result }}
           TEST: ${{ needs.test.result }}
           PUBLIC_FACADE: ${{ needs['public-facade'].result }}
@@ -335,6 +366,7 @@ jobs:
             "JS_LINT_TYPES=$JS_LINT_TYPES" \
             "RUST_FORMAT=$RUST_FORMAT" \
             "RUST_LINT=$RUST_LINT" \
+            "RUST_DOCS=$RUST_DOCS" \
             "BUILD=$BUILD" \
             "TEST=$TEST" \
             "PUBLIC_FACADE=$PUBLIC_FACADE" \
@@ -343,7 +375,7 @@ jobs:
             result="${check#*=}"
             echo "$name: $result"
             # main 限定ジョブが PR で skipped になっても落とさないが、
-            # ここで集計する 8 ジョブは PR/push 双方で実行されるため success 必須。
+            # ここで集計するジョブは PR/push 双方で実行されるため success 必須。
             if [ "$result" != "success" ]; then
               failed=1
             fi

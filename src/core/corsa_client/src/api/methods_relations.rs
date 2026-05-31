@@ -330,8 +330,7 @@ impl ApiClient {
     ///
     /// Missing server data is normalized to an empty vector. A stale type
     /// handle that the server has dropped from its snapshot registry is also
-    /// treated as "no type arguments" so callers can keep analyzing the type;
-    /// see [`ApiClient::is_stale_handle_error`].
+    /// treated as "no type arguments" so callers can keep analyzing the type.
     pub async fn get_type_arguments(
         &self,
         snapshot: SnapshotHandle,
