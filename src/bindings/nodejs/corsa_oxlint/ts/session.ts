@@ -394,9 +394,11 @@ export class CorsaProjectSession {
   }
 
   getConstraintOfType(type: CorsaType): CorsaType | undefined {
-    return (type.flags & typeFlags.substitution) !== 0
-      ? this.callType("getConstraintOfType", type)
-      : undefined;
+    return this.rememberType(
+      this.client().getConstraintOfType(this.#snapshot!, this.projectId(), type.id) as
+        | CorsaType
+        | undefined,
+    );
   }
 
   private callType(method: string, type: CorsaType): CorsaType | undefined {
