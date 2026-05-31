@@ -9,6 +9,7 @@ use super::{
     requests_symbols::{SignatureOnlyRequest, TypeOnlyRequest, TypeProjectRequest},
 };
 use crate::Result;
+use corsa_core::utils::split_top_level_type_text;
 
 impl ApiClient {
     /// Returns the symbol attached to a type, if one exists.
@@ -172,15 +173,24 @@ impl ApiClient {
             .call::<Option<Vec<TypeResponse>>, _>(
                 "getTypeArguments",
                 TypeProjectRequest {
-                    snapshot,
-                    project,
-                    r#type,
+                    snapshot: snapshot.clone(),
+                    project: project.clone(),
+                    r#type: r#type.clone(),
                 },
             )
             .await
         {
-            Ok(items) => Ok(items.unwrap_or_default()),
-            Err(error) if Self::is_stale_handle_error(&error) => Ok(Vec::new()),
+            Ok(Some(items)) if !items.is_empty() => Ok(items),
+            Ok(_) => {
+                self.fallback_type_arguments_from_text(snapshot, project, r#type)
+                    .await
+            }
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                self.fallback_type_arguments_from_text(snapshot, project, r#type)
+                    .await
+            }
             Err(error) => Err(error),
         }
     }
@@ -317,5 +327,102 @@ impl ApiClient {
     ) -> Result<Option<TypeResponse>> {
         self.call_optional("getConstraintOfType", TypeOnlyRequest { snapshot, r#type })
             .await
+    }
+
+    async fn fallback_type_arguments_from_text(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        let text = match self
+            .type_to_string(snapshot, project, r#type.clone(), None, None)
+            .await
+        {
+            Ok(text) => text,
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                return Ok(Vec::new());
+            }
+            Err(error) => return Err(error),
+        };
+        let Some(arguments) = generic_argument_text(&text) else {
+            return Ok(Vec::new());
+        };
+        Ok(split_top_level_type_text(arguments, ',')
+            .into_iter()
+            .enumerate()
+            .map(|(index, text)| synthetic_type_response(r#type.as_str(), index, text))
+            .collect())
+    }
+}
+
+fn generic_argument_text(text: &str) -> Option<&str> {
+    let text = text.trim();
+    let mut angle_depth = 0usize;
+    let mut square_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut quote = None;
+    let mut open = None;
+    for (index, ch) in text.char_indices() {
+        if let Some(active_quote) = quote {
+            if ch == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '\'' | '"' | '`' => quote = Some(ch),
+            '<' if angle_depth == 0
+                && square_depth == 0
+                && paren_depth == 0
+                && brace_depth == 0 =>
+            {
+                open.get_or_insert(index);
+                angle_depth += 1;
+            }
+            '<' => angle_depth += 1,
+            '>' if angle_depth > 0 => angle_depth -= 1,
+            '[' => square_depth += 1,
+            ']' if square_depth > 0 => square_depth -= 1,
+            '(' => paren_depth += 1,
+            ')' if paren_depth > 0 => paren_depth -= 1,
+            '{' => brace_depth += 1,
+            '}' if brace_depth > 0 => brace_depth -= 1,
+            _ => {}
+        }
+    }
+    let open = open?;
+    if angle_depth != 0 || !text.ends_with('>') {
+        return None;
+    }
+    Some(&text[open + 1..text.len() - 1])
+}
+
+fn synthetic_type_response(source_type: &str, index: usize, text: String) -> TypeResponse {
+    TypeResponse {
+        id: TypeHandle::from(format!(
+            "synthetic-type-argument:{source_type}:{index}:{text}"
+        )),
+        flags: 0,
+        object_flags: None,
+        value: None,
+        target: None,
+        type_parameters: Vec::new(),
+        outer_type_parameters: Vec::new(),
+        local_type_parameters: Vec::new(),
+        element_flags: Vec::new(),
+        fixed_length: None,
+        readonly: None,
+        object_type: None,
+        index_type: None,
+        check_type: None,
+        extends_type: None,
+        base_type: None,
+        subst_constraint: None,
+        texts: vec![text],
+        symbol: None,
     }
 }

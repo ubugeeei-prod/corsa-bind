@@ -549,6 +549,20 @@ impl ApiClient {
         }
     }
 
+    /// Reports whether an error came from an upstream panic.
+    ///
+    /// A few experimental type-relation endpoints can panic for type shapes
+    /// they do not currently support. Higher-level typed helpers use this to
+    /// fall back to adjacent upstream endpoints without exposing the panic to
+    /// consumers.
+    pub(crate) fn is_protocol_panic_error(error: &CorsaError) -> bool {
+        match error {
+            CorsaError::Rpc(rpc) => is_protocol_panic_message(&rpc.message),
+            CorsaError::Protocol(message) => is_protocol_panic_message(message),
+            _ => false,
+        }
+    }
+
     async fn request_after_initialize<T, P>(&self, method: &str, params: &P) -> Result<T>
     where
         T: DeserializeOwned,
@@ -659,6 +673,10 @@ fn is_unknown_api_method_message(message: &str) -> bool {
 
 fn is_stale_handle_message(message: &str) -> bool {
     message.contains("not found in snapshot registry")
+}
+
+fn is_protocol_panic_message(message: &str) -> bool {
+    message.contains("panic:")
 }
 
 #[cfg(test)]
