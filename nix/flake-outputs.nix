@@ -29,6 +29,24 @@ in
             runHook postInstall
           '';
         };
+      # Blacksmith CLI (testbox / sticky disk). Distributed as a single Go
+      # binary; pinned to the `latest` channel like moonbit above. The CLI's
+      # background auto-update can't write into the read-only Nix store, so it
+      # degrades to a warning and keeps running — bump the hash to upgrade.
+      blacksmith = pkgs.stdenvNoCC.mkDerivation {
+        pname = "blacksmith";
+        version = "latest";
+        src = pkgs.fetchurl {
+          url = "https://clireleases.blacksmith.sh/cli/latest/darwin/arm64/blacksmith";
+          hash = "sha256-ozZ6tBUbEqTqdxUVwxSg1ItiKUwLZxMl1Ccx8r6XP2Y=";
+        };
+        dontUnpack = true;
+        installPhase = ''
+          runHook preInstall
+          install -Dm755 $src $out/bin/blacksmith
+          runHook postInstall
+        '';
+      };
       vitePlusRuntimePnpmDeps = pkgs.fetchPnpmDeps {
         pname = "vite-plus-runtime";
         version = vitePlusVersion;
@@ -93,6 +111,7 @@ in
       default = vitePlus;
       moonbit = moonbit;
       vite-plus = vitePlus;
+      blacksmith = blacksmith;
     });
 
   devShells = forAllSystems (system:
@@ -100,6 +119,7 @@ in
       pkgs = import nixpkgs { inherit system; };
       vitePlus = self.packages.${system}.vite-plus;
       moonPkg = self.packages.${system}.moonbit;
+      blacksmithPkg = self.packages.${system}.blacksmith;
       swiftPkg = pkgs.swift;
       dotnetPkg = pkgs.dotnet-sdk_9;
       tnixCli = tnix.packages.${system}.tnix;
@@ -108,6 +128,7 @@ in
         pkgs.libiconv
       ];
       toolchainPath = lib.makeBinPath [
+        blacksmithPkg
         pkgs.cargo
         pkgs.clang
         pkgs.clippy
@@ -116,7 +137,9 @@ in
         pkgs.go_1_26
         pkgs.gnugrep
         moonPkg
+        pkgs.openssh
         pkgs.pkg-config
+        pkgs.rsync
         pkgs.rustc
         pkgs.rustfmt
         swiftPkg
@@ -129,6 +152,7 @@ in
       default = pkgs.mkShell {
         packages = [
           vitePlus
+          blacksmithPkg
           pkgs.cargo
           pkgs.clang
           pkgs.clippy
@@ -138,7 +162,9 @@ in
           pkgs.gnugrep
           pkgs.libiconv
           moonPkg
+          pkgs.openssh
           pkgs.pkg-config
+          pkgs.rsync
           pkgs.rustc
           pkgs.rustfmt
           swiftPkg
