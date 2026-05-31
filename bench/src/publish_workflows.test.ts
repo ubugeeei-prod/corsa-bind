@@ -70,4 +70,17 @@ describe("publish workflows", () => {
     );
     expect(workflow).toContain("node --strip-types ./scripts/pr_benchmark_report.ts comment");
   });
+
+  it("hydrates a Blacksmith Testbox for benchmark work", () => {
+    const workflow = readWorkflow(".github/workflows/blacksmith-testbox.yml");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("testbox_id:");
+    expect(workflow).toContain("runs-on: blacksmith-32vcpu-ubuntu-2404");
+    expect(workflow).toMatch(/uses: useblacksmith\/begin-testbox@[a-f0-9]{40} # v2/);
+    expect(workflow).toMatch(/uses: useblacksmith\/run-testbox@[a-f0-9]{40} # v2/);
+    expect(workflow).toContain("vp run -w build_corsa");
+    expect(workflow).toContain("vp run -w build_corsa_oxlint");
+    expect(workflow).toContain("vp run -w bench_tooling_setup");
+    expect(workflow).not.toContain("vp run -w bench_verify");
+  });
 });
