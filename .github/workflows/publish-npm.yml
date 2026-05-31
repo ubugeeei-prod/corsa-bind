@@ -248,7 +248,7 @@ jobs:
     needs:
       - release-gates
       - build-native-bindings
-    runs-on: blacksmith-32vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: release
     permissions:
@@ -261,25 +261,11 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
-      - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
-        with:
-          key: ${{ github.repository }}-publish-npm-publish-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
-          path: target
-
-      - name: Mount pnpm store sticky disk
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
-        with:
-          key: ${{ github.repository }}-publish-npm-publish-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
-          path: ~/.local/share/pnpm/store
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          cache-targets: false
 
       - name: Setup Node.js for npm trusted publishing
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -291,7 +277,7 @@ jobs:
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
-          cache: ${{ runner.os != 'Linux' }}
+          cache: true
           run-install: true
 
       - name: Download native binding artifacts
