@@ -41,6 +41,7 @@ pub struct CorsaApiClient {
 }
 
 const OBJECT_FLAGS_REFERENCE: u32 = 1 << 2;
+const OBJECT_FLAGS_MAPPED: u32 = 1 << 5;
 
 fn build_spawn_config(options: SpawnOptions) -> Result<ApiSpawnConfig, String> {
     let mut config = ApiSpawnConfig::new(options.executable);
@@ -441,7 +442,7 @@ pub unsafe extern "C" fn corsa_api_client_get_type_arguments_json(
     let Some(type_handle) = read_required_text(type_handle, "type_handle") else {
         return CorsaString::default();
     };
-    if object_flags & OBJECT_FLAGS_REFERENCE == 0 {
+    if object_flags & (OBJECT_FLAGS_REFERENCE | OBJECT_FLAGS_MAPPED) == 0 {
         return take_json(&Vec::<corsa_client::TypeResponse>::new());
     }
     match block_on(client.inner.get_type_arguments(

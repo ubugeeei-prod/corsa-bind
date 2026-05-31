@@ -574,6 +574,39 @@ fn get_type_arguments_degrades_stale_handle_to_empty() {
     });
 }
 
+#[test]
+fn get_type_arguments_hydrates_symbol_backed_arguments() {
+    block_on(async {
+        let client = ApiClient::spawn(support::api_config(ApiMode::AsyncJsonRpcStdio))
+            .await
+            .unwrap();
+        let snapshot = client
+            .update_snapshot(UpdateSnapshotParams {
+                open_project: Some("/workspace/tsconfig.json".into()),
+                file_changes: None,
+                overlay_changes: None,
+            })
+            .await
+            .unwrap();
+        let project = snapshot.projects[0].id.clone();
+
+        let arguments = client
+            .get_type_arguments(
+                snapshot.handle.clone(),
+                project,
+                corsa::api::TypeHandle::from("t00000000000000ee"),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(arguments.len(), 1);
+        assert_eq!(arguments[0].id.as_str(), "t00000000000000e2");
+        assert_eq!(arguments[0].texts, ["Dog"]);
+
+        client.close().await.unwrap();
+    });
+}
+
 fn count_lines(path: impl AsRef<std::path::Path>) -> usize {
     fs::read_to_string(path)
         .map(|text| text.lines().count())

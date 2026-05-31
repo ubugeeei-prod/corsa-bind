@@ -4,7 +4,7 @@
 //! to each other after the checker has already identified them.
 
 use super::{
-    ApiClient, IndexInfo, ProjectHandle, SignatureHandle, SnapshotHandle, TypeHandle,
+    ApiClient, IndexInfo, ProjectHandle, SignatureHandle, SnapshotHandle, SymbolHandle, TypeHandle,
     TypePredicateResponse, TypeResponse,
     requests_symbols::{SignatureOnlyRequest, TypeOnlyRequest, TypeProjectRequest},
 };
@@ -348,7 +348,10 @@ impl ApiClient {
             )
             .await
         {
-            Ok(Some(items)) if !items.is_empty() => Ok(items),
+            Ok(Some(items)) if !items.is_empty() => {
+                self.structural_type_arguments_from_symbols(snapshot, project, items)
+                    .await
+            }
             Ok(_) => {
                 self.fallback_type_arguments_from_text(snapshot, project, r#type)
                     .await
@@ -358,6 +361,123 @@ impl ApiClient {
             {
                 self.fallback_type_arguments_from_text(snapshot, project, r#type)
                     .await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn structural_type_arguments_from_symbols(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        items: Vec<TypeResponse>,
+    ) -> Result<Vec<TypeResponse>> {
+        let mut structural = Vec::with_capacity(items.len());
+        for item in items {
+            let Some(symbol) = item.symbol.clone() else {
+                structural.push(item);
+                continue;
+            };
+            let Some(candidate) = self
+                .symbol_type_or_none(snapshot.clone(), project.clone(), symbol)
+                .await?
+            else {
+                structural.push(item);
+                continue;
+            };
+            if self
+                .same_type_text(snapshot.clone(), project.clone(), &item, &candidate)
+                .await?
+            {
+                structural.push(candidate);
+            } else {
+                structural.push(item);
+            }
+        }
+        Ok(structural)
+    }
+
+    async fn symbol_type_or_none(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Option<TypeResponse>> {
+        match self
+            .get_declared_type_of_symbol(snapshot.clone(), project.clone(), symbol.clone())
+            .await
+        {
+            Ok(Some(r#type)) => Ok(Some(r#type)),
+            Ok(None) => self.type_of_symbol_or_none(snapshot, project, symbol).await,
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn type_of_symbol_or_none(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Option<TypeResponse>> {
+        match self.get_type_of_symbol(snapshot, project, symbol).await {
+            Ok(r#type) => Ok(r#type),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn same_type_text(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        left: &TypeResponse,
+        right: &TypeResponse,
+    ) -> Result<bool> {
+        if left.id == right.id || type_response_texts_overlap(left, right) {
+            return Ok(true);
+        }
+        let Some(left_text) = self
+            .type_response_text_or_none(snapshot.clone(), project.clone(), left)
+            .await?
+        else {
+            return Ok(false);
+        };
+        let Some(right_text) = self
+            .type_response_text_or_none(snapshot, project, right)
+            .await?
+        else {
+            return Ok(false);
+        };
+        Ok(left_text == right_text)
+    }
+
+    async fn type_response_text_or_none(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: &TypeResponse,
+    ) -> Result<Option<String>> {
+        if let Some(text) = r#type.texts.iter().find(|text| !text.is_empty()) {
+            return Ok(Some(text.clone()));
+        }
+        match self
+            .type_to_string(snapshot, project, r#type.id.clone(), None, None)
+            .await
+        {
+            Ok(text) => Ok(Some(text)),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(None)
             }
             Err(error) => Err(error),
         }
@@ -596,6 +716,13 @@ fn append_unique_types(target: &mut Vec<TypeResponse>, source: Vec<TypeResponse>
         }
         target.push(item);
     }
+}
+
+fn type_response_texts_overlap(left: &TypeResponse, right: &TypeResponse) -> bool {
+    left.texts
+        .iter()
+        .filter(|text| !text.is_empty())
+        .any(|left_text| right.texts.iter().any(|right_text| left_text == right_text))
 }
 
 fn fallback_intersection_parts_from_type_texts(
