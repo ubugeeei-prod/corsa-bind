@@ -20,7 +20,7 @@ env:
 jobs:
   js-format:
     name: JS/TS Format
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -40,7 +40,7 @@ jobs:
 
   js-lint-types:
     name: JS/TS Lint and Types
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -60,7 +60,7 @@ jobs:
 
   rust-format:
     name: Rust Format
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -258,7 +258,7 @@ jobs:
 
   quality:
     name: Quality
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 5
     needs:
       - js-format
