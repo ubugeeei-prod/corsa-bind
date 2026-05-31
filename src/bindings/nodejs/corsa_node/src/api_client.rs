@@ -734,7 +734,7 @@ impl CorsaApiClient {
         })
     }
 
-    /// Resolves type arguments for type-reference objects and returns [] otherwise.
+    /// Resolves type arguments for type-reference and mapped objects, and returns [] otherwise.
     #[napi]
     pub fn get_type_arguments(
         &self,

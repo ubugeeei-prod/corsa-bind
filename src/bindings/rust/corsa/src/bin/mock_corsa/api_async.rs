@@ -14,6 +14,10 @@ use std::{
 /// integration tests can drive the stale-handle degradation path in
 /// `getTypeArguments`.
 const STALE_TYPE_HANDLE: &str = "t00000000000000ff";
+const MAPPED_UTILITY_TYPE_HANDLE: &str = "t00000000000000ee";
+const MAPPED_UTILITY_ARGUMENT_SYMBOL: &str = "s00000000000000ee";
+const MAPPED_UTILITY_SPARSE_ARGUMENT: &str = "t00000000000000e1";
+const MAPPED_UTILITY_STRUCTURAL_ARGUMENT: &str = "t00000000000000e2";
 static RELEASE_FAILURE_USED: AtomicBool = AtomicBool::new(false);
 
 pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
@@ -80,6 +84,11 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             "getSymbolsAtPositions" | "getSymbolsAtLocations" => {
                 Some(json!([common::symbol("value"), Value::Null]))
             }
+            "getDeclaredTypeOfSymbol"
+                if symbol_param(&params) == Some(MAPPED_UTILITY_ARGUMENT_SYMBOL) =>
+            {
+                Some(mapped_utility_argument(MAPPED_UTILITY_STRUCTURAL_ARGUMENT))
+            }
             "getTypeOfSymbol"
             | "getDeclaredTypeOfSymbol"
             | "getTypeAtLocation"
@@ -115,8 +124,11 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
                         .collect(),
                 ))
             }
-            "getBaseTypes"
-            | "getTypeArguments"
+            "getBaseTypes" => Some(json!([common::type_response("t0000000000000001")])),
+            "getTypeArguments" if type_param(&params) == Some(MAPPED_UTILITY_TYPE_HANDLE) => Some(
+                json!([mapped_utility_argument(MAPPED_UTILITY_SPARSE_ARGUMENT,)]),
+            ),
+            "getTypeArguments"
             | "getTypesOfType"
             | "getTypeParametersOfType"
             | "getOuterTypeParametersOfType"
@@ -183,6 +195,24 @@ fn stale_handle_error(method: &str, params: &Value) -> Option<RpcResponseError> 
         )
         .into(),
         data: None,
+    })
+}
+
+fn type_param(params: &Value) -> Option<&str> {
+    params.get("type").and_then(Value::as_str)
+}
+
+fn symbol_param(params: &Value) -> Option<&str> {
+    params.get("symbol").and_then(Value::as_str)
+}
+
+fn mapped_utility_argument(id: &str) -> Value {
+    json!({
+        "id": id,
+        "flags": 524288,
+        "objectFlags": 3,
+        "symbol": MAPPED_UTILITY_ARGUMENT_SYMBOL,
+        "texts": ["Dog"],
     })
 }
 
