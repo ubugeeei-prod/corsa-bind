@@ -214,6 +214,42 @@ fn dropping_many_snapshots_uses_bounded_release_queue() {
 }
 
 #[test]
+fn failed_explicit_snapshot_release_is_retried_on_drop() {
+    let count_dir = tempfile::tempdir().unwrap();
+    block_on(async {
+        let client = ApiClient::spawn(
+            support::api_config(ApiMode::AsyncJsonRpcStdio)
+                .with_env(
+                    "CORSA_MOCK_COUNT_DIR",
+                    count_dir.path().display().to_string(),
+                )
+                .with_env("CORSA_MOCK_FAIL_RELEASE_ONCE", "1")
+                .with_shutdown_timeout(Duration::from_secs(10)),
+        )
+        .await
+        .unwrap();
+        let snapshot = client
+            .update_snapshot(UpdateSnapshotParams {
+                open_project: Some("/workspace/tsconfig.json".into()),
+                file_changes: None,
+                overlay_changes: None,
+            })
+            .await
+            .unwrap();
+
+        let error = snapshot.release().await.unwrap_err();
+        assert!(matches!(
+            error,
+            corsa::CorsaError::Rpc(error) if error.message.contains("mock release failure")
+        ));
+
+        drop(snapshot);
+        client.close().await.unwrap();
+    });
+    assert_eq!(count_lines(count_dir.path().join("release.count")), 2);
+}
+
+#[test]
 fn async_api_full_surface_methods() {
     block_on(async {
         let client = ApiClient::spawn(support::api_config(ApiMode::AsyncJsonRpcStdio))

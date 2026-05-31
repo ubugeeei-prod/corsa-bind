@@ -201,7 +201,13 @@ impl ManagedSnapshot {
         if self.released.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        self.client.release_handle(self.handle.as_str()).await
+        match self.client.release_handle(self.handle.as_str()).await {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.released.store(false, Ordering::SeqCst);
+                Err(error)
+            }
+        }
     }
 }
 

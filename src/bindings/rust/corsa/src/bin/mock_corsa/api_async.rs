@@ -6,6 +6,7 @@ use std::{
     fs::{OpenOptions, create_dir_all},
     io::{BufReader, BufWriter, Write as _},
     path::Path,
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
@@ -13,6 +14,7 @@ use std::{
 /// integration tests can drive the stale-handle degradation path in
 /// `getTypeArguments`.
 const STALE_TYPE_HANDLE: &str = "t00000000000000ff";
+static RELEASE_FAILURE_USED: AtomicBool = AtomicBool::new(false);
 
 pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
     let stdin = std::io::stdin();
@@ -30,6 +32,10 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
         record_params(method.as_str(), &params);
         if let (Some(id), Some(error)) = (id.clone(), stale_handle_error(method.as_str(), &params))
         {
+            jsonrpc::write_message(&mut writer, &RawMessage::error(id, error))?;
+            continue;
+        }
+        if let (Some(id), Some(error)) = (id.clone(), release_error(method.as_str())) {
             jsonrpc::write_message(&mut writer, &RawMessage::error(id, error))?;
             continue;
         }
@@ -146,6 +152,20 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             jsonrpc::write_message(&mut writer, &RawMessage::response(id, response))?;
         }
     }
+}
+
+fn release_error(method: &str) -> Option<RpcResponseError> {
+    if method != "release" || std::env::var_os("CORSA_MOCK_FAIL_RELEASE_ONCE").is_none() {
+        return None;
+    }
+    if RELEASE_FAILURE_USED.swap(true, Ordering::SeqCst) {
+        return None;
+    }
+    Some(RpcResponseError {
+        code: -32000,
+        message: "mock release failure".into(),
+        data: None,
+    })
 }
 
 fn stale_handle_error(method: &str, params: &Value) -> Option<RpcResponseError> {

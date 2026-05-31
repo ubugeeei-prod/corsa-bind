@@ -18,6 +18,11 @@ pub enum CorsaEvent {
     },
     /// The JSON-RPC writer queue rejected a message because it was full.
     JsonRpcOutboundQueueFull,
+    /// A locally registered JSON-RPC handler panicked while processing a peer message.
+    JsonRpcLocalHandlerPanicked {
+        /// JSON-RPC method name whose local handler panicked.
+        method: CompactString,
+    },
     /// Pending JSON-RPC requests were failed because the transport broke.
     JsonRpcPendingRequestsFailed {
         /// Transport error propagated to pending callers.
