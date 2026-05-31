@@ -290,6 +290,7 @@ export class CorsaProjectSession {
           snapshot: this.#snapshot,
           project: this.projectId(),
           type: type.id,
+          texts: this.typeTexts(type),
         }) ?? [],
       );
     } catch (error) {
@@ -511,6 +512,14 @@ export class CorsaProjectSession {
     } catch {
       // Some upstream handles are only renderable before a later relation query.
     }
+  }
+
+  private typeTexts(type: CorsaType): readonly string[] {
+    if (Array.isArray(type.texts) && type.texts.length > 0) {
+      return type.texts;
+    }
+    const cached = this.#typeTextById.get(type.id);
+    return cached === undefined ? [] : [cached];
   }
 
   private rememberSymbol<T extends CorsaSymbol | undefined>(symbol: T): T {

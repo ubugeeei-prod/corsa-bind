@@ -40,6 +40,16 @@ struct TypeProjectParams {
     project: String,
     #[serde(rename = "type")]
     type_handle: String,
+    #[serde(default)]
+    texts: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TypeOnlyParams {
+    snapshot: String,
+    #[serde(rename = "type")]
+    type_handle: String,
 }
 
 type SnapshotStore = Arc<Mutex<FastMap<CompactString, ManagedSnapshot>>>;
@@ -901,9 +911,20 @@ fn call_json_blocking(client: &ApiClient, method: &str, params: Option<Value>) -
     if method == "getBaseTypes" {
         let params = params.ok_or_else(|| into_napi_error("getBaseTypes requires params"))?;
         let params = from_value::<TypeProjectParams>(params)?;
-        let response = block_on(client.get_base_types(
+        let response = block_on(client.get_base_types_with_texts(
             SnapshotHandle::from(params.snapshot.as_str()),
             ProjectHandle::from(params.project.as_str()),
+            TypeHandle::from(params.type_handle.as_str()),
+            params.texts.as_slice(),
+        ))
+        .map_err(into_napi_error)?;
+        return to_value(&response);
+    }
+    if method == "getTypesOfType" {
+        let params = params.ok_or_else(|| into_napi_error("getTypesOfType requires params"))?;
+        let params = from_value::<TypeOnlyParams>(params)?;
+        let response = block_on(client.get_types_of_type(
+            SnapshotHandle::from(params.snapshot.as_str()),
             TypeHandle::from(params.type_handle.as_str()),
         ))
         .map_err(into_napi_error)?;

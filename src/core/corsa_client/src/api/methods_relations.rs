@@ -85,6 +85,19 @@ impl ApiClient {
         project: ProjectHandle,
         r#type: TypeHandle,
     ) -> Result<Vec<TypeResponse>> {
+        self.get_base_types_with_texts(snapshot, project, r#type, &[])
+            .await
+    }
+
+    /// Returns the immediate base types of a type, using already-rendered type
+    /// text as a fallback when the upstream handle can no longer be rendered.
+    pub async fn get_base_types_with_texts(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+        type_texts: &[String],
+    ) -> Result<Vec<TypeResponse>> {
         let bases = self
             .get_base_types_direct(snapshot.clone(), project.clone(), r#type.clone())
             .await?;
@@ -98,11 +111,72 @@ impl ApiClient {
             .filter(|target| target.id != r#type)
         {
             let target_bases = self
-                .get_base_types_direct(snapshot, project, target.id)
+                .get_base_types_direct(snapshot.clone(), project.clone(), target.id)
                 .await?;
             if !target_bases.is_empty() {
                 return Ok(target_bases);
             }
+        }
+
+        let mut construct_return_bases = Vec::new();
+        let construct_signatures = self
+            .get_signatures_of_type_or_empty(snapshot.clone(), project.clone(), r#type.clone(), 1)
+            .await?;
+        for signature in construct_signatures {
+            let Some(return_type) = self
+                .get_return_type_of_signature_or_none(
+                    snapshot.clone(),
+                    project.clone(),
+                    signature.id,
+                )
+                .await?
+                .filter(|return_type| return_type.id != r#type)
+            else {
+                continue;
+            };
+            let mut return_bases = self
+                .get_base_types_direct(snapshot.clone(), project.clone(), return_type.id.clone())
+                .await?;
+            if return_bases.is_empty() {
+                if let Some(target) = self
+                    .get_target_of_type_or_none(snapshot.clone(), return_type.id.clone())
+                    .await?
+                    .filter(|target| target.id != return_type.id)
+                {
+                    return_bases = self
+                        .get_base_types_direct(snapshot.clone(), project.clone(), target.id)
+                        .await?;
+                }
+            }
+            if return_bases.is_empty() {
+                return_bases = self
+                    .get_types_of_type(snapshot.clone(), return_type.id)
+                    .await?;
+            }
+            append_unique_types(&mut construct_return_bases, return_bases);
+        }
+        if !construct_return_bases.is_empty() {
+            return Ok(construct_return_bases);
+        }
+
+        let intersection_parts = self
+            .get_types_of_type(snapshot.clone(), r#type.clone())
+            .await?;
+        if !intersection_parts.is_empty() {
+            return Ok(intersection_parts);
+        }
+
+        let text_parts = self
+            .fallback_intersection_parts_from_text(snapshot, project, r#type.clone())
+            .await?;
+        if !text_parts.is_empty() {
+            return Ok(text_parts);
+        }
+
+        let hinted_text_parts =
+            fallback_intersection_parts_from_type_texts(r#type.as_str(), type_texts);
+        if !hinted_text_parts.is_empty() {
+            return Ok(hinted_text_parts);
         }
 
         Ok(Vec::new())
@@ -142,6 +216,47 @@ impl ApiClient {
     ) -> Result<Option<TypeResponse>> {
         match self.get_target_of_type(snapshot, r#type).await {
             Ok(target) => Ok(target),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn get_signatures_of_type_or_empty(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+        kind: i32,
+    ) -> Result<Vec<super::SignatureResponse>> {
+        match self
+            .get_signatures_of_type(snapshot, project, r#type, kind)
+            .await
+        {
+            Ok(signatures) => Ok(signatures),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(Vec::new())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn get_return_type_of_signature_or_none(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        signature: SignatureHandle,
+    ) -> Result<Option<TypeResponse>> {
+        match self
+            .get_return_type_of_signature(snapshot, project, signature)
+            .await
+        {
+            Ok(return_type) => Ok(return_type),
             Err(error)
                 if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
             {
@@ -267,12 +382,21 @@ impl ApiClient {
         snapshot: SnapshotHandle,
         r#type: TypeHandle,
     ) -> Result<Vec<TypeResponse>> {
-        self.call::<Option<Vec<TypeResponse>>, _>(
-            "getTypesOfType",
-            TypeOnlyRequest { snapshot, r#type },
-        )
-        .await
-        .map(|items| items.unwrap_or_default())
+        match self
+            .call::<Option<Vec<TypeResponse>>, _>(
+                "getTypesOfType",
+                TypeOnlyRequest { snapshot, r#type },
+            )
+            .await
+        {
+            Ok(items) => Ok(items.unwrap_or_default()),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(Vec::new())
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// Returns the direct type parameters declared on a type.
@@ -435,6 +559,62 @@ impl ApiClient {
             .map(|(index, text)| synthetic_type_response(r#type.as_str(), index, text))
             .collect())
     }
+
+    async fn fallback_intersection_parts_from_text(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        let text = match self
+            .type_to_string(snapshot, project, r#type.clone(), None, None)
+            .await
+        {
+            Ok(text) => text,
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                return Ok(Vec::new());
+            }
+            Err(error) => return Err(error),
+        };
+        let parts = split_top_level_type_text(text.as_str(), '&');
+        if parts.len() <= 1 {
+            return Ok(Vec::new());
+        }
+        Ok(parts
+            .into_iter()
+            .enumerate()
+            .map(|(index, text)| synthetic_type_response(r#type.as_str(), index, text))
+            .collect())
+    }
+}
+
+fn append_unique_types(target: &mut Vec<TypeResponse>, source: Vec<TypeResponse>) {
+    for item in source {
+        if target.iter().any(|existing| existing.id == item.id) {
+            continue;
+        }
+        target.push(item);
+    }
+}
+
+fn fallback_intersection_parts_from_type_texts(
+    source_type: &str,
+    type_texts: &[String],
+) -> Vec<TypeResponse> {
+    for text in type_texts {
+        let parts = split_top_level_type_text(text.as_str(), '&');
+        if parts.len() <= 1 {
+            continue;
+        }
+        return parts
+            .into_iter()
+            .enumerate()
+            .map(|(index, text)| synthetic_type_response(source_type, index, text))
+            .collect();
+    }
+    Vec::new()
 }
 
 fn generic_argument_text(text: &str) -> Option<&str> {
