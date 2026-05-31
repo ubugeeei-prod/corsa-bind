@@ -50,6 +50,24 @@ export interface CorsaApiClient {
     file: string,
     position: number,
   ): Promise<TypeResponse | null>;
+  getTypeAtSourceRange(
+    snapshot: string,
+    project: string,
+    file: string,
+    start: number,
+    end: number,
+    sourceText: string,
+    kind?: string,
+  ): TypeResponse | null;
+  getTypeAtSourceRangeAsync(
+    snapshot: string,
+    project: string,
+    file: string,
+    start: number,
+    end: number,
+    sourceText: string,
+    kind?: string,
+  ): Promise<TypeResponse | null>;
   getSymbolAtPosition(
     snapshot: string,
     project: string,

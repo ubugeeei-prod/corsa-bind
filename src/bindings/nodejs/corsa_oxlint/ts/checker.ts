@@ -43,10 +43,12 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
         return typeOfNewExpression(node as Node, this);
       }
       const lookupNode = nodeForTypeLookup(node);
-      return sessionForContext(context).session.getTypeAtPosition(
+      return sessionForContext(context).session.getTypeAtSourceRange(
         filenameFor(context, lookupNode),
         toPosition(lookupNode),
+        endPosition(lookupNode),
         sourceTextFor(context, lookupNode),
+        nodeKind(lookupNode),
       );
     },
     getContextualType(node) {
@@ -230,6 +232,21 @@ function nodeForTypeLookup(node: Node | CorsaNode): Node | CorsaNode {
     default:
       return node;
   }
+}
+
+function endPosition(node: Node | CorsaNode): number {
+  if ("end" in node) {
+    return node.end;
+  }
+  const range = (node as Node & { readonly range?: readonly [number, number] }).range;
+  if (!range) {
+    throw new Error("corsa oxlint requires ESTree nodes with range data");
+  }
+  return range[1];
+}
+
+function nodeKind(node: Node | CorsaNode): string | undefined {
+  return "pos" in node ? undefined : (node as { readonly type?: string }).type;
 }
 
 function childNode(node: Node, key: string): Node | undefined {

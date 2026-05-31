@@ -17,6 +17,7 @@ type FileCache = {
   sourceText?: string;
   projectId: string;
   typeByPosition: Map<number, CorsaType | undefined>;
+  typeBySourceRange: Map<string, CorsaType | undefined>;
   symbolByPosition: Map<number, CorsaSymbol | undefined>;
 };
 
@@ -123,6 +124,39 @@ export class CorsaProjectSession {
     const type = this.rememberType(state.typeByPosition.get(position));
     if (type) {
       this.#typeLookupById.set(type.id, { fileName, position, sourceText });
+    }
+    return type;
+  }
+
+  getTypeAtSourceRange(
+    fileName: string,
+    start: number,
+    end: number,
+    sourceText: string | undefined,
+    kind: string | undefined,
+  ): CorsaType | undefined {
+    if (!sourceText || end <= start) {
+      return this.getTypeAtPosition(fileName, start, sourceText);
+    }
+    const state = this.fileState(fileName, sourceText);
+    const key = `${start}:${end}:${kind ?? ""}`;
+    if (!state.typeBySourceRange.has(key)) {
+      state.typeBySourceRange.set(
+        key,
+        this.client().getTypeAtSourceRange(
+          this.#snapshot!,
+          state.projectId,
+          fileName,
+          start,
+          end,
+          sourceText,
+          kind,
+        ) as CorsaType | undefined,
+      );
+    }
+    const type = this.rememberType(state.typeBySourceRange.get(key));
+    if (type) {
+      this.#typeLookupById.set(type.id, { fileName, position: start, sourceText });
     }
     return type;
   }
@@ -710,6 +744,7 @@ export class CorsaProjectSession {
       sourceText: prepared.sourceText,
       projectId: project?.id ?? this.projectId(),
       typeByPosition: new Map(),
+      typeBySourceRange: new Map(),
       symbolByPosition: new Map(),
     };
     this.#files.set(fileName, state);
