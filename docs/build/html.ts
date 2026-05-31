@@ -26,11 +26,17 @@ const NAV_GROUPS = [
       "language_bindings/index.html",
       "oxlint_guide/index.html",
       "native_rules/index.html",
+      "stylistic_rules/index.html",
     ],
   },
   {
     title: "Run",
-    routes: ["ci_guide/index.html", "performance/index.html", "benchmarking_guide/index.html"],
+    routes: [
+      "ci_guide/index.html",
+      "performance/index.html",
+      "stylistic_benchmark/index.html",
+      "benchmarking_guide/index.html",
+    ],
   },
   {
     title: "Ship",
@@ -64,8 +70,10 @@ const ROUTE_TITLES = new Map<string, string>([
   ["language_bindings/index.html", "Language bindings"],
   ["oxlint_guide/index.html", "Type-aware Oxlint"],
   ["native_rules/index.html", "Native rules"],
+  ["stylistic_rules/index.html", "Stylistic rules"],
   ["ci_guide/index.html", "CI and local checks"],
   ["performance/index.html", "Performance commands"],
+  ["stylistic_benchmark/index.html", "Stylistic benchmark"],
   ["benchmarking_guide/index.html", "Benchmarking model"],
   ["production_readiness/index.html", "Production readiness"],
   ["production_readiness_audit/index.html", "Readiness audit"],
@@ -86,6 +94,7 @@ export function renderHtml(
   page: MarkdownPage,
   compiled: CompiledMarkdown,
   nav: readonly MarkdownPage[],
+  ogImagePath = "/og.png",
 ): string {
   const title = compiled.title || titleFromRoute(page.route);
   const fullTitle = title === SITE_NAME ? SITE_NAME : `${title} - ${SITE_NAME}`;
@@ -93,7 +102,9 @@ export function renderHtml(
   const description =
     typeof frontmatterDescription === "string" ? frontmatterDescription : DEFAULT_DESCRIPTION;
   const pageUrl = `${SITE_URL}/${page.route === "index.html" ? "" : page.route}`;
-  const ogImage = `${SITE_URL}/og.png`;
+  const ogImage = `${SITE_URL}${ogImagePath}`;
+  const isHome = page.route === "index.html";
+  const body = rewriteMarkdownLinks(compiled.html);
   return `<!doctype html>
 <html lang="en" data-theme="light">
 <head>
@@ -110,7 +121,8 @@ export function renderHtml(
   <meta property="og:url" content="${escapeHtml(pageUrl)}">
   <meta property="og:image" content="${escapeHtml(ogImage)}">
   <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="${escapeHtml(fullTitle)}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapeHtml(fullTitle)}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
@@ -130,13 +142,85 @@ export function renderHtml(
       </a>
       <nav aria-label="Documentation">${renderNav(nav, page.route)}</nav>
     </aside>
-    <div class="content-shell">
-      <main class="void-md">${rewriteMarkdownLinks(compiled.html)}</main>
+    <div class="content-shell${isHome ? " is-home-shell" : ""}">
+      ${isHome ? renderHero(description) : ""}
+      <main class="void-md${isHome ? " is-home" : ""}">${body}</main>
       ${renderPager(nav, page.route)}
     </div>
   </div>
+  ${mermaidScript()}
 </body>
 </html>`;
+}
+
+/**
+ * Client-side Mermaid renderer. The static pipeline emits ```mermaid fences as
+ * ordinary `language-mermaid` code blocks; this turns them into rendered SVG in
+ * the browser. Mermaid is only fetched on pages that actually contain a
+ * diagram, and the source is read from the inner `<code>` so the language label
+ * and copy button never leak into the graph definition.
+ */
+function mermaidScript(): string {
+  return `<script type="module">
+  const wrappers = [...document.querySelectorAll('[class*="language-mermaid"]')]
+    .filter((el) => !(el.parentElement && el.parentElement.closest('[class*="language-mermaid"]')));
+  if (wrappers.length) {
+    const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' });
+    for (const wrapper of wrappers) {
+      const code = wrapper.querySelector('code') ?? wrapper;
+      const pre = document.createElement('pre');
+      pre.className = 'mermaid';
+      pre.textContent = code.textContent.replace(/\\n+$/, '');
+      wrapper.replaceWith(pre);
+    }
+    await mermaid.run({ querySelector: 'pre.mermaid' });
+  }
+</script>`;
+}
+
+/** The landing-page hero: a two-column intro with a live code sample. */
+function renderHero(_description: string): string {
+  const mark = `<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 15 H13 V49 H20"/><path d="M44 15 H51 V49 H44"/><path d="M24 24 L32 32 L24 40"/><path d="M33 24 L41 32 L33 40"/></svg>`;
+  const k = (text: string) => `<span class="tk-k">${text}</span>`;
+  const s = (text: string) => `<span class="tk-s">${escapeHtml(text)}</span>`;
+  const p = (text: string) => `<span class="tk-p">${escapeHtml(text)}</span>`;
+  const code = [
+    `${k("import")} { OxlintUtils } ${k("from")} ${s('"corsa-oxlint"')}${p(";")}`,
+    ``,
+    `${k("export")} ${k("const")} rule = createRule({`,
+    `  create(context) {`,
+    `    ${k("const")} services = OxlintUtils.getParserServices(context)${p(";")}`,
+    `    ${k("const")} checker = services.program.getTypeChecker()${p(";")}`,
+    `    ${k("return")} {`,
+    `      AwaitExpression(node) {`,
+    `        ${k("const")} type = checker.getTypeAtLocation(node.argument)${p(";")}`,
+    `        ${k("if")} (!isThenable(type)) context.report({ node })${p(";")}`,
+    `      },`,
+    `    };`,
+    `  },`,
+    `});`,
+  ].join("\n");
+  return `<header class="hero">
+    <div class="hero-copy">
+      <span class="hero-eyebrow"><span class="hero-mark" aria-hidden="true">${mark}</span>Rust · Node · C ABI</span>
+      <h1 class="hero-title"><span>corsa</span><span class="hero-title-dim">-bind</span></h1>
+      <p class="hero-tagline">Author <strong>type-aware lint rules</strong> with real <strong>Corsa</strong> types — plus a stdio API&nbsp;+ LSP and zero-cost hot paths. No forks, no patches.</p>
+      <div class="hero-actions">
+        <a class="hero-button primary" href="/getting_started/">Get started</a>
+        <a class="hero-button" href="https://github.com/ubugeeei/corsa-bind">GitHub<span class="hero-arrow" aria-hidden="true">↗</span></a>
+      </div>
+      <ul class="hero-badges" aria-label="Highlights">
+        <li>type-aware custom rules</li>
+        <li>59 tsgolint-parity rules</li>
+        <li>real types from Corsa</li>
+      </ul>
+    </div>
+    <figure class="hero-code" aria-label="Authoring a type-aware custom rule with corsa-oxlint">
+      <figcaption class="hero-code-bar"><span></span><span></span><span></span><em>no-floating-await.ts</em></figcaption>
+      <pre><code>${code}</code></pre>
+    </figure>
+  </header>`;
 }
 
 function renderNav(pages: readonly MarkdownPage[], activeRoute: string): string {

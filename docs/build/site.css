@@ -22,6 +22,14 @@ html {
   background: var(--page);
   color-scheme: light;
   scroll-behavior: smooth;
+  /*
+   * Disable iOS Safari's text autosizing. Without this, Safari "boosts" the
+   * font of code/pre blocks (especially after orientation change or when the
+   * block is wider than the viewport), making code suddenly render larger
+   * than the 14px we pin below.
+   */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -326,6 +334,21 @@ nav a[aria-current="page"] {
   font-size: 0.9em;
 }
 
+/* Mermaid diagrams, rendered client-side from `language-mermaid` blocks. */
+.void-md .mermaid {
+  margin: 26px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: center;
+  line-height: 0;
+}
+
+.void-md .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .void-md table {
   display: block;
   width: 100%;
@@ -497,5 +520,232 @@ nav a[aria-current="page"] {
 
   .void-md > h1:first-child {
     font-size: 32px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Landing hero
+ * ------------------------------------------------------------------------- */
+
+/* The home page widens the content column so the hero can run two-up. */
+.content-shell.is-home-shell {
+  width: min(100%, 1200px);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 48px;
+  margin: 0 0 56px;
+  padding: 8px 0 56px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-family: var(--vmd-font-mono, ui-monospace, Menlo, monospace);
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+}
+
+.hero-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgb(24 24 27 / 6%);
+}
+
+.hero-mark svg {
+  width: 17px;
+  height: 17px;
+}
+
+.hero-title {
+  margin: 22px 0 0;
+  font-family: var(--vmd-font-mono, ui-monospace, Menlo, monospace);
+  font-size: clamp(46px, 5.4vw, 66px);
+  font-weight: 700;
+  letter-spacing: -2.5px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.hero-title-dim {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.hero-tagline {
+  max-width: 30em;
+  margin: 22px 0 0;
+  color: var(--ink-soft);
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.hero-tagline strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.hero-button {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 560;
+  text-decoration: none;
+}
+
+.hero-button:hover {
+  border-color: var(--ink);
+}
+
+.hero-button.primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+.hero-button.primary:hover {
+  background: var(--accent-hover);
+}
+
+.hero-arrow {
+  margin-left: 7px;
+  color: var(--faint);
+}
+
+.hero-button.primary .hero-arrow {
+  color: rgb(255 255 255 / 60%);
+}
+
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-badges li {
+  padding: 6px 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-family: var(--vmd-font-mono, ui-monospace, Menlo, monospace);
+  font-size: 12.5px;
+}
+
+/* Code sample card */
+.hero-code {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: 0 24px 48px -28px rgb(24 24 27 / 22%);
+}
+
+.hero-code-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 16px;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.hero-code-bar span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.hero-code-bar em {
+  margin-left: 9px;
+  font-style: normal;
+  font-family: var(--vmd-font-mono, ui-monospace, Menlo, monospace);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.hero-code pre {
+  margin: 0;
+  padding: 20px 22px;
+  overflow-x: auto;
+}
+
+.hero-code code {
+  font-family: var(--vmd-font-mono, ui-monospace, Menlo, monospace);
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre;
+}
+
+.hero-code .tk-k {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.hero-code .tk-s {
+  color: var(--muted);
+}
+
+.hero-code .tk-p {
+  color: var(--faint);
+}
+
+/* The hero already states the title and tagline, so drop the Markdown
+ * overview's leading H1 and its description paragraph on the home page. */
+.void-md.is-home > h1:first-of-type,
+.void-md.is-home > h1:first-of-type + p {
+  display: none;
+}
+
+@media (max-width: 1080px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .hero-code {
+    max-width: 640px;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    padding-bottom: 40px;
+  }
+
+  .hero-tagline {
+    font-size: 16.5px;
   }
 }

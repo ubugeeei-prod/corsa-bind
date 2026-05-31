@@ -8,39 +8,62 @@ description: Native Rust and JavaScript bindings for the Corsa TypeScript checke
 Native Rust and JavaScript bindings for the **Corsa** TypeScript checker — fast,
 type-aware tooling without reimplementing the checker and without forking it.
 
-`corsa-bind` is a multi-crate workspace for talking to
-[Corsa](https://devblogs.microsoft.com/typescript/typescript-native-port/) (the
-native TypeScript 7 implementation line) over stdio. Hot paths live in Rust and
-stay zero-cost; `napi-rs` and a shared C ABI surface that performance to
-JavaScript, C, C++, Go, Zig, C#, Swift, and MoonBit — so you can build custom
-checker tooling and type-aware lint rules on top of the real upstream checker.
+**Corsa** is Microsoft's native Go port of the TypeScript compiler — the
+[TypeScript 7 / "native preview"](https://devblogs.microsoft.com/typescript/typescript-native-port/)
+line, commonly known as **`tsgo`**. It is the same engine that powers `tsgo`'s
+`--noEmit` type checking, exposed over stdio.
+
+`corsa-bind` is a multi-crate workspace for talking to that checker. Hot paths
+live in Rust and stay zero-cost; `napi-rs` and a shared C ABI surface that
+performance to JavaScript, C, C++, Go, Zig, C#, Swift, and MoonBit — so you can
+build custom checker tooling and type-aware lint rules on top of the real
+upstream checker, with no forks and no patches.
 
 ## Quick start
 
+`corsa-bind` runs on top of [Oxlint](https://oxc.rs). Install the plugin from
+npm:
+
 ```bash
-nix develop
-vp install
-vp run -w build
+npm i corsa-oxlint
 ```
 
-```rust
-use corsa::{
-    api::{ApiClient, ApiSpawnConfig},
-    runtime::block_on,
-};
+Register the plugin in your Oxlint config and point `settings.corsaOxlint` at
+your `tsconfig.json` and a Corsa (`tsgo`) binary — that is what makes the rules
+type-aware:
 
-fn main() -> Result<(), corsa::CorsaError> {
-    block_on(async {
-        let client = ApiClient::spawn(ApiSpawnConfig::new(".cache/corsa")).await?;
-        let init = client.initialize().await?;
-        println!("{}", init.current_directory);
-        client.close().await
-    })
-}
+```js
+// oxlint.config.js
+import { corsaOxlintPlugin } from "corsa-oxlint/rules";
+
+export default [
+  {
+    settings: {
+      corsaOxlint: {
+        parserOptions: {
+          project: ["./tsconfig.json"],
+          corsa: { executable: "./.cache/corsa" },
+        },
+      },
+    },
+    plugins: { typescript: corsaOxlintPlugin },
+    rules: {
+      "typescript/no-floating-promises": "error",
+      "typescript/no-misused-promises": "error",
+    },
+  },
+];
 ```
 
-New here? The [Getting started guide](./getting_started.md) walks through the
-Rust, Node.js, and type-aware Oxlint entry points from a clean checkout.
+Then run Oxlint:
+
+```bash
+npx oxlint
+```
+
+The [Getting started guide](./getting_started.md) covers the Corsa binary,
+authoring your own type-aware rules, and the `@corsa-bind/napi` and Rust entry
+points.
 
 ## Why corsa-bind
 
@@ -65,11 +88,13 @@ Rust, Node.js, and type-aware Oxlint entry points from a clean checkout.
 - [Language bindings](./language_bindings.md) — the `corsa_ffi` C ABI for C, C++, Go, Zig, C#, Swift, MoonBit.
 - [Type-aware Oxlint](./oxlint_guide.md) — `corsa-oxlint` rule authoring, native rules, and stylistic rules.
 - [Native rules](./native_rules.md) — the full set of type-aware rules implemented natively in Rust.
+- [Stylistic rules](./stylistic_rules.md) — the Rust-backed `@stylistic`-compatible formatting rules.
 
 ## Run and ship
 
 - [CI and local checks](./ci_guide.md) — reproduce the GitHub checks locally.
 - [Performance commands](./performance.md) — benchmark entrypoints and the artifacts they write.
+- [Stylistic benchmark](./stylistic_benchmark.md) — native stylistic throughput vs the upstream `@stylistic` plugin.
 - [Release process](./release_guide.md) — package publishing and release verification.
 - [API index](./api/index.md) — generated reference pages for the public Node entrypoints.
 

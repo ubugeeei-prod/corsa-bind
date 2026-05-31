@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { Plugin } from "vite";
@@ -61,6 +61,18 @@ export function corsaDocsPlugin(): Plugin {
           source: readFileSync(resolve(rootDir, assetPath)),
         });
       }
+      // Per-page Open Graph cards (assets/og/<slug>.png → /og/<slug>.png).
+      const ogDir = resolve(rootDir, "assets/og");
+      if (existsSync(ogDir)) {
+        for (const file of readdirSync(ogDir)) {
+          if (!file.endsWith(".png")) continue;
+          this.emitFile({
+            type: "asset",
+            fileName: `og/${file}`,
+            source: readFileSync(resolve(ogDir, file)),
+          });
+        }
+      }
     },
     closeBundle() {
       rmSync(resolve(rootDir, "dist/docs/.vite"), { force: true, recursive: true });
@@ -76,7 +88,17 @@ async function renderPages(rootDir: string): Promise<Array<MarkdownPage & { html
   return Promise.all(
     pages.map(async (page) => ({
       ...page,
-      html: renderHtml(page, await compile(page.markdown), pages),
+      html: renderHtml(page, await compile(page.markdown), pages, ogImageFor(rootDir, page.route)),
     })),
   );
+}
+
+/** Resolves the Open Graph image path for a route, preferring a per-page card. */
+function ogImageFor(rootDir: string, route: string): string {
+  if (route === "index.html") {
+    return "/og.png";
+  }
+  const slug = route.replace(/\/index\.html$/, "").replace(/\//g, "-");
+  const cardPath = resolve(rootDir, "assets/og", `${slug}.png`);
+  return existsSync(cardPath) ? `/og/${slug}.png` : "/og.png";
 }

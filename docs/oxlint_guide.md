@@ -152,9 +152,11 @@ implemented + pending sets drift away from the tracked upstream list.
 ## Stylistic rules
 
 `corsa-oxlint/stylistic` is a separate path for Rust-backed style rules that do
-**not** need type information. The rules scan the full source text in native
-code, and the JS plugin caches diagnostics per source/config so all enabled
-rules share a single N-API call.
+**not** need type information. They are native re-implementations of the
+[`@stylistic`](https://eslint.style) plugin: a single Rust scan (lexer +
+bracket/expression context) turns the source into diagnostics, and the JS plugin
+caches the result per source/config so all enabled rules share a single N-API
+call.
 
 ```ts
 import { corsaStylisticPlugin } from "corsa-oxlint/stylistic";
@@ -165,20 +167,18 @@ export default [
       corsaStylistic: {
         rules: {
           "eol-last": ["always"],
-          "linebreak-style": ["unix"],
-          "no-multiple-empty-lines": [{ max: 1, maxBOF: 0, maxEOF: 1 }],
-          "no-tabs": [{ allowIndentationTabs: false }],
-          "no-trailing-spaces": [{ skipBlankLines: false }],
           quotes: ["single", { avoidEscape: true }],
-          "unicode-bom": ["never"],
+          "comma-dangle": ["always-multiline"],
+          "object-curly-spacing": ["always"],
+          "space-before-function-paren": ["always"],
         },
       },
     },
     plugins: { stylistic: corsaStylisticPlugin },
     rules: {
       "stylistic/eol-last": "error",
-      "stylistic/linebreak-style": "error",
       "stylistic/quotes": "error",
+      "stylistic/comma-dangle": "error",
     },
   },
 ];
@@ -188,6 +188,10 @@ Options can be supplied directly in `rules` (for example
 `"stylistic/quotes": ["error", "single"]`). For the fastest multi-rule path,
 put the same option payloads in `settings.corsaStylistic.rules` so the bridge
 batches every configured stylistic rule into one Rust source scan.
+
+See the **[stylistic rules reference](./stylistic_rules.md)** for the native
+scan engine, the full rule list with default options, and how parity is verified
+against the real `@stylistic` plugin.
 
 ## Testing rules with `RuleTester`
 

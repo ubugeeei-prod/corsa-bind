@@ -59,6 +59,41 @@ fn stylistic_rules_run_in_one_source_pass() {
 }
 
 #[test]
+fn stylistic_token_rules_share_one_tokenization_pass() {
+    let diagnostics = run_stylistic_lint(
+        "const f = (a ,b)=>a;",
+        &StylisticRunConfig {
+            rules: vec![
+                StylisticRuleConfig {
+                    name: "comma-spacing".to_owned(),
+                    options: json!([]),
+                },
+                StylisticRuleConfig {
+                    name: "arrow-spacing".to_owned(),
+                    options: json!([]),
+                },
+                StylisticRuleConfig {
+                    name: "space-in-parens".to_owned(),
+                    options: json!([]),
+                },
+            ],
+        },
+    )
+    .unwrap();
+
+    // comma-spacing: space before `,` (unexpected) + missing after.
+    // arrow-spacing: missing before and after `=>`.
+    let rule_names = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.rule_name.as_str())
+        .collect::<Vec<_>>();
+    assert!(rule_names.contains(&"comma-spacing"));
+    assert!(rule_names.contains(&"arrow-spacing"));
+    // `(a ,b)` has no space adjacent to the parens themselves.
+    assert!(!rule_names.contains(&"space-in-parens"));
+}
+
+#[test]
 fn stylistic_tabs_and_bom_respect_options() {
     let diagnostics = run_stylistic_lint(
         "\u{feff}const value = 1;\n\tconst ok = 2;\nconst\tother = 3;\n",

@@ -125,19 +125,17 @@ impl RustLintRule for StrictBooleanExpressionsRule {
                     traverse_node(ctx, test, &opts, true);
                 }
             }
-            "LogicalExpression" => {
+            "LogicalExpression"
                 // The `??` operator is not a boolean position.
-                if node.field_str("operator") != Some("??") {
+                if node.field_str("operator") != Some("??") => {
                     traverse_logical_expression(ctx, node, &opts, false);
                 }
-            }
-            "UnaryExpression" => {
-                if node.field_str("operator") == Some("!") {
+            "UnaryExpression"
+                if node.field_str("operator") == Some("!") => {
                     if let Some(argument) = node.child("argument") {
                         traverse_node(ctx, argument, &opts, true);
                     }
                 }
-            }
             "CallExpression" => {
                 check_call_expression(ctx, node, &opts);
             }
