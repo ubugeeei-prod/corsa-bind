@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use corsa::{
     api::{
         ApiClient, ManagedSnapshot, ProjectHandle, SnapshotHandle, SymbolHandle, TypeHandle,
-        UpdateSnapshotParams,
+        TypeResponse, UpdateSnapshotParams,
     },
     fast::{CompactString, FastMap},
     runtime::block_on,
@@ -50,6 +50,16 @@ struct TypeOnlyParams {
     snapshot: String,
     #[serde(rename = "type")]
     type_handle: String,
+}
+
+struct SourceRangeLookup {
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    file: String,
+    start: u32,
+    end: u32,
+    source_text: String,
+    kind: Option<String>,
 }
 
 type SnapshotStore = Arc<Mutex<FastMap<CompactString, ManagedSnapshot>>>;
@@ -99,6 +109,15 @@ enum JsonTaskKind {
         project: String,
         file: String,
         position: u32,
+    },
+    GetTypeAtSourceRange {
+        snapshot: String,
+        project: String,
+        file: String,
+        start: u32,
+        end: u32,
+        source_text: String,
+        kind: Option<String>,
     },
     GetSymbolAtPosition {
         snapshot: String,
@@ -195,6 +214,30 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                     ProjectHandle::from(project.as_str()),
                     file.clone(),
                     *position,
+                ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetTypeAtSourceRange {
+                snapshot,
+                project,
+                file,
+                start,
+                end,
+                source_text,
+                kind,
+            } => {
+                let response = block_on(get_type_at_source_range(
+                    &self.client,
+                    SourceRangeLookup {
+                        snapshot: SnapshotHandle::from(snapshot.as_str()),
+                        project: ProjectHandle::from(project.as_str()),
+                        file: file.clone(),
+                        start: *start,
+                        end: *end,
+                        source_text: source_text.clone(),
+                        kind: kind.clone(),
+                    },
                 ))
                 .map_err(into_napi_error)?;
                 to_value(&response)
@@ -598,6 +641,61 @@ impl CorsaApiClient {
         })
     }
 
+    /// Resolves the checker type for a source range using Rust-side lookup hints.
+    #[allow(clippy::too_many_arguments)]
+    #[napi]
+    pub fn get_type_at_source_range(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+        start: u32,
+        end: u32,
+        source_text: String,
+        kind: Option<String>,
+    ) -> Result<Value> {
+        let response = block_on(get_type_at_source_range(
+            &self.inner,
+            SourceRangeLookup {
+                snapshot: SnapshotHandle::from(snapshot.as_str()),
+                project: ProjectHandle::from(project.as_str()),
+                file,
+                start,
+                end,
+                source_text,
+                kind,
+            },
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[napi]
+    pub fn get_type_at_source_range_async(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+        start: u32,
+        end: u32,
+        source_text: String,
+        kind: Option<String>,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetTypeAtSourceRange {
+                snapshot,
+                project,
+                file,
+                start,
+                end,
+                source_text,
+                kind,
+            },
+        })
+    }
+
     /// Resolves the checker symbol visible at a file position.
     #[napi]
     pub fn get_symbol_at_position(
@@ -904,6 +1002,440 @@ impl CorsaApiClient {
                 snapshots: self.snapshots.clone(),
             },
         })
+    }
+}
+
+async fn get_type_at_source_range(
+    client: &ApiClient,
+    params: SourceRangeLookup,
+) -> corsa::Result<Option<TypeResponse>> {
+    let direct = client
+        .get_type_at_position(
+            params.snapshot.clone(),
+            params.project.clone(),
+            params.file.clone(),
+            params.start,
+        )
+        .await?;
+
+    for position in fallback_type_lookup_positions(
+        params.kind.as_deref(),
+        params.start,
+        params.end,
+        params.source_text.as_str(),
+    ) {
+        if position == params.start {
+            continue;
+        }
+        let candidate = get_type_or_symbol_type_at_position(
+            client,
+            params.snapshot.clone(),
+            params.project.clone(),
+            params.file.clone(),
+            position,
+        )
+        .await?;
+        if candidate.is_some() {
+            return Ok(candidate);
+        }
+    }
+
+    Ok(direct)
+}
+
+async fn get_type_or_symbol_type_at_position(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    file: String,
+    position: u32,
+) -> corsa::Result<Option<TypeResponse>> {
+    let direct = client
+        .get_type_at_position(snapshot.clone(), project.clone(), file.clone(), position)
+        .await?;
+    if direct
+        .as_ref()
+        .map(|r#type| !is_any_type(r#type))
+        .unwrap_or(false)
+    {
+        return Ok(direct);
+    }
+
+    let Some(symbol) = client
+        .get_symbol_at_position(snapshot.clone(), project.clone(), file, position)
+        .await?
+    else {
+        return Ok(direct);
+    };
+    if let Some(declared) = client
+        .get_declared_type_of_symbol(snapshot.clone(), project.clone(), symbol.id.clone())
+        .await?
+    {
+        return Ok(Some(declared));
+    }
+    if let Some(apparent) = client
+        .get_type_of_symbol(snapshot, project, symbol.id)
+        .await?
+    {
+        return Ok(Some(apparent));
+    }
+    Ok(direct)
+}
+
+fn is_any_type(r#type: &TypeResponse) -> bool {
+    (r#type.flags & 1) != 0 || corsa::utils::is_any_like_type_texts(&r#type.texts)
+}
+
+fn fallback_type_lookup_positions(
+    kind: Option<&str>,
+    start: u32,
+    end: u32,
+    source_text: &str,
+) -> Vec<u32> {
+    let Some(kind) = kind else {
+        return Vec::new();
+    };
+    let Some((start_byte, end_byte)) = utf16_byte_range(source_text, start, end) else {
+        return Vec::new();
+    };
+    if start_byte >= end_byte {
+        return Vec::new();
+    }
+
+    let slice = &source_text[start_byte..end_byte];
+    let mut positions = Vec::new();
+    match kind {
+        "ClassBody" => {
+            push_utf16_position(
+                &mut positions,
+                source_text,
+                class_name_before(source_text, start_byte),
+            );
+        }
+        "MethodDefinition" => {
+            let member_name = first_member_name_range(slice);
+            if member_name
+                .map(|(start, end)| &slice[start..end] == "constructor")
+                .unwrap_or(false)
+            {
+                push_utf16_position(
+                    &mut positions,
+                    source_text,
+                    class_name_before(source_text, start_byte),
+                );
+            } else {
+                push_utf16_position(
+                    &mut positions,
+                    source_text,
+                    member_name.map(|(offset, _)| start_byte + offset),
+                );
+            }
+        }
+        "PropertyDefinition" | "TSAbstractMethodDefinition" | "TSParameterProperty" => {
+            push_utf16_position(
+                &mut positions,
+                source_text,
+                first_member_name_range(slice).map(|(offset, _)| start_byte + offset),
+            );
+        }
+        "TSAsExpression" => {
+            push_utf16_position(
+                &mut positions,
+                source_text,
+                type_assertion_as_offset(slice).map(|offset| start_byte + offset),
+            );
+        }
+        "TSTypeAssertion" => {
+            push_utf16_position(
+                &mut positions,
+                source_text,
+                type_assertion_angle_offset(slice).map(|offset| start_byte + offset),
+            );
+        }
+        _ => {}
+    }
+    positions
+}
+
+fn push_utf16_position(positions: &mut Vec<u32>, source_text: &str, byte_offset: Option<usize>) {
+    let Some(byte_offset) = byte_offset else {
+        return;
+    };
+    let Some(position) = utf16_index_from_byte(source_text, byte_offset) else {
+        return;
+    };
+    if !positions.contains(&position) {
+        positions.push(position);
+    }
+}
+
+fn utf16_byte_range(text: &str, start: u32, end: u32) -> Option<(usize, usize)> {
+    if start > end {
+        return None;
+    }
+    Some((
+        byte_index_from_utf16(text, start)?,
+        byte_index_from_utf16(text, end)?,
+    ))
+}
+
+fn byte_index_from_utf16(text: &str, target: u32) -> Option<usize> {
+    let mut utf16 = 0u32;
+    for (byte, ch) in text.char_indices() {
+        if utf16 == target {
+            return Some(byte);
+        }
+        let next = utf16.checked_add(ch.len_utf16() as u32)?;
+        if target < next {
+            return None;
+        }
+        utf16 = next;
+    }
+    if utf16 == target {
+        Some(text.len())
+    } else {
+        None
+    }
+}
+
+fn utf16_index_from_byte(text: &str, byte_offset: usize) -> Option<u32> {
+    if !text.is_char_boundary(byte_offset) {
+        return None;
+    }
+    u32::try_from(text[..byte_offset].encode_utf16().count()).ok()
+}
+
+fn class_name_before(source_text: &str, body_start: usize) -> Option<usize> {
+    let prefix = source_text.get(..body_start)?;
+    let mut index = 0usize;
+    let mut scanner = SourceScanner::default();
+    let mut candidate = None;
+    while index < prefix.len() {
+        let next = scanner.skip(prefix, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        if matches_keyword(prefix, "class", index) {
+            candidate = first_identifier_after(prefix, index + "class".len());
+            index += "class".len();
+            continue;
+        }
+        index += char_len_at(prefix, index)?;
+    }
+    candidate
+}
+
+fn first_member_name_range(text: &str) -> Option<(usize, usize)> {
+    let mut index = skip_whitespace(text, 0);
+    loop {
+        if char_at(text, index) == Some('#') {
+            index += 1;
+        }
+        let (start, end) = read_identifier(text, index)?;
+        let word = &text[start..end];
+        if is_modifier(word) {
+            index = skip_whitespace(text, end);
+            continue;
+        }
+        return Some((start, end));
+    }
+}
+
+fn type_assertion_as_offset(text: &str) -> Option<usize> {
+    let keyword = find_keyword_outside_trivia(text, "as")?;
+    first_identifier_after(text, keyword + "as".len())
+}
+
+fn type_assertion_angle_offset(text: &str) -> Option<usize> {
+    let open = text.find('<')?;
+    let close = matching_angle_close(text, open)?;
+    first_identifier_after(&text[..close], open + 1)
+}
+
+fn matching_angle_close(text: &str, open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut index = open;
+    let mut scanner = SourceScanner::default();
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        let ch = char_at(text, index)?;
+        if ch == '<' {
+            depth += 1;
+        } else if ch == '>' {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(index);
+            }
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+fn find_keyword_outside_trivia(text: &str, keyword: &str) -> Option<usize> {
+    let mut index = 0usize;
+    let mut scanner = SourceScanner::default();
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        if matches_keyword(text, keyword, index) {
+            return Some(index);
+        }
+        index += char_len_at(text, index)?;
+    }
+    None
+}
+
+fn matches_keyword(text: &str, keyword: &str, index: usize) -> bool {
+    text.get(index..)
+        .map(|tail| tail.starts_with(keyword))
+        .unwrap_or(false)
+        && !identifier_part_before(text, index)
+        && !identifier_part_at(text, index + keyword.len())
+}
+
+fn first_identifier_after(text: &str, index: usize) -> Option<usize> {
+    let mut index = skip_whitespace(text, index);
+    while index < text.len() {
+        if let Some((start, _)) = read_identifier(text, index) {
+            return Some(start);
+        }
+        index += char_len_at(text, index)?;
+        index = skip_whitespace(text, index);
+    }
+    None
+}
+
+fn read_identifier(text: &str, index: usize) -> Option<(usize, usize)> {
+    let mut iter = text.get(index..)?.char_indices();
+    let (_, first) = iter.next()?;
+    if !is_identifier_start(first) {
+        return None;
+    }
+    let mut end = index + first.len_utf8();
+    for (offset, ch) in iter {
+        if !is_identifier_part(ch) {
+            break;
+        }
+        end = index + offset + ch.len_utf8();
+    }
+    Some((index, end))
+}
+
+fn skip_whitespace(text: &str, mut index: usize) -> usize {
+    while let Some(ch) = char_at(text, index) {
+        if !ch.is_whitespace() {
+            break;
+        }
+        index += ch.len_utf8();
+    }
+    index
+}
+
+fn is_modifier(word: &str) -> bool {
+    matches!(
+        word,
+        "abstract"
+            | "accessor"
+            | "async"
+            | "declare"
+            | "export"
+            | "override"
+            | "private"
+            | "protected"
+            | "public"
+            | "readonly"
+            | "static"
+    )
+}
+
+fn is_identifier_start(ch: char) -> bool {
+    ch == '_' || ch == '$' || ch.is_ascii_alphabetic()
+}
+
+fn is_identifier_part(ch: char) -> bool {
+    is_identifier_start(ch) || ch.is_ascii_digit()
+}
+
+fn identifier_part_before(text: &str, index: usize) -> bool {
+    text.get(..index)
+        .and_then(|prefix| prefix.chars().next_back())
+        .map(is_identifier_part)
+        .unwrap_or(false)
+}
+
+fn identifier_part_at(text: &str, index: usize) -> bool {
+    char_at(text, index)
+        .map(is_identifier_part)
+        .unwrap_or(false)
+}
+
+fn char_at(text: &str, index: usize) -> Option<char> {
+    text.get(index..)?.chars().next()
+}
+
+fn char_len_at(text: &str, index: usize) -> Option<usize> {
+    Some(char_at(text, index)?.len_utf8())
+}
+
+#[derive(Default)]
+struct SourceScanner {
+    quote: Option<char>,
+    escaped: bool,
+    in_line_comment: bool,
+    in_block_comment: bool,
+}
+
+impl SourceScanner {
+    fn skip(&mut self, text: &str, index: usize) -> usize {
+        let Some(ch) = char_at(text, index) else {
+            return index;
+        };
+        let next = char_at(text, index + ch.len_utf8());
+        if self.in_line_comment {
+            if ch == '\n' || ch == '\r' {
+                self.in_line_comment = false;
+            }
+            return index + ch.len_utf8();
+        }
+        if self.in_block_comment {
+            if ch == '*' && next == Some('/') {
+                self.in_block_comment = false;
+                return index + 2;
+            }
+            return index + ch.len_utf8();
+        }
+        if let Some(quote) = self.quote {
+            if self.escaped {
+                self.escaped = false;
+            } else if ch == '\\' {
+                self.escaped = true;
+            } else if ch == quote {
+                self.quote = None;
+            }
+            return index + ch.len_utf8();
+        }
+        if ch == '/' && next == Some('/') {
+            self.in_line_comment = true;
+            return index + 2;
+        }
+        if ch == '/' && next == Some('*') {
+            self.in_block_comment = true;
+            return index + 2;
+        }
+        if ch == '"' || ch == '\'' || ch == '`' {
+            self.quote = Some(ch);
+            return index + ch.len_utf8();
+        }
+        index
     }
 }
 

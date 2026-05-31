@@ -157,6 +157,120 @@ describe("corsa oxlint type locations", () => {
     expect(seen.usage).toBe("Foo");
   });
 
+  integrationCase("resolves types from wrapper-like AST nodes", () => {
+    const seen: Record<string, string | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "wrapper-like-node-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise wrapper-like node type lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassBody(node: any) {
+            const header = context.sourceCode.text.slice(0, node.range[0]);
+            const className = header.match(/\bclass\s+([A-Za-z_$][A-Za-z0-9_$]*)[^{]*$/)?.[1];
+            if (className !== "Foo") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.classBody = type ? checker.typeToString(type) : undefined;
+          },
+          PropertyDefinition(node: any) {
+            if (node.key?.name !== "classField") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.classField = type ? checker.typeToString(type) : undefined;
+          },
+          TSParameterProperty(node: any) {
+            if (node.parameter?.name !== "paramProp") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.paramProp = type ? checker.typeToString(type) : undefined;
+          },
+          MethodDefinition(node: any) {
+            if (node.kind !== "constructor") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.constructorType = type ? checker.typeToString(type) : undefined;
+          },
+          TSAbstractMethodDefinition(node: any) {
+            if (node.key?.name !== "sound") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.abstractMethod = type ? checker.typeToString(type) : undefined;
+          },
+          TSAsExpression(node: any) {
+            if (node.typeAnnotation?.typeName?.name !== "Bar") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.asCast = type ? checker.typeToString(type) : undefined;
+          },
+          TSTypeAssertion(node: any) {
+            const type = checker.getTypeAtLocation(node);
+            seen.oldCast = type ? checker.typeToString(type) : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("wrapper-like-node-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "abstract class Animal {",
+            "  abstract sound(): string;",
+            "}",
+            "class Foo {",
+            "  readonly classField: number = 0;",
+            "  constructor(public readonly paramProp: boolean) {}",
+            "  method(arg: string): void {}",
+            "}",
+            "class Bar {}",
+            "const asCast = {} as Bar;",
+            "const oldCast = <Bar>({} as any);",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.classBody).toBe("Foo");
+    expect(seen.classField).toBe("number");
+    expect(seen.paramProp).toBe("boolean");
+    expect(seen.constructorType).toBeDefined();
+    expect(seen.constructorType).not.toBe("any");
+    expect(seen.abstractMethod).toBe("() => string");
+    expect(seen.asCast).toBe("Bar");
+    expect(seen.oldCast).toBe("Bar");
+  });
+
   integrationCase("falls back for instantiated generic base types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
