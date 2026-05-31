@@ -69,6 +69,11 @@ jobs:
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          # main の real-corsa-smoke が温めた corsa ビルドキャッシュを復元し、
+          # PR ごとのコールドビルドを避ける(PR では保存せず汚染を防ぐ)。
+          shared-key: corsa-ref
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Sync pinned Corsa ref
         run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
