@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "corsa"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "base64",
  "corsa_client",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_client"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "base64",
  "corsa_core",
@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_core"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "base64",
  "bumpalo",
@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_ffi"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "corsa_client",
  "corsa_core",
@@ -134,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_jsonrpc"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "corsa_core",
  "corsa_runtime",
@@ -146,7 +146,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_lsp"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "corsa_core",
  "corsa_jsonrpc",
@@ -159,7 +159,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_node"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "corsa",
  "lsp-types",
@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_orchestrator"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "corsa_client",
  "corsa_core",
@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_ref"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "corsa_core",
  "serde",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "corsa_runtime"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "smallvec",
 ]
