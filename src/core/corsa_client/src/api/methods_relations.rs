@@ -323,10 +323,35 @@ impl ApiClient {
     pub async fn get_constraint_of_type(
         &self,
         snapshot: SnapshotHandle,
+        project: ProjectHandle,
         r#type: TypeHandle,
     ) -> Result<Option<TypeResponse>> {
-        self.call_optional("getConstraintOfType", TypeOnlyRequest { snapshot, r#type })
+        if let Some(constraint) = self
+            .get_constraint_of_type_parameter(snapshot.clone(), project, r#type.clone())
+            .await?
+        {
+            return Ok(Some(constraint));
+        }
+        self.get_constraint_of_type_direct(snapshot, r#type).await
+    }
+
+    async fn get_constraint_of_type_direct(
+        &self,
+        snapshot: SnapshotHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        match self
+            .call_optional("getConstraintOfType", TypeOnlyRequest { snapshot, r#type })
             .await
+        {
+            Ok(constraint) => Ok(constraint),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     async fn fallback_type_arguments_from_text(

@@ -103,6 +103,11 @@ enum JsonTaskKind {
         project: String,
         symbol: String,
     },
+    GetConstraintOfType {
+        snapshot: String,
+        project: String,
+        type_handle: String,
+    },
     TypeToString {
         snapshot: String,
         project: String,
@@ -231,6 +236,19 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                     SnapshotHandle::from(snapshot.as_str()),
                     ProjectHandle::from(project.as_str()),
                     SymbolHandle::from(symbol.as_str()),
+                ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetConstraintOfType {
+                snapshot,
+                project,
+                type_handle,
+            } => {
+                let response = block_on(self.client.get_constraint_of_type(
+                    SnapshotHandle::from(snapshot.as_str()),
+                    ProjectHandle::from(project.as_str()),
+                    TypeHandle::from(type_handle.as_str()),
                 ))
                 .map_err(into_napi_error)?;
                 to_value(&response)
@@ -638,6 +656,40 @@ impl CorsaApiClient {
                 project,
                 type_handle,
                 object_flags,
+            },
+        })
+    }
+
+    /// Resolves a type constraint using Corsa relation endpoints.
+    #[napi]
+    pub fn get_constraint_of_type(
+        &self,
+        snapshot: String,
+        project: String,
+        type_handle: String,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_constraint_of_type(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            TypeHandle::from(type_handle.as_str()),
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn get_constraint_of_type_async(
+        &self,
+        snapshot: String,
+        project: String,
+        type_handle: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetConstraintOfType {
+                snapshot,
+                project,
+                type_handle,
             },
         })
     }

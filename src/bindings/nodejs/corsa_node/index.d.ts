@@ -34,6 +34,9 @@ export declare class CorsaApiClient {
   /** Resolves type arguments for type-reference objects and returns [] otherwise. */
   getTypeArguments(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): any
   getTypeArgumentsAsync(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): Promise<unknown>
+  /** Resolves a type constraint using Corsa relation endpoints. */
+  getConstraintOfType(snapshot: string, project: string, typeHandle: string): any
+  getConstraintOfTypeAsync(snapshot: string, project: string, typeHandle: string): Promise<unknown>
   /** Resolves the apparent checker type of a symbol. */
   getTypeOfSymbol(snapshot: string, project: string, symbol: string): any
   getTypeOfSymbolAsync(snapshot: string, project: string, symbol: string): Promise<unknown>

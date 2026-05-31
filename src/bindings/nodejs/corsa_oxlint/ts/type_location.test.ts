@@ -87,6 +87,76 @@ describe("corsa oxlint type locations", () => {
     expect(seen.classFromNode).toBe(seen.classFromId);
   });
 
+  integrationCase("returns constraints for bounded type parameters", () => {
+    const seen: Record<string, string | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "bounded-type-parameter-constraints",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise type parameter constraint lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSTypeParameter(node: any) {
+            const name = node.name?.name ?? node.name;
+            if (name !== "TBound") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            const constraint = type ? checker.getConstraintOfType(type) : undefined;
+            seen.declaration = constraint ? checker.typeToString(constraint) : undefined;
+          },
+          Identifier(node: any) {
+            if (node.name !== "boundParam") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            const constraint = type ? checker.getConstraintOfType(type) : undefined;
+            seen.usage = constraint ? checker.typeToString(constraint) : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("bounded-type-parameter-constraints", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Foo {}",
+            "function withBound<TBound extends Foo>(boundParam: TBound): TBound {",
+            "  return boundParam;",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.declaration).toBe("Foo");
+    expect(seen.usage).toBe("Foo");
+  });
+
   integrationCase("resolves symbol and node handles exposed by signatures and types", () => {
     const seen: Record<string, unknown> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
