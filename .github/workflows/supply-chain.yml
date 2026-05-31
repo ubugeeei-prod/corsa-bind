@@ -1,6 +1,7 @@
 name: Supply Chain
 
 on:
+  pull_request:
   push:
     branches:
       - main
