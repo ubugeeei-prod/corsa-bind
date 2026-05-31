@@ -28,4 +28,4 @@ pub use broadcast::{
     Receiver as BroadcastReceiver, Sender as BroadcastSender, channel as broadcast,
 };
 pub use executor::block_on;
-pub use task::{JoinHandle, spawn};
+pub use task::{JoinHandle, spawn, try_spawn};
