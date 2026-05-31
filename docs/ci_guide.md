@@ -54,6 +54,12 @@ The workflow uploads the four benchmark reports as artifacts, then updates one
 sticky PR comment with faster, slower, and stable rows. Rows within 3% are marked
 stable to avoid treating benchmark noise as a regression.
 
+The Blacksmith Testbox workflow lives in
+[`../.github/workflows/blacksmith-testbox.yml`](../.github/workflows/blacksmith-testbox.yml).
+It is `workflow_dispatch`-only and hydrates the benchmark environment on a
+`blacksmith-32vcpu-ubuntu-2404` runner without running timed benchmarks during
+warmup.
+
 ## `quality`
 
 The `quality` job answers:
@@ -155,6 +161,46 @@ nix develop -c sh -c 'vp run -w bench_verify'
 
 Using `sh -c` instead of a login shell matters here.
 It makes the tool resolution deterministic, especially for `go`, which would otherwise be shadowed by a preexisting shell profile on some machines.
+
+## Blacksmith Testbox
+
+Blacksmith Testbox is the CI-parity path for broad Linux checks and benchmark
+work from a local worktree. The workflow sets up Rust, Go, Node `24`, Vite+,
+the pinned Corsa ref, the native Corsa binary, the `corsa-oxlint` package, and
+tooling benchmark dependencies. It intentionally stops before `bench_verify` or
+`bench_tooling_compare`; those measured commands should be run through the warm
+testbox so their output belongs to the current local diff.
+
+Warm a benchmark testbox from the repository root:
+
+```bash
+blacksmith testbox warmup blacksmith-testbox.yml --job bench --idle-timeout 90
+```
+
+For the first rollout, the workflow file must exist on the default branch before
+GitHub exposes it through `workflow_dispatch`.
+Blacksmith resolves the repository from the local git remote, so `origin` must
+point at a repository in the authenticated Blacksmith org.
+
+Then reuse the returned ID for benchmark commands:
+
+```bash
+blacksmith testbox run --id <tbx_id> "vp run -w bench_verify"
+blacksmith testbox run --id <tbx_id> "vp run -w bench_tooling_compare"
+```
+
+If dependency manifests or benchmark setup changed after warmup, run the setup
+inside the same box before measuring:
+
+```bash
+blacksmith testbox run --id <tbx_id> "vp run -w bench_tooling_setup"
+```
+
+Stop the box when it is no longer needed:
+
+```bash
+blacksmith testbox stop --id <tbx_id>
+```
 
 ## Reproducing the Full Workflow
 

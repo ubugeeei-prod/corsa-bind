@@ -1,0 +1,74 @@
+name: Blacksmith Testbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      testbox_id:
+        description: Blacksmith Testbox session ID
+        required: false
+        type: string
+      api_url:
+        description: Blacksmith API URL override
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blacksmith-testbox-${{ github.workflow }}-${{ github.ref }}-${{ inputs.testbox_id || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    name: Benchmark Testbox
+    runs-on: blacksmith-32vcpu-ubuntu-2404
+    timeout-minutes: 120
+    steps:
+      - name: Begin Blacksmith Testbox
+        uses: useblacksmith/begin-testbox@233448af4bfdc6fca509a7f0974411ac6d8a8043 # v2
+        with:
+          testbox_id: ${{ inputs.testbox_id }}
+          api_url: ${{ inputs.api_url }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Sync pinned Corsa ref
+        run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
+
+      - name: Setup Go for pinned Corsa ref
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: ref/corsa-upstream/go.mod
+          cache: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
+        with:
+          node-version: "24"
+          cache: true
+          run-install: true
+
+      - name: Hydrate benchmark build outputs
+        run: |
+          vp run -w build_corsa
+          vp run -w build_corsa_oxlint
+
+      - name: Install tooling benchmark dependencies
+        run: vp run -w bench_tooling_setup
+
+      - name: Run Blacksmith Testbox
+        if: ${{ always() }}
+        uses: useblacksmith/run-testbox@5ca05834db1d3813554d1dd109e5f2087a8d7cbc # v2
