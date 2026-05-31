@@ -28,11 +28,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-js-format
+          cargo-target: "false"
+          pnpm-store: "true"
+
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
-          cache: true
+          cache: ${{ runner.os != 'Linux' }}
           run-install: true
 
       - name: Check JS and TS formatting
@@ -48,11 +55,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-js-lint-types
+          cargo-target: "false"
+          pnpm-store: "true"
+
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
-          cache: true
+          cache: ${{ runner.os != 'Linux' }}
           run-install: true
 
       - name: Check JS and TS lint and types
@@ -86,6 +100,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-rust-lint
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
@@ -94,6 +113,7 @@ jobs:
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
+          cache-targets: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Lint Rust
@@ -113,12 +133,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-build-${{ matrix.os }}
+          pnpm-store: "true"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
+          cache-targets: ${{ runner.os != 'Linux' }}
           shared-key: workspace
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -126,7 +153,7 @@ jobs:
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
-          cache: true
+          cache: ${{ runner.os != 'Linux' }}
           run-install: true
 
       - name: Setup Deno
@@ -159,12 +186,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-test-${{ matrix.os }}
+          corsa-ref-target: "true"
+          pnpm-store: "true"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
+          cache-targets: ${{ runner.os != 'Linux' }}
           shared-key: workspace
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -172,7 +207,7 @@ jobs:
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
-          cache: true
+          cache: ${{ runner.os != 'Linux' }}
           run-install: true
 
       - name: Test workspace
@@ -188,12 +223,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-public-facade
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
+          cache-targets: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build mock Corsa binary
@@ -212,12 +253,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-non-node-bindings
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
+          cache-targets: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Go for Go binding
@@ -321,12 +368,21 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: ci-real-corsa-smoke-${{ matrix.os }}
+          corsa-ref-target: "true"
+          go-build: "true"
+          pnpm-store: "true"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
+          cache-targets: ${{ runner.os != 'Linux' }}
           shared-key: corsa-ref
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -345,7 +401,7 @@ jobs:
           node-version: "24"
           # Windows can fail inside setup-vp's dependency cache resolver after
           # the managed Corsa upstream checkout has been materialized.
-          cache: ${{ runner.os != 'Windows' }}
+          cache: ${{ runner.os != 'Linux' && runner.os != 'Windows' }}
           run-install: true
 
       - name: Build pinned Corsa binary

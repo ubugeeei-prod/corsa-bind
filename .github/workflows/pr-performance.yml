@@ -64,14 +64,45 @@ jobs:
           ref: ${{ steps.bench-ref.outputs.sha }}
           persist-credentials: false
 
+      - name: Mount Cargo target sticky disk
+        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        with:
+          key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
+          path: target
+
+      - name: Mount corsa_ref target sticky disk
+        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        with:
+          key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
+          path: .cache/corsa-ref-target
+
+      - name: Mount Go build sticky disk
+        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        with:
+          key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
+          path: .cache/go-build
+
+      - name: Mount npm cache sticky disk
+        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        with:
+          key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-npm-cache-${{ hashFiles('ref/corsa-upstream/package-lock.json', 'bench/cli_compare/package-lock.json') }}
+          path: ~/.npm
+
+      - name: Mount pnpm store sticky disk
+        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        with:
+          key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          path: ~/.local/share/pnpm/store
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          # main の real-corsa-smoke が温めた corsa ビルドキャッシュを復元し、
-          # PR ごとのコールドビルドを避ける(PR では保存せず汚染を防ぐ)。
+          cache-targets: false
+          # Sticky Disk owns target/ on Blacksmith; rust-cache keeps Cargo
+          # registry/git data warm without saving PR build outputs.
           shared-key: corsa-ref
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -105,7 +136,7 @@ jobs:
         uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
         with:
           node-version: "24"
-          cache: true
+          cache: ${{ runner.os != 'Linux' }}
           run-install: true
 
       - name: Build pinned Corsa binary
