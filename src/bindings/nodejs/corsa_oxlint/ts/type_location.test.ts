@@ -271,6 +271,71 @@ describe("corsa oxlint type locations", () => {
     expect(seen.oldCast).toBe("Bar");
   });
 
+  integrationCase("resolves static member expression types from the property", () => {
+    const seen: Record<string, string | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "static-member-expression-type",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise static member expression type lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          MemberExpression(node: any) {
+            if (node.property?.name !== "STATIC_FIELD") {
+              return;
+            }
+            const whole = checker.getTypeAtLocation(node);
+            const property = checker.getTypeAtLocation(node.property);
+            const object = checker.getTypeAtLocation(node.object);
+            seen.whole = whole ? checker.typeToString(whole) : undefined;
+            seen.property = property ? checker.typeToString(property) : undefined;
+            seen.object = object ? checker.typeToString(object) : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("static-member-expression-type", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Foo {",
+            '  static STATIC_FIELD: string = "x";',
+            "}",
+            "const sUse = Foo.STATIC_FIELD;",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.whole).toBe("string");
+    expect(seen.property).toBe("string");
+    expect(seen.object).toBe("typeof Foo");
+  });
+
   integrationCase("falls back for instantiated generic base types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

@@ -1112,6 +1112,13 @@ fn fallback_type_lookup_positions(
                 class_name_before(source_text, start_byte),
             );
         }
+        "MemberExpression" => {
+            push_utf16_position(
+                &mut positions,
+                source_text,
+                member_property_offset(slice).map(|offset| start_byte + offset),
+            );
+        }
         "MethodDefinition" => {
             let member_name = first_member_name_range(slice);
             if member_name
@@ -1224,6 +1231,25 @@ fn class_name_before(source_text: &str, body_start: usize) -> Option<usize> {
         index += char_len_at(prefix, index)?;
     }
     candidate
+}
+
+fn member_property_offset(text: &str) -> Option<usize> {
+    let mut index = 0usize;
+    let mut scanner = SourceScanner::default();
+    let mut last_dot = None;
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        let ch = char_at(text, index)?;
+        if ch == '.' {
+            last_dot = Some(index);
+        }
+        index += ch.len_utf8();
+    }
+    first_identifier_after(text, last_dot? + 1)
 }
 
 fn first_member_name_range(text: &str) -> Option<(usize, usize)> {
