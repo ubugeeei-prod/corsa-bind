@@ -86,11 +86,31 @@ export interface CorsaApiClient {
     typeHandle: string,
     objectFlags?: number,
   ): TypeResponse[];
+  getTypeArgumentsAtSourceRange(
+    snapshot: string,
+    project: string,
+    typeHandle: string,
+    objectFlags: number | undefined | null,
+    file: string,
+    start: number,
+    end: number,
+    sourceText: string,
+  ): TypeResponse[];
   getTypeArgumentsAsync(
     snapshot: string,
     project: string,
     typeHandle: string,
     objectFlags?: number,
+  ): Promise<TypeResponse[]>;
+  getTypeArgumentsAtSourceRangeAsync(
+    snapshot: string,
+    project: string,
+    typeHandle: string,
+    objectFlags: number | undefined | null,
+    file: string,
+    start: number,
+    end: number,
+    sourceText: string,
   ): Promise<TypeResponse[]>;
   getConstraintOfType(snapshot: string, project: string, typeHandle: string): TypeResponse | null;
   getConstraintOfTypeAsync(

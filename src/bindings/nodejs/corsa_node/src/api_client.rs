@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use corsa::{
+    CorsaError,
     api::{
         ApiClient, ManagedSnapshot, ProjectHandle, SnapshotHandle, SymbolHandle, TypeHandle,
         TypeResponse, UpdateSnapshotParams,
@@ -60,6 +61,17 @@ struct SourceRangeLookup {
     end: u32,
     source_text: String,
     kind: Option<String>,
+}
+
+struct TypeArgumentsSourceRangeLookup {
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    type_handle: TypeHandle,
+    object_flags: Option<u32>,
+    file: String,
+    start: u32,
+    end: u32,
+    source_text: String,
 }
 
 type SnapshotStore = Arc<Mutex<FastMap<CompactString, ManagedSnapshot>>>;
@@ -130,6 +142,16 @@ enum JsonTaskKind {
         project: String,
         type_handle: String,
         object_flags: Option<u32>,
+    },
+    GetTypeArgumentsAtSourceRange {
+        snapshot: String,
+        project: String,
+        type_handle: String,
+        object_flags: Option<u32>,
+        file: String,
+        start: u32,
+        end: u32,
+        source_text: String,
     },
     GetTypeOfSymbol {
         snapshot: String,
@@ -272,6 +294,32 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                     SnapshotHandle::from(snapshot.as_str()),
                     ProjectHandle::from(project.as_str()),
                     TypeHandle::from(type_handle.as_str()),
+                ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetTypeArgumentsAtSourceRange {
+                snapshot,
+                project,
+                type_handle,
+                object_flags,
+                file,
+                start,
+                end,
+                source_text,
+            } => {
+                let response = block_on(get_type_arguments_at_source_range(
+                    &self.client,
+                    TypeArgumentsSourceRangeLookup {
+                        snapshot: SnapshotHandle::from(snapshot.as_str()),
+                        project: ProjectHandle::from(project.as_str()),
+                        type_handle: TypeHandle::from(type_handle.as_str()),
+                        object_flags: *object_flags,
+                        file: file.clone(),
+                        start: *start,
+                        end: *end,
+                        source_text: source_text.clone(),
+                    },
                 ))
                 .map_err(into_napi_error)?;
                 to_value(&response)
@@ -755,6 +803,37 @@ impl CorsaApiClient {
         to_value(&response)
     }
 
+    /// Resolves type arguments and prefers structural handles from source locations when available.
+    #[allow(clippy::too_many_arguments)]
+    #[napi]
+    pub fn get_type_arguments_at_source_range(
+        &self,
+        snapshot: String,
+        project: String,
+        type_handle: String,
+        object_flags: Option<u32>,
+        file: String,
+        start: u32,
+        end: u32,
+        source_text: String,
+    ) -> Result<Value> {
+        let response = block_on(get_type_arguments_at_source_range(
+            &self.inner,
+            TypeArgumentsSourceRangeLookup {
+                snapshot: SnapshotHandle::from(snapshot.as_str()),
+                project: ProjectHandle::from(project.as_str()),
+                type_handle: TypeHandle::from(type_handle.as_str()),
+                object_flags,
+                file,
+                start,
+                end,
+                source_text,
+            },
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
     #[napi]
     pub fn get_type_arguments_async(
         &self,
@@ -770,6 +849,34 @@ impl CorsaApiClient {
                 project,
                 type_handle,
                 object_flags,
+            },
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[napi]
+    pub fn get_type_arguments_at_source_range_async(
+        &self,
+        snapshot: String,
+        project: String,
+        type_handle: String,
+        object_flags: Option<u32>,
+        file: String,
+        start: u32,
+        end: u32,
+        source_text: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetTypeArgumentsAtSourceRange {
+                snapshot,
+                project,
+                type_handle,
+                object_flags,
+                file,
+                start,
+                end,
+                source_text,
             },
         })
     }
@@ -1018,13 +1125,17 @@ async fn get_type_at_source_range(
         )
         .await?;
 
+    let direct_is_specific = direct
+        .as_ref()
+        .map(|r#type| !is_any_type(r#type))
+        .unwrap_or(false);
     for position in fallback_type_lookup_positions(
         params.kind.as_deref(),
         params.start,
         params.end,
         params.source_text.as_str(),
     ) {
-        if position == params.start {
+        if position == params.start && direct_is_specific {
             continue;
         }
         let candidate = get_type_or_symbol_type_at_position(
@@ -1041,6 +1152,124 @@ async fn get_type_at_source_range(
     }
 
     Ok(direct)
+}
+
+async fn get_type_arguments_at_source_range(
+    client: &ApiClient,
+    params: TypeArgumentsSourceRangeLookup,
+) -> corsa::Result<Vec<TypeResponse>> {
+    if params.object_flags.unwrap_or_default() & (OBJECT_FLAGS_REFERENCE | OBJECT_FLAGS_MAPPED) == 0
+    {
+        return Ok(Vec::new());
+    }
+
+    let arguments_from_api = client
+        .get_type_arguments(
+            params.snapshot.clone(),
+            params.project.clone(),
+            params.type_handle.clone(),
+        )
+        .await?;
+    let arguments_from_source = type_arguments_from_source_range(client, &params).await?;
+    if arguments_from_source.is_empty() {
+        return Ok(arguments_from_api);
+    }
+    if arguments_from_api.is_empty() {
+        return Ok(arguments_from_source);
+    }
+    if arguments_from_api.len() != arguments_from_source.len() {
+        return Ok(arguments_from_api);
+    }
+
+    let mut structural = Vec::with_capacity(arguments_from_api.len());
+    for (api_argument, source_argument) in arguments_from_api.into_iter().zip(arguments_from_source)
+    {
+        if same_type_text_for_source_argument(
+            client,
+            params.snapshot.clone(),
+            params.project.clone(),
+            &api_argument,
+            &source_argument,
+        )
+        .await?
+        {
+            structural.push(source_argument);
+        } else {
+            structural.push(api_argument);
+        }
+    }
+    Ok(structural)
+}
+
+async fn type_arguments_from_source_range(
+    client: &ApiClient,
+    params: &TypeArgumentsSourceRangeLookup,
+) -> corsa::Result<Vec<TypeResponse>> {
+    let positions =
+        type_argument_positions_for_source_range(params.start, params.end, &params.source_text);
+    let mut arguments = Vec::with_capacity(positions.len());
+    for position in positions {
+        if let Some(argument) = get_type_or_symbol_type_at_position(
+            client,
+            params.snapshot.clone(),
+            params.project.clone(),
+            params.file.clone(),
+            position,
+        )
+        .await?
+        {
+            arguments.push(argument);
+        }
+    }
+    Ok(arguments)
+}
+
+async fn same_type_text_for_source_argument(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    left: &TypeResponse,
+    right: &TypeResponse,
+) -> corsa::Result<bool> {
+    if left.id == right.id || type_response_texts_overlap(left, right) {
+        return Ok(true);
+    }
+    let Some(left_text) =
+        type_response_text_or_none(client, snapshot.clone(), project.clone(), left).await?
+    else {
+        return Ok(false);
+    };
+    let Some(right_text) = type_response_text_or_none(client, snapshot, project, right).await?
+    else {
+        return Ok(false);
+    };
+    Ok(left_text == right_text)
+}
+
+async fn type_response_text_or_none(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    r#type: &TypeResponse,
+) -> corsa::Result<Option<String>> {
+    if let Some(text) = r#type.texts.iter().find(|text| !text.is_empty()) {
+        return Ok(Some(text.clone()));
+    }
+    match client
+        .type_to_string(snapshot, project, r#type.id.clone(), None, None)
+        .await
+    {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if is_stale_handle_error(&error) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn type_response_texts_overlap(left: &TypeResponse, right: &TypeResponse) -> bool {
+    left.texts
+        .iter()
+        .filter(|text| !text.is_empty())
+        .any(|left_text| right.texts.iter().any(|right_text| left_text == right_text))
 }
 
 async fn get_type_or_symbol_type_at_position(
@@ -1159,9 +1388,192 @@ fn fallback_type_lookup_positions(
                 type_assertion_angle_offset(slice).map(|offset| start_byte + offset),
             );
         }
+        "TSTypeReference" => {
+            push_utf16_position(
+                &mut positions,
+                source_text,
+                first_identifier_after(slice, 0).map(|offset| start_byte + offset),
+            );
+        }
+        "Identifier" if identifier_looks_like_type_reference_name(source_text, start_byte) => {
+            push_utf16_position(&mut positions, source_text, Some(start_byte));
+        }
         _ => {}
     }
     positions
+}
+
+fn identifier_looks_like_type_reference_name(source_text: &str, start_byte: usize) -> bool {
+    previous_non_whitespace(source_text, start_byte)
+        .map(|ch| matches!(ch, ':' | '<' | '|' | '&' | ','))
+        .unwrap_or(false)
+}
+
+fn previous_non_whitespace(text: &str, index: usize) -> Option<char> {
+    text.get(..index)?
+        .chars()
+        .rev()
+        .find(|ch| !ch.is_whitespace())
+}
+
+fn type_argument_positions_for_source_range(start: u32, end: u32, source_text: &str) -> Vec<u32> {
+    let Some((start_byte, end_byte)) = utf16_byte_range(source_text, start, end) else {
+        return Vec::new();
+    };
+    if start_byte >= end_byte {
+        return Vec::new();
+    }
+    let slice = &source_text[start_byte..end_byte];
+    let type_start = first_top_level_index_of_any(slice, &[':', '='])
+        .and_then(|index| char_len_at(slice, index).map(|len| index + len))
+        .unwrap_or(0);
+    let Some(open_in_type) = first_top_level_opening_angle(&slice[type_start..]) else {
+        return Vec::new();
+    };
+    let open = type_start + open_in_type;
+    let Some(close) = matching_angle_close(slice, open) else {
+        return Vec::new();
+    };
+    let arguments_text = &slice[open + 1..close];
+    let mut positions = Vec::new();
+    for range in split_top_level_ranges(arguments_text, ',') {
+        let raw = &arguments_text[range.start..range.end];
+        let Some(leading) = first_non_whitespace(raw) else {
+            continue;
+        };
+        push_utf16_position(
+            &mut positions,
+            source_text,
+            Some(start_byte + open + 1 + range.start + leading),
+        );
+    }
+    positions
+}
+
+fn first_top_level_index_of_any(text: &str, needles: &[char]) -> Option<usize> {
+    let mut angle_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut index = 0usize;
+    let mut scanner = SourceScanner::default();
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        let ch = char_at(text, index)?;
+        match ch {
+            '<' => angle_depth += 1,
+            '>' => angle_depth = angle_depth.saturating_sub(1),
+            '(' => paren_depth += 1,
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            '{' => brace_depth += 1,
+            '}' => brace_depth = brace_depth.saturating_sub(1),
+            _ if needles.contains(&ch)
+                && angle_depth == 0
+                && paren_depth == 0
+                && bracket_depth == 0
+                && brace_depth == 0 =>
+            {
+                return Some(index);
+            }
+            _ => {}
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+fn first_top_level_opening_angle(text: &str) -> Option<usize> {
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut index = 0usize;
+    let mut scanner = SourceScanner::default();
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        let ch = char_at(text, index)?;
+        match ch {
+            '(' => paren_depth += 1,
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            '{' => brace_depth += 1,
+            '}' => brace_depth = brace_depth.saturating_sub(1),
+            '<' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => {
+                return Some(index);
+            }
+            _ => {}
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+struct ByteRange {
+    start: usize,
+    end: usize,
+}
+
+fn split_top_level_ranges(text: &str, delimiter: char) -> Vec<ByteRange> {
+    let mut ranges = Vec::new();
+    let mut angle_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut start = 0usize;
+    let mut index = 0usize;
+    let mut scanner = SourceScanner::default();
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        let Some(ch) = char_at(text, index) else {
+            break;
+        };
+        match ch {
+            '<' => angle_depth += 1,
+            '>' => angle_depth = angle_depth.saturating_sub(1),
+            '(' => paren_depth += 1,
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            '{' => brace_depth += 1,
+            '}' => brace_depth = brace_depth.saturating_sub(1),
+            _ if ch == delimiter
+                && angle_depth == 0
+                && paren_depth == 0
+                && bracket_depth == 0
+                && brace_depth == 0 =>
+            {
+                ranges.push(ByteRange { start, end: index });
+                start = index + ch.len_utf8();
+            }
+            _ => {}
+        }
+        index += ch.len_utf8();
+    }
+    ranges.push(ByteRange {
+        start,
+        end: text.len(),
+    });
+    ranges
+}
+
+fn first_non_whitespace(text: &str) -> Option<usize> {
+    text.char_indices()
+        .find(|(_, ch)| !ch.is_whitespace())
+        .map(|(index, _)| index)
 }
 
 fn push_utf16_position(positions: &mut Vec<u32>, source_text: &str, byte_offset: Option<usize>) {
@@ -1410,6 +1822,18 @@ fn char_at(text: &str, index: usize) -> Option<char> {
 
 fn char_len_at(text: &str, index: usize) -> Option<usize> {
     Some(char_at(text, index)?.len_utf8())
+}
+
+fn is_stale_handle_error(error: &CorsaError) -> bool {
+    match error {
+        CorsaError::Rpc(rpc) => is_stale_handle_message(&rpc.message),
+        CorsaError::Protocol(message) => is_stale_handle_message(message),
+        _ => false,
+    }
+}
+
+fn is_stale_handle_message(message: &str) -> bool {
+    message.contains("not found in snapshot registry")
 }
 
 #[derive(Default)]
