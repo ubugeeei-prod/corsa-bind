@@ -43,10 +43,6 @@ type ParameterInfo = {
   node: CorsaNode;
 };
 
-type TypeArgumentInfo = {
-  pos: number;
-};
-
 const typeFlags = {
   object: 1 << 20,
   index: 1 << 21,
@@ -341,15 +337,26 @@ export class CorsaProjectSession {
   }
 
   getTypeArguments(type: CorsaType): readonly CorsaType[] {
-    const argumentsFromApi = this.rememberTypes(
-      this.client().getTypeArguments(
-        this.#snapshot!,
-        this.projectId(),
-        type.id,
-        type.objectFlags,
-      ) as unknown as readonly CorsaType[],
+    const source = this.sourceSliceForType(type);
+    return this.rememberTypes(
+      source
+        ? (this.client().getTypeArgumentsAtSourceRange(
+            this.#snapshot!,
+            this.projectId(),
+            type.id,
+            type.objectFlags,
+            source.node.fileName,
+            source.node.pos,
+            source.node.end,
+            this.sourceTextForPath(source.node.fileName) ?? "",
+          ) as unknown as readonly CorsaType[])
+        : (this.client().getTypeArguments(
+            this.#snapshot!,
+            this.projectId(),
+            type.id,
+            type.objectFlags,
+          ) as unknown as readonly CorsaType[]),
     );
-    return argumentsFromApi.length > 0 ? argumentsFromApi : this.fallbackTypeArguments(type);
   }
 
   getTypesOfType(type: CorsaType): readonly CorsaType[] {
@@ -465,25 +472,6 @@ export class CorsaProjectSession {
     } catch {
       return undefined;
     }
-  }
-
-  private fallbackTypeArguments(type: CorsaType): readonly CorsaType[] {
-    const source = this.sourceSliceForType(type);
-    if (!source) {
-      return [];
-    }
-    return typeArgumentInfosForSource(source)
-      .map((argument) => {
-        const symbol = this.getSymbolAtPosition(
-          source.node.fileName,
-          argument.pos,
-          this.sourceTextForPath(source.node.fileName),
-        );
-        return symbol
-          ? (this.getDeclaredTypeOfSymbol(symbol) ?? this.getTypeOfSymbol(symbol))
-          : undefined;
-      })
-      .filter((argument): argument is CorsaType => argument !== undefined);
   }
 
   private sourceSliceForType(type: CorsaType): SourceSlice | undefined {
@@ -1060,33 +1048,6 @@ function parameterNameForText(text: string): string | undefined {
   return left.split(/\s+/).at(-1);
 }
 
-function typeArgumentInfosForSource(source: SourceSlice): readonly TypeArgumentInfo[] {
-  const annotationMarker = firstTopLevelIndexOfAny(source.text, [":", "="]);
-  const typeStart = annotationMarker >= 0 ? annotationMarker + 1 : 0;
-  const openInType = firstTopLevelOpeningAngle(source.text.slice(typeStart));
-  if (openInType < 0) {
-    return [];
-  }
-  const open = typeStart + openInType;
-  const close = matchingCloseAngle(source.text, open);
-  if (close < 0) {
-    return [];
-  }
-  const argumentsText = source.text.slice(open + 1, close);
-  return splitTopLevelRanges(argumentsText, ",")
-    .map((range) => {
-      const raw = argumentsText.slice(range.start, range.end);
-      const leading = raw.search(/\S/);
-      if (leading < 0) {
-        return undefined;
-      }
-      return {
-        pos: source.node.pos + open + 1 + range.start + leading,
-      };
-    })
-    .filter((argument): argument is TypeArgumentInfo => argument !== undefined);
-}
-
 function matchingCloseParen(text: string, open: number): number {
   let depth = 0;
   const scanner = createScanner();
@@ -1098,26 +1059,6 @@ function matchingCloseParen(text: string, open: number): number {
     if (char === "(") {
       depth += 1;
     } else if (char === ")") {
-      depth -= 1;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function matchingCloseAngle(text: string, open: number): number {
-  let depth = 0;
-  const scanner = createScanner();
-  for (let index = open; index < text.length; index += 1) {
-    const char = text[index];
-    if (scanner.inQuote(char)) {
-      continue;
-    }
-    if (char === "<") {
-      depth += 1;
-    } else if (char === ">") {
       depth -= 1;
       if (depth === 0) {
         return index;
@@ -1192,29 +1133,6 @@ function firstTopLevelIndexOfAny(text: string, needles: readonly string[]): numb
       bracketDepth === 0 &&
       braceDepth === 0
     ) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function firstTopLevelOpeningAngle(text: string): number {
-  const scanner = createScanner();
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  let braceDepth = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (scanner.inQuote(char)) {
-      continue;
-    }
-    if (char === "(") parenDepth += 1;
-    else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
-    else if (char === "[") bracketDepth += 1;
-    else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
-    else if (char === "{") braceDepth += 1;
-    else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
-    else if (char === "<" && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
       return index;
     }
   }

@@ -36,7 +36,10 @@ export declare class CorsaApiClient {
   getSymbolAtPositionAsync(snapshot: string, project: string, file: string, position: number): Promise<unknown>
   /** Resolves type arguments for type-reference and mapped objects, and returns [] otherwise. */
   getTypeArguments(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): any
+  /** Resolves type arguments and prefers structural handles from source locations when available. */
+  getTypeArgumentsAtSourceRange(snapshot: string, project: string, typeHandle: string, objectFlags: number | undefined | null, file: string, start: number, end: number, sourceText: string): any
   getTypeArgumentsAsync(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): Promise<unknown>
+  getTypeArgumentsAtSourceRangeAsync(snapshot: string, project: string, typeHandle: string, objectFlags: number | undefined | null, file: string, start: number, end: number, sourceText: string): Promise<unknown>
   /** Resolves a type constraint using Corsa relation endpoints. */
   getConstraintOfType(snapshot: string, project: string, typeHandle: string): any
   getConstraintOfTypeAsync(snapshot: string, project: string, typeHandle: string): Promise<unknown>

@@ -87,6 +87,94 @@ describe("corsa oxlint type locations", () => {
     expect(seen.classFromNode).toBe(seen.classFromId);
   });
 
+  integrationCase("resolves declared types for type reference nodes", () => {
+    const seen: {
+      readonly name: string;
+      readonly whole?: string;
+      readonly inner?: string;
+      readonly declared?: string;
+    }[] = [];
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "type-reference-node-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise type reference type lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSTypeReference(node: any) {
+            if (node.typeName?.type !== "Identifier") {
+              return;
+            }
+            const whole = checker.getTypeAtLocation(node);
+            const inner = checker.getTypeAtLocation(node.typeName);
+            const symbol = checker.getSymbolAtLocation(node.typeName);
+            const declared = symbol
+              ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
+              : undefined;
+            seen.push({
+              name: node.typeName.name,
+              whole: whole ? checker.typeToString(whole) : undefined,
+              inner: inner ? checker.typeToString(inner) : undefined,
+              declared: declared ? checker.typeToString(declared) : undefined,
+            });
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("type-reference-node-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Foo {",
+            '  readonly name: string = "";',
+            "}",
+            "interface IBar {",
+            "  id: number;",
+            "}",
+            "interface Props {",
+            "  foo: Foo;",
+            "  bar: IBar;",
+            "}",
+            "function takesFoo(value: Foo): Foo {",
+            "  return value;",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen).toEqual([
+      { name: "Foo", whole: "Foo", inner: "Foo", declared: "Foo" },
+      { name: "IBar", whole: "IBar", inner: "IBar", declared: "IBar" },
+      { name: "Foo", whole: "Foo", inner: "Foo", declared: "Foo" },
+      { name: "Foo", whole: "Foo", inner: "Foo", declared: "Foo" },
+    ]);
+  });
+
   integrationCase("returns constraints for bounded type parameters", () => {
     const seen: Record<string, string | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
