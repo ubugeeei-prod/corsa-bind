@@ -36,6 +36,11 @@ describe("api surface", () => {
     expect(tsestreeEntry.AST_NODE_TYPES.Identifier).toBe("Identifier");
   });
 
+  it("re-exports SignatureKind from the root entry", () => {
+    expect(main.SignatureKind.Call).toBe(0);
+    expect(main.SignatureKind.Construct).toBe(1);
+  });
+
   it("re-exports ESTree types from the root entry", () => {
     expectTypeOf<RootESTree["NewExpression"]>().toMatchTypeOf<{ type: "NewExpression" }>();
     expectTypeOf<RootESTree["BindingIdentifier"]["typeAnnotation"]>().toEqualTypeOf<

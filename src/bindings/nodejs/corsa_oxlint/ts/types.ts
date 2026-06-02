@@ -73,6 +73,11 @@ export interface CorsaSignature {
   readonly target?: string;
 }
 
+export enum SignatureKind {
+  Call = 0,
+  Construct = 1,
+}
+
 export interface CorsaTypePredicate {
   readonly kind: number;
   readonly parameterIndex: number;
@@ -109,7 +114,7 @@ export interface CorsaTypeCheckerShape {
   typeToString(type: CorsaType, enclosingDeclaration?: Node | CorsaNode, flags?: number): string;
   getBaseTypeOfLiteralType(type: CorsaType): CorsaType | undefined;
   getPropertiesOfType(type: CorsaType): readonly CorsaSymbol[];
-  getSignaturesOfType(type: CorsaType, kind: number): readonly CorsaSignature[];
+  getSignaturesOfType(type: CorsaType, kind: SignatureKind): readonly CorsaSignature[];
   getReturnTypeOfSignature(signature: CorsaSignature): CorsaType | undefined;
   getTypePredicateOfSignature(signature: CorsaSignature): CorsaTypePredicate | undefined;
   getBaseTypes(type: CorsaType): readonly CorsaType[];
