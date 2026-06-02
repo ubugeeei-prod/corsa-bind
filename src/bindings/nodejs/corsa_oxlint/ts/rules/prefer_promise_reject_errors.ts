@@ -7,17 +7,8 @@ export const preferPromiseRejectErrorsRule = createRustNativeRule(
   {
     schema: { type: "array" },
   },
-  {
-    includePropertyNames: includeRejectTypeMetadata,
-    includeTypeTexts: includeRejectTypeMetadata,
-    maxDepth: 2,
-    shouldRun: shouldRunPreferPromiseRejectErrors,
-  },
+  { shouldRun: shouldRunPreferPromiseRejectErrors },
 );
-
-function includeRejectTypeMetadata(_node: any, depth: number): boolean {
-  return depth === 1 || depth === 2;
-}
 
 function shouldRunPreferPromiseRejectErrors(node: any, context: ContextWithParserOptions): boolean {
   const callee = stripChainExpression(node.callee) as any;

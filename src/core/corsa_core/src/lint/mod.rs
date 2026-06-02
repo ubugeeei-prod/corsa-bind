@@ -40,5 +40,6 @@ pub use stylistic::{
     StylisticRuleConfig, StylisticRunConfig, run_stylistic_lint, stylistic_rule_metas,
 };
 pub use types::{
-    LintDiagnostic, LintFix, LintNode, LintSuggestion, RuleMessage, RuleMeta, TextRange,
+    LintDiagnostic, LintFix, LintNode, LintSuggestion, NodeMetadataDepth, RuleBridgeRequirements,
+    RuleMessage, RuleMeta, TextRange,
 };

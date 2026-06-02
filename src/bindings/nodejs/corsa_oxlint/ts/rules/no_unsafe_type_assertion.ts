@@ -5,12 +5,7 @@ export const noUnsafeTypeAssertionRule = createRustNativeRule(
   {
     schema: { type: "array" },
   },
-  {
-    includePropertyNames: false,
-    includeTypeTexts: (_node, depth) => depth === 1,
-    maxDepth: 1,
-    shouldRun: shouldRunNoUnsafeTypeAssertion,
-  },
+  { shouldRun: shouldRunNoUnsafeTypeAssertion },
 );
 
 function shouldRunNoUnsafeTypeAssertion(node: any): boolean {

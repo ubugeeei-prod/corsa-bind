@@ -6,12 +6,7 @@ export const noMeaninglessVoidOperatorRule = createRustNativeRule(
     hasSuggestions: true,
     schema: { type: "array" },
   },
-  {
-    includePropertyNames: false,
-    includeTypeTexts: (_node, depth) => depth === 1,
-    maxDepth: 1,
-    shouldRun: shouldRunNoMeaninglessVoidOperator,
-  },
+  { shouldRun: shouldRunNoMeaninglessVoidOperator },
 );
 
 function shouldRunNoMeaninglessVoidOperator(node: any): boolean {

@@ -9,12 +9,7 @@ import { createRustNativeRule } from "./native_bridge";
 export const noImpliedEvalRule = createRustNativeRule(
   "no-implied-eval",
   {},
-  {
-    includePropertyNames: false,
-    includeTypeTexts: (_node, depth) => depth === 1,
-    maxDepth: 2,
-    shouldRun: shouldRunNoImpliedEval,
-  },
+  { shouldRun: shouldRunNoImpliedEval },
 );
 
 function shouldRunNoImpliedEval(node: any): boolean {
