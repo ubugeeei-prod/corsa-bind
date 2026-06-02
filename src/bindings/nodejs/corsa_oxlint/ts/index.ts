@@ -12,6 +12,7 @@ export { compatPlugin, definePlugin, defineRule } from "./plugin";
 export type { Plugin, Rule } from "./plugin";
 export { getParserServices } from "./parser_services";
 export { RuleTester } from "./rule_tester";
+export { SignatureKind } from "./types";
 export type { RuleTesterConfig } from "./rule_tester";
 export { TSESLint } from "./ts_eslint";
 export * as rules from "./rules/index";

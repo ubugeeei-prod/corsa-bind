@@ -2,6 +2,7 @@ import type { Node } from "@oxlint/plugins";
 
 import { createNodeMaps, toPosition } from "./node_map";
 import { sessionForContext } from "./registry";
+import { SignatureKind } from "./types";
 import type {
   ContextWithParserOptions,
   CorsaNode,
@@ -213,7 +214,7 @@ function typeOfNewExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaT
   if (!calleeType) {
     return undefined;
   }
-  const constructSignature = checker.getSignaturesOfType(calleeType, 1)[0];
+  const constructSignature = checker.getSignaturesOfType(calleeType, SignatureKind.Construct)[0];
   return constructSignature
     ? (checker.getReturnTypeOfSignature(constructSignature) ?? calleeType)
     : calleeType;
