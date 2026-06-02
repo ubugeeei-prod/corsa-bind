@@ -92,6 +92,13 @@ export const rustReleaseCrates: readonly RustReleaseCrate[] = [
     patches: [],
     publish: "internal",
   },
+  {
+    name: "corsa_elixir",
+    manifestPath: "src/bindings/elixir/corsa_utils/native/corsa_elixir/Cargo.toml",
+    packagePath: "src/bindings/elixir/corsa_utils/native/corsa_elixir",
+    patches: ["corsa_client", "corsa_core", "corsa_lsp", "corsa_runtime"],
+    publish: "internal",
+  },
 ] as const;
 
 export const publicRustCrates = rustReleaseCrates.filter(
@@ -101,6 +108,7 @@ export const publicRustCrates = rustReleaseCrates.filter(
 export const publicRustCrateNames = publicRustCrates.map((crate) => crate.name);
 
 const cargoManifestPaths = rustReleaseCrates.map((crate) => crate.manifestPath);
+const elixirPackageManifestPath = "src/bindings/elixir/corsa_utils/mix.exs";
 const workspaceCrateNames = rustReleaseCrates.map((crate) => crate.name);
 const workspaceNpmPackageNames = npmPackages.map((pkg) => pkg.name);
 
@@ -147,6 +155,14 @@ function getCargoPackageVersion(manifestPath: string): string {
   }
 
   throw new Error(`Unable to find [package] version in ${manifestPath}`);
+}
+
+function getElixirPackageVersion(manifestPath: string): string {
+  const match = readText(manifestPath).match(/^\s*@version\s+"([^"]+)"\s*$/m);
+  if (!match) {
+    throw new Error(`Unable to find @version in ${manifestPath}`);
+  }
+  return match[1];
 }
 
 function updateCargoManifest(manifestPath: string, nextVersion: string): boolean {
@@ -238,6 +254,30 @@ function updatePackageManifest(manifestPath: string, nextVersion: string): boole
   return changed;
 }
 
+function updateElixirPackageManifest(manifestPath: string, nextVersion: string): boolean {
+  const contents = readText(manifestPath).replace(/\r\n/g, "\n");
+  let changed = false;
+
+  const nextContents = contents.replace(/^(\s*@version\s+")([^"]+)(".*)$/m, (...args) => {
+    const [, prefix, currentVersion, suffix] = args as [string, string, string, string];
+    if (currentVersion === nextVersion) {
+      return `${prefix}${currentVersion}${suffix}`;
+    }
+    changed = true;
+    return `${prefix}${nextVersion}${suffix}`;
+  });
+
+  if (!changed && !/^\s*@version\s+"([^"]+)"\s*$/m.test(contents)) {
+    throw new Error(`Unable to find @version in ${manifestPath}`);
+  }
+
+  if (changed) {
+    writeText(manifestPath, nextContents);
+  }
+
+  return changed;
+}
+
 export function readWorkspaceVersion(): string {
   const versions = new Set<string>();
 
@@ -248,6 +288,8 @@ export function readWorkspaceVersion(): string {
   for (const pkg of [nodeBindingPackage, corsaOxlintPackage]) {
     versions.add(JSON.parse(readText(resolve(pkg.path, "package.json"))).version);
   }
+
+  versions.add(getElixirPackageVersion(resolve(rootDir, elixirPackageManifestPath)));
 
   if (versions.size !== 1) {
     throw new Error(
@@ -313,6 +355,11 @@ export function updateWorkspaceVersion(nextVersion: string): string[] {
     if (updatePackageManifest(manifestPath, nextVersion)) {
       changedPaths.push(manifestPath);
     }
+  }
+
+  const elixirManifestPath = resolve(rootDir, elixirPackageManifestPath);
+  if (updateElixirPackageManifest(elixirManifestPath, nextVersion)) {
+    changedPaths.push(elixirManifestPath);
   }
 
   return changedPaths;
