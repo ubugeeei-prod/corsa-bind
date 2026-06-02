@@ -230,10 +230,18 @@ export class CorsaProjectSession {
     return type;
   }
 
+  getTypeOfSymbolById(id: string): CorsaType | undefined {
+    return this.rememberType(this.tryGetSymbolTypeId(id, "getTypeOfSymbol"));
+  }
+
   getDeclaredTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined {
     const type = this.rememberType(this.tryGetSymbolType(symbol, "getDeclaredTypeOfSymbol"));
     this.rememberTypeSource(type, symbol.valueDeclaration);
     return type;
+  }
+
+  getDeclaredTypeOfSymbolById(id: string): CorsaType | undefined {
+    return this.rememberType(this.tryGetSymbolTypeId(id, "getDeclaredTypeOfSymbol"));
   }
 
   typeToString(type: CorsaType, flags?: number): string {
@@ -481,10 +489,15 @@ export class CorsaProjectSession {
     symbol: CorsaSymbol,
     method: "getTypeOfSymbol" | "getDeclaredTypeOfSymbol",
   ): CorsaType | undefined {
+    return this.tryGetSymbolTypeId(symbol.id, method);
+  }
+
+  private tryGetSymbolTypeId(
+    id: string,
+    method: "getTypeOfSymbol" | "getDeclaredTypeOfSymbol",
+  ): CorsaType | undefined {
     try {
-      return this.client()[method](this.#snapshot!, this.projectId(), symbol.id) as
-        | CorsaType
-        | undefined;
+      return this.client()[method](this.#snapshot!, this.projectId(), id) as CorsaType | undefined;
     } catch {
       return undefined;
     }

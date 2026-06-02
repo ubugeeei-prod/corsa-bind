@@ -11,7 +11,14 @@ import type {
 
 import { createNativeRule } from "./rule_creator";
 import { checkerFor, propertyNamesOfNode, typeAtNode, typeTextsAtNode } from "./type_utils";
-import type { ContextWithParserOptions, CorsaNode, CorsaSignature, CorsaType } from "../types";
+import type {
+  ContextWithParserOptions,
+  CorsaNode,
+  CorsaSignature,
+  CorsaSymbol,
+  CorsaType,
+  CorsaTypeCheckerShape,
+} from "../types";
 
 type RangedNode = {
   readonly type: string;
@@ -494,17 +501,31 @@ function parameterTypeTexts(
   parameterId: string,
 ): readonly string[] {
   const checker = checkerFor(context);
-  const parameterSymbol = checker.getSymbol(parameterId) ?? ({ id: parameterId } as any);
-  const declaration =
-    checker.getNode(parameterSymbol.valueDeclaration) ??
-    checker.getNode(parameterSymbol.declarations?.[0]);
+  const parameterSymbol = checker.getSymbol(parameterId);
+  const declaration = parameterSymbol ? declarationForSymbol(checker, parameterSymbol) : undefined;
   const parameterType =
-    (declaration ? checker.getTypeOfSymbolAtLocation(parameterSymbol, declaration) : undefined) ??
-    checker.getTypeOfSymbol(parameterSymbol) ??
-    checker.getDeclaredTypeOfSymbol(parameterSymbol);
+    (parameterSymbol && declaration
+      ? checker.getTypeOfSymbolAtLocation(parameterSymbol, declaration)
+      : undefined) ??
+    (parameterSymbol ? checker.getTypeOfSymbol(parameterSymbol) : undefined) ??
+    (parameterSymbol ? checker.getDeclaredTypeOfSymbol(parameterSymbol) : undefined) ??
+    checker.getTypeOfSymbolById(parameterId) ??
+    checker.getDeclaredTypeOfSymbolById(parameterId);
   const typeTexts = parameterType ? renderTypeTexts(context, parameterType) : [];
   const fallbackTexts = parameterAnnotationTexts(context, declaration);
   return typeTexts.length > 0 ? typeTexts : fallbackTexts;
+}
+
+function declarationForSymbol(
+  checker: CorsaTypeCheckerShape,
+  symbol: CorsaSymbol,
+): CorsaNode | undefined {
+  const valueDeclaration = symbol.valueDeclaration;
+  const firstDeclaration = symbol.declarations?.[0];
+  return (
+    (valueDeclaration ? checker.getNode(valueDeclaration) : undefined) ??
+    (firstDeclaration ? checker.getNode(firstDeclaration) : undefined)
+  );
 }
 
 function parameterAnnotationTexts(

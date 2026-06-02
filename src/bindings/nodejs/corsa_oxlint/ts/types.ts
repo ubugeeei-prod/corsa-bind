@@ -110,7 +110,9 @@ export interface CorsaTypeCheckerShape {
   getNode(node: string | CorsaNode): CorsaNode | undefined;
   getNodeById(id: string): CorsaNode | undefined;
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined;
+  getTypeOfSymbolById(id: string): CorsaType | undefined;
   getDeclaredTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined;
+  getDeclaredTypeOfSymbolById(id: string): CorsaType | undefined;
   getTypeOfSymbolAtLocation(symbol: CorsaSymbol, node: Node | CorsaNode): CorsaType | undefined;
   typeToString(type: CorsaType, enclosingDeclaration?: Node | CorsaNode, flags?: number): string;
   getBaseTypeOfLiteralType(type: CorsaType): CorsaType | undefined;
