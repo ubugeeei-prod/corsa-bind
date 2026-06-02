@@ -326,9 +326,6 @@ function addHostFacts(
   if (current.type === "ExpressionStatement") {
     fields.__nearestFunctionAsync = nearestFunctionAncestor(context, current)?.async === true;
   }
-  if (current.type === "TemplateLiteral") {
-    fields.__taggedTemplate = current.parent?.type === "TaggedTemplateExpression";
-  }
   if (current.type === "CallExpression" && isPromiseExecutorRejectCall(context, current)) {
     fields.__promiseExecutorRejectCall = true;
   }

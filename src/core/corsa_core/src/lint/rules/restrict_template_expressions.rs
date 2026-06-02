@@ -32,7 +32,7 @@ impl RustLintRule for RestrictTemplateExpressionsRule {
     }
 
     fn check(&self, ctx: &mut RuleContext<'_>, node: &LintNode) {
-        if node.kind != "TemplateLiteral" || node.field_bool("__taggedTemplate").unwrap_or(false) {
+        if node.kind != "TemplateLiteral" || is_tagged_template(node) {
             return;
         }
 
@@ -43,6 +43,10 @@ impl RustLintRule for RestrictTemplateExpressionsRule {
             }
         }
     }
+}
+
+fn is_tagged_template(node: &LintNode) -> bool {
+    node.field_str("__parentKind") == Some("TaggedTemplateExpression")
 }
 
 #[derive(Clone, Copy, Debug)]

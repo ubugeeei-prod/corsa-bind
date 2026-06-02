@@ -1108,7 +1108,7 @@ fn ignores_tagged_template_expressions() {
         "{ value: number }",
     )]);
     node.fields
-        .insert("__taggedTemplate".to_owned(), json!(true));
+        .insert("__parentKind".to_owned(), json!("TaggedTemplateExpression"));
 
     let diagnostics = registry()
         .run_rule("restrict-template-expressions", &node)
