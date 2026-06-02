@@ -19,8 +19,8 @@ commitment:
 - the `experimental-distributed` cargo feature
 - the in-process Raft replication layer
 - upstream endpoints explicitly called out as unstable
-- C#, Swift, Zig, and MoonBit wrappers until their toolchains are added to the
-  required CI matrix
+- C#, Swift, Zig, MoonBit, and Elixir wrappers until their toolchains are added
+  to the required CI matrix
 
 ## Release Channels
 

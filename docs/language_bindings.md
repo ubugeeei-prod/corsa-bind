@@ -1,15 +1,19 @@
 ---
 title: Language bindings
-description: Use the corsa_ffi C ABI from C, C++, Go, Zig, C#, Swift, and MoonBit — build the shared library, link it, and call the utils, API client, and virtual document surfaces.
+description: Use the native Corsa bindings from Elixir, C, C++, Go, Zig, C#, Swift, and MoonBit — build the shared library or Rustler NIF and call the utils, API client, and virtual document surfaces.
 ---
 
-# Language Bindings (C ABI)
+# Language Bindings
 
-Every non-Node binding is layered on a single shared C ABI crate,
+Most non-Node bindings are layered on a single shared C ABI crate,
 [`corsa_ffi`](https://github.com/ubugeeei/corsa-bind/tree/main/src/bindings/c/corsa_ffi).
 It exposes the Rust `corsa_client::ApiClient`, `corsa_core::utils`, and
 `corsa_lsp::VirtualDocument` surfaces over a stable C interface, and the thin
 per-language wrappers add idiomatic ergonomics on top.
+
+Elixir uses a Rustler NIF instead of the C ABI because BEAM runtimes need a NIF
+or port boundary. It exposes the same utils, virtual-document, and API-client
+surfaces through `Corsa`, `Corsa.VirtualDocument`, and `Corsa.ApiClient`.
 
 ```
 corsa_client / corsa_core::utils / corsa_lsp        (Rust)
@@ -18,6 +22,12 @@ corsa_client / corsa_core::utils / corsa_lsp        (Rust)
                   │
    ┌────────┬─────┴──────┬──────┬──────┬──────────┐
    C       C++          Go     Zig    C#   Swift / MoonBit
+
+corsa_client / corsa_core::utils / corsa_lsp        (Rust)
+                  │
+            Rustler NIF
+                  │
+                Elixir
 ```
 
 The Node.js binding is documented separately in the
@@ -26,7 +36,7 @@ C ABI.
 
 ## What each binding exposes
 
-All seven language wrappers cover the same three surfaces:
+All language wrappers cover the same three surfaces:
 
 - **Utils** — Rust-backed type-text predicates and splitters
   (`classify_type_text`, `is_string_like_type_texts`, `split_type_text`, …),
@@ -45,6 +55,7 @@ All seven language wrappers cover the same three surfaces:
 | C#       | `src/bindings/csharp/CorsaUtils`   | `CorsaUtils.csproj`                                               |
 | Swift    | `src/bindings/swift/CorsaUtils`    | `Package.swift`                                                   |
 | MoonBit  | `src/bindings/moonbit/corsa_utils` | `moon.pkg.json`                                                   |
+| Elixir   | `src/bindings/elixir/corsa_utils`  | `Corsa`, `Corsa.VirtualDocument`, `Corsa.ApiClient`               |
 
 > [!IMPORTANT]
 > Like the Node binding, these wrappers do **not** bundle a Corsa executable.
@@ -53,8 +64,9 @@ All seven language wrappers cover the same three surfaces:
 
 ## Build the shared library
 
-All bindings link against `corsa_ffi`. Build it first; the C ABI crate is
-configured as both a `cdylib` and a `staticlib`:
+C ABI bindings link against `corsa_ffi`. Build it first; the C ABI crate is
+configured as both a `cdylib` and a `staticlib`. Elixir builds its Rustler NIF
+from the `src/bindings/elixir/corsa_utils` package instead.
 
 ```bash
 cargo build -p corsa_ffi
@@ -215,13 +227,39 @@ moon test
 See `README.mbt.md` in that directory for the MoonBit-specific build details.
 The package mirrors the same utils, API client, and virtual document surfaces.
 
+## Elixir
+
+The Elixir package is backed by a Rustler NIF rather than the C ABI:
+
+```bash
+cd src/bindings/elixir/corsa_utils
+mix deps.get
+mix test
+```
+
+Use it as:
+
+```elixir
+Corsa.classify_type_text("string[]")
+
+{:ok, doc} = Corsa.VirtualDocument.untitled("/demo.ts", "typescript", "const value = 1;")
+:ok = Corsa.VirtualDocument.replace(doc, "const value = 2;")
+```
+
+`Corsa.ApiClient` accepts a caller-provided executable path and mirrors the C
+ABI API-client surface. Map-based helpers decode JSON through Jason; `_json`
+variants expose the raw JSON strings.
+
 ## How they are verified
 
 CI builds `corsa_ffi`, runs the Go binding tests, and compiles a C++ smoke
 translation unit against the headers in the `non-node-bindings` job. The
-binding benchmark harness (`scripts/bench_bindings.ts`, `vp run -w
-bench_bindings`) builds and links the C, C++, and Go bindings against the same
-shared library. See the [CI guide](./ci_guide.md) for the full job layout.
+Elixir NIF crate is part of the Rust workspace and is covered by Rust format,
+build, and clippy checks; Mix-level tests remain experimental until Elixir is
+added to the required CI matrix. The binding benchmark harness
+(`scripts/bench_bindings.ts`, `vp run -w bench_bindings`) builds and links the
+C, C++, and Go bindings against the same shared library. See the
+[CI guide](./ci_guide.md) for the full job layout.
 
 ## See also
 

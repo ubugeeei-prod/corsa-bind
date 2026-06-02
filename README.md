@@ -13,9 +13,10 @@
 
 `corsa-bind` is a multi-crate workspace for talking to [Corsa](https://devblogs.microsoft.com/typescript/typescript-native-port/)
 (the native TypeScript 7 implementation line) from Rust and JavaScript runtimes.
-Hot paths live in Rust and stay zero-cost; `napi-rs` and a shared C ABI surface
-that performance to JS/TS, C, C++, Go, Zig, C#, Swift, and MoonBit — so you can
-author custom checker tooling and lint rules without reimplementing the checker.
+Hot paths live in Rust and stay zero-cost; `napi-rs`, Rustler, and a shared C
+ABI carry that performance to JS/TS, Elixir, C, C++, Go, Zig, C#, Swift, and
+MoonBit — so you can author custom checker tooling and lint rules without
+reimplementing the checker.
 
 > [!WARNING]
 > This repository is still evolving. The local Rust and Node API/LSP surfaces
@@ -73,20 +74,20 @@ binary.
 
 Full guides live under [`docs/`](./docs/index.md):
 
-| Guide                                                  | What it covers                                                |
-| ------------------------------------------------------ | ------------------------------------------------------------- |
-| [Getting started](./docs/getting_started.md)           | First program in Rust, Node.js, and Oxlint                    |
-| [Architecture](./docs/project_guide.md)                | Workspace shape, upstream policy, extension points, naming    |
-| [Node.js binding](./docs/nodejs_binding.md)            | `@corsa-bind/napi` for Node, Deno, and Bun                    |
-| [Language bindings](./docs/language_bindings.md)       | The `corsa_ffi` C ABI for C, C++, Go, Zig, C#, Swift, MoonBit |
-| [Type-aware Oxlint](./docs/oxlint_guide.md)            | `corsa-oxlint` rule authoring, native and stylistic rules     |
-| [Native rules](./docs/native_rules.md)                 | The type-aware Rust lint rules and their options              |
-| [Stylistic rules](./docs/stylistic_rules.md)           | The Rust-backed `@stylistic`-compatible formatting rules      |
-| [Stylistic benchmark](./docs/stylistic_benchmark.md)   | Native stylistic throughput vs the upstream `@stylistic`      |
-| [Performance](./docs/performance.md)                   | Benchmark entry points and measured numbers                   |
-| [CI and local checks](./docs/ci_guide.md)              | Reproduce the GitHub checks locally                           |
-| [Production readiness](./docs/production_readiness.md) | Runtime controls and release gates                            |
-| [Support policy](./docs/support_policy.md)             | Supported platforms, bindings, and experimental scope         |
+| Guide                                                  | What it covers                                                  |
+| ------------------------------------------------------ | --------------------------------------------------------------- |
+| [Getting started](./docs/getting_started.md)           | First program in Rust, Node.js, and Oxlint                      |
+| [Architecture](./docs/project_guide.md)                | Workspace shape, upstream policy, extension points, naming      |
+| [Node.js binding](./docs/nodejs_binding.md)            | `@corsa-bind/napi` for Node, Deno, and Bun                      |
+| [Language bindings](./docs/language_bindings.md)       | Native bindings for Elixir, C, C++, Go, Zig, C#, Swift, MoonBit |
+| [Type-aware Oxlint](./docs/oxlint_guide.md)            | `corsa-oxlint` rule authoring, native and stylistic rules       |
+| [Native rules](./docs/native_rules.md)                 | The type-aware Rust lint rules and their options                |
+| [Stylistic rules](./docs/stylistic_rules.md)           | The Rust-backed `@stylistic`-compatible formatting rules        |
+| [Stylistic benchmark](./docs/stylistic_benchmark.md)   | Native stylistic throughput vs the upstream `@stylistic`        |
+| [Performance](./docs/performance.md)                   | Benchmark entry points and measured numbers                     |
+| [CI and local checks](./docs/ci_guide.md)              | Reproduce the GitHub checks locally                             |
+| [Production readiness](./docs/production_readiness.md) | Runtime controls and release gates                              |
+| [Support policy](./docs/support_policy.md)             | Supported platforms, bindings, and experimental scope           |
 
 The generated documentation site starts at [`docs/index.md`](./docs/index.md)
 and is built with `vp run -w docs_build`.

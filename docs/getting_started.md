@@ -275,7 +275,7 @@ verified is documented in
 
 - [Architecture](./project_guide.md) — workspace shape, upstream policy, and extension points
 - [Node binding guide](./nodejs_binding.md) — the full `@corsa-bind/napi` surface
-- [Language bindings](./language_bindings.md) — C, C++, Go, Zig, C#, Swift, and MoonBit
+- [Language bindings](./language_bindings.md) — Elixir, C, C++, Go, Zig, C#, Swift, and MoonBit
 - [Oxlint guide](./oxlint_guide.md) — type-aware and native rule authoring
 - [CI and local checks](./ci_guide.md) — reproduce the GitHub checks locally
 - [Production readiness](./production_readiness.md) — runtime controls and release gates

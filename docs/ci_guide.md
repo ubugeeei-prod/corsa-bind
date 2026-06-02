@@ -115,8 +115,8 @@ outside Node:
 - runs the Go wrapper tests in `src/bindings/go/corsa_utils`
 - compiles the C++ header surface against the generated C ABI header
 
-C#, Swift, Zig, and MoonBit remain tracked as experimental wrappers until their
-toolchains are promoted into the required matrix.
+C#, Swift, Zig, MoonBit, and Elixir remain tracked as experimental wrappers
+until their toolchains are promoted into the required matrix.
 
 ## Local Reproduction
 
@@ -127,7 +127,7 @@ The easiest local reproduction path is a shell that provides:
 - `vp` for Vite+, Node `24`, and package-manager access
 - `rust 1.85+`
 - `go 1.26`
-- the native-language toolchains under `src/bindings` (`clang`, `zig`, `dotnet`, `swift`, `moon`)
+- the native-language toolchains under `src/bindings` (`clang`, `zig`, `dotnet`, `swift`, `moon`, `elixir`)
 
 This repository now ships a `flake.nix` for that environment.
 The generated flake comes from a thin `tnix` entrypoint in
