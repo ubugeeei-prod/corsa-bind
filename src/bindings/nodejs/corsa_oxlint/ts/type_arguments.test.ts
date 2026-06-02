@@ -248,4 +248,103 @@ describe("corsa oxlint type arguments", () => {
     expect(seen.partialDog).toEqual(expected);
     expect(seen.requiredDog).toEqual(expected);
   });
+
+  integrationCase("returns structural mapped utility arguments on class properties", () => {
+    const seen: Record<
+      string,
+      | {
+          readonly argument: string;
+          readonly bases: readonly string[];
+          readonly implemented: readonly string[];
+        }
+      | undefined
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "mapped-utility-class-property-argument-structure",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise mapped utility type arguments from class properties",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          PropertyDefinition(node: any) {
+            const keyName = node.key?.name;
+            if (!keyName) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            const argument = type ? checker.getTypeArguments(type)[0] : undefined;
+            seen[keyName] = argument
+              ? {
+                  argument: checker.typeToString(argument),
+                  bases: checker.getBaseTypes(argument).map((base) => checker.typeToString(base)),
+                  implemented: checker
+                    .getImplementedTypesOfType(argument)
+                    .map((implemented) => checker.typeToString(implemented)),
+                }
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("mapped-utility-class-property-argument-structure", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Animal {}",
+            "interface IDog {",
+            "  name: string;",
+            "}",
+            "class Dog extends Animal implements IDog {",
+            '  readonly name = "Rex";',
+            "}",
+            "interface Box<T> {",
+            "  value: T;",
+            "}",
+            "class Holder {",
+            "  readonly readonlyDog: Readonly<Dog> = {} as Readonly<Dog>;",
+            "  readonly partialDog: Partial<Dog> = {} as Partial<Dog>;",
+            "  readonly requiredDog: Required<Dog> = {} as Required<Dog>;",
+            "  readonly boxedDog: Box<Dog> = { value: {} as Dog };",
+            "  readonly dogList: Dog[] = [];",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    const expected = {
+      argument: "Dog",
+      bases: ["Animal"],
+      implemented: ["IDog"],
+    };
+    expect(seen.readonlyDog).toEqual(expected);
+    expect(seen.partialDog).toEqual(expected);
+    expect(seen.requiredDog).toEqual(expected);
+    expect(seen.boxedDog).toEqual(expected);
+    expect(seen.dogList).toEqual(expected);
+  });
 });
