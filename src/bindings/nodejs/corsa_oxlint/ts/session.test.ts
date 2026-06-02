@@ -66,6 +66,39 @@ describe("CorsaProjectSession", () => {
     expect(clients[0]?.updateSnapshot).toHaveBeenCalledTimes(1);
   });
 
+  it("does not rotate an unchanged snapshot only because the cache lifetime expired", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      clients.length = 0;
+      const runtime = {
+        executable: "/tmp/corsa",
+        cwd: "/tmp",
+        mode: "msgpack",
+        cacheLifetimeMs: 1,
+      } as const;
+      const session = new CorsaProjectSession(
+        {
+          filename: "/tmp/one.ts",
+          rootDir: "/tmp",
+          configPath: "/tmp/tsconfig.json",
+          runtime,
+        },
+        runtime,
+      );
+
+      const type = session.getTypeAtPosition("/tmp/one.ts", 0);
+      vi.advanceTimersByTime(2);
+      session.typeToString(type as never);
+      session.getTypeAtPosition("/tmp/one.ts", 1);
+
+      expect(clients[0]?.updateSnapshot).toHaveBeenCalledTimes(1);
+      expect(clients[0]?.releaseHandle).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Regression for GH#206: upstream Corsa occasionally drops a type handle
   // from its snapshot registry after a base-types query on a class with no
   // explicit `extends` clause, which then makes a follow-up

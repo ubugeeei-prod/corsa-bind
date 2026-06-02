@@ -75,6 +75,7 @@ export class CorsaProjectSession {
   #typeSourceById = new Map<string, SourceSlice>();
   #typeTextById = new Map<string, string>();
   #lastRefreshMs = 0;
+  #snapshotHasIssuedHandles = false;
   #supportsOverlayChanges?: boolean;
 
   constructor(
@@ -496,6 +497,9 @@ export class CorsaProjectSession {
   }
 
   private rememberType<T extends CorsaType | undefined>(type: T): T {
+    if (type) {
+      this.#snapshotHasIssuedHandles = true;
+    }
     if (type?.symbol) {
       this.#symbolTypeById.set(type.symbol, type.id);
     }
@@ -548,6 +552,7 @@ export class CorsaProjectSession {
     if (!symbol) {
       return symbol;
     }
+    this.#snapshotHasIssuedHandles = true;
     const synthetic = this.#syntheticSymbolsById.get(symbol.id);
     if (synthetic) {
       return synthetic as T;
@@ -635,6 +640,7 @@ export class CorsaProjectSession {
     this.#nodesById.clear();
     this.#typeLookupById.clear();
     this.#typeSourceById.clear();
+    this.#snapshotHasIssuedHandles = false;
   }
 
   private parameterInfosForDeclaration(
@@ -752,7 +758,11 @@ export class CorsaProjectSession {
       lintSourceText: sourceText,
       sourceText: overlayText,
     };
-    const stale = !this.#snapshot || mtimeChanged || textChanged || expired;
+    const stale =
+      !this.#snapshot ||
+      mtimeChanged ||
+      textChanged ||
+      (expired && !this.#snapshotHasIssuedHandles);
     if (!stale) {
       return prepared;
     }
