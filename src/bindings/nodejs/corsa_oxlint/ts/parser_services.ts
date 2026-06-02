@@ -144,8 +144,14 @@ function createEslintTypeChecker(
     getTypeOfSymbol(symbol) {
       return callChecker(source, "getTypeOfSymbol", symbol);
     },
+    getTypeOfSymbolById() {
+      return undefined;
+    },
     getDeclaredTypeOfSymbol(symbol) {
       return callChecker(source, "getDeclaredTypeOfSymbol", symbol);
+    },
+    getDeclaredTypeOfSymbolById() {
+      return undefined;
     },
     getTypeOfSymbolAtLocation(symbol, node) {
       return (

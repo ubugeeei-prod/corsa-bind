@@ -918,6 +918,12 @@ describe("corsa oxlint type locations", () => {
       "id",
       "props",
     ]);
+    expect(
+      signature?.parameters.map((id) => {
+        const type = checker.getTypeOfSymbolById(id) ?? checker.getDeclaredTypeOfSymbolById(id);
+        return type ? checker.typeToString(type) : undefined;
+      }),
+    ).toEqual(["Construct | undefined", "string | undefined", "StackProps | undefined"]);
   });
 
   integrationCase("resolves the symbol type at a location instead of the node type", () => {
