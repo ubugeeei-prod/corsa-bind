@@ -341,9 +341,6 @@ function addHostFacts(
   if (current.parent?.type) {
     fields.__parentKind = current.parent.type;
   }
-  if (current.type === "ExportNamedDeclaration" && hasTypeOnlyValueExport(context, current)) {
-    fields.__nativeRuleViolation = true;
-  }
   if (
     (current.type === "Identifier" || current.type === "MemberExpression") &&
     isDeprecatedSymbolUse(context, current)
@@ -670,21 +667,6 @@ function topLevelIndexOf(text: string, needle: string): number {
     }
   }
   return -1;
-}
-
-function hasTypeOnlyValueExport(context: ContextWithParserOptions, node: any): boolean {
-  if (node.exportKind === "type" || !Array.isArray(node.specifiers)) {
-    return false;
-  }
-  const checker = checkerFor(context);
-  return node.specifiers.some((specifier: any) => {
-    if (specifier.exportKind === "type") {
-      return false;
-    }
-    const target = specifier.local ?? specifier.exported;
-    const symbol = target ? checker.getSymbolAtLocation(target) : undefined;
-    return symbol !== undefined && symbol.valueDeclaration === undefined;
-  });
 }
 
 function isDeprecatedSymbolUse(context: ContextWithParserOptions, node: any): boolean {
