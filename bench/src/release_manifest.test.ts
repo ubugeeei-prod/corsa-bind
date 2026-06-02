@@ -22,7 +22,7 @@ describe("release manifest", () => {
   it("tracks internal crates separately from public crates", () => {
     expect(
       rustReleaseCrates.filter((crate) => crate.publish === "internal").map((crate) => crate.name),
-    ).toEqual(["corsa_ref", "corsa_ffi", "corsa_node"]);
+    ).toEqual(["corsa_ref", "corsa_ffi", "corsa_node", "corsa_elixir"]);
 
     expect(publicRustCrates.every((crate) => crate.publish === "public")).toBe(true);
   });
