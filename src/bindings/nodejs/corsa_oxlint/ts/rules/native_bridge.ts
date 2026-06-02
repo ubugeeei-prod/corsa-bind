@@ -511,9 +511,7 @@ function parameterTypeTexts(
     (parameterSymbol ? checker.getDeclaredTypeOfSymbol(parameterSymbol) : undefined) ??
     checker.getTypeOfSymbolById(parameterId) ??
     checker.getDeclaredTypeOfSymbolById(parameterId);
-  const typeTexts = parameterType ? renderTypeTexts(context, parameterType) : [];
-  const fallbackTexts = parameterAnnotationTexts(context, declaration);
-  return typeTexts.length > 0 ? typeTexts : fallbackTexts;
+  return parameterType ? renderTypeTexts(context, parameterType) : [];
 }
 
 function declarationForSymbol(
@@ -526,35 +524,6 @@ function declarationForSymbol(
     (valueDeclaration ? checker.getNode(valueDeclaration) : undefined) ??
     (firstDeclaration ? checker.getNode(firstDeclaration) : undefined)
   );
-}
-
-function parameterAnnotationTexts(
-  context: ContextWithParserOptions,
-  declaration: CorsaNode | undefined,
-): readonly string[] {
-  if (!declaration) {
-    return [];
-  }
-  const sourceText = sourceTextForPath(context, declaration.fileName);
-  if (
-    !sourceText ||
-    declaration.pos < 0 ||
-    declaration.end > sourceText.length ||
-    declaration.pos >= declaration.end
-  ) {
-    return [];
-  }
-  const parameterText = sourceText.slice(declaration.pos, declaration.end);
-  const annotationStart = topLevelIndexOf(parameterText, ":");
-  if (annotationStart < 0) {
-    return [];
-  }
-  const annotationText = parameterText.slice(annotationStart + 1);
-  const defaultStart = topLevelIndexOf(annotationText, "=");
-  const typeText = (defaultStart >= 0 ? annotationText.slice(0, defaultStart) : annotationText)
-    .trim()
-    .replace(/\s+$/, "");
-  return typeText ? [typeText] : [];
 }
 
 function typeTextsOverlap(actual: readonly string[], expected: readonly string[]): boolean {
