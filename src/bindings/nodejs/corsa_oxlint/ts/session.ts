@@ -154,6 +154,9 @@ export class CorsaProjectSession {
     const type = this.rememberType(state.typeBySourceRange.get(key));
     if (type) {
       this.#typeLookupById.set(type.id, { fileName, position: start, sourceText });
+      if (kind !== "Identifier") {
+        this.rememberTypeSourceRange(type, fileName, start, end, sourceText);
+      }
     }
     return type;
   }
@@ -536,6 +539,34 @@ export class CorsaProjectSession {
     if (source) {
       this.#typeSourceById.set(type.id, source);
     }
+  }
+
+  private rememberTypeSourceRange(
+    type: CorsaType,
+    fileName: string,
+    start: number,
+    end: number,
+    sourceText: string | undefined,
+  ): void {
+    if (
+      this.#typeSourceById.has(type.id) ||
+      !sourceText ||
+      start < 0 ||
+      end > sourceText.length ||
+      start >= end
+    ) {
+      return;
+    }
+    const node = {
+      fileName,
+      pos: start,
+      end,
+      range: [start, end] as const,
+    };
+    this.#typeSourceById.set(type.id, {
+      node,
+      text: sourceText.slice(start, end),
+    });
   }
 
   private cacheTypeText(type: CorsaType | undefined): void {
