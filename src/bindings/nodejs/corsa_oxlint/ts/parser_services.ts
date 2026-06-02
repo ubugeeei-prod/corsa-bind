@@ -167,7 +167,7 @@ function createEslintTypeChecker(
           type,
           enclosingDeclaration ? tsNodeFor(enclosingDeclaration, esTreeNodeToTSNodeMap) : undefined,
           flags,
-        ) ?? fallbackTypeText(type)
+        ) ?? ""
       );
     },
     getBaseTypeOfLiteralType(type) {
@@ -186,18 +186,15 @@ function createEslintTypeChecker(
       return callChecker(source, "getTypePredicateOfSignature", signature);
     },
     getBaseTypes(type) {
-      const baseTypes = asReadonlyArray(callChecker(source, "getBaseTypes", type));
-      return baseTypes.length > 0 ? baseTypes : heritageTypes(type, source, "extends");
+      return asReadonlyArray(callChecker(source, "getBaseTypes", type));
     },
     getImplementedTypes(node) {
-      return heritageTypesFromDeclaration(
-        tsNodeFor(node, esTreeNodeToTSNodeMap),
-        source,
-        "implements",
+      return asReadonlyArray(
+        callChecker(source, "getImplementedTypes", tsNodeFor(node, esTreeNodeToTSNodeMap)),
       );
     },
     getImplementedTypesOfType(type) {
-      return implementedTypesIncludingBases(type, source);
+      return asReadonlyArray(callChecker(source, "getImplementedTypesOfType", type));
     },
     getTypeArguments(type) {
       return asReadonlyArray(callChecker(source, "getTypeArguments", type));
@@ -275,100 +272,6 @@ function hasNode(
   node: unknown,
 ): boolean {
   return typeof node === "object" && node !== null && esTreeNodeToTSNodeMap.has(node as never);
-}
-
-function fallbackTypeText(type: unknown): string {
-  const name = (type as { readonly name?: unknown }).name;
-  return typeof name === "string" || typeof name === "number" || typeof name === "boolean"
-    ? String(name)
-    : "";
-}
-
-function heritageTypes(
-  type: unknown,
-  checker: Record<string, unknown>,
-  keyword: "extends" | "implements",
-): readonly never[] {
-  const declarations = asReadonlyArray(
-    (type as { readonly symbol?: { readonly declarations?: unknown } }).symbol?.declarations,
-  );
-  return declarations.flatMap((declaration) =>
-    heritageTypesFromDeclaration(declaration, checker, keyword),
-  );
-}
-
-/**
- * Mirrors the tsgo-backed `getImplementedTypesOfType` behaviour by walking the
- * base-type chain so a class that implements an interface only through a base
- * class still reports that interface. Without this, a rule shared between
- * oxlint (tsgo) and ESLint (this `@typescript-eslint` fallback checker) would
- * see different implemented types for the same source (GH#207).
- *
- * The traversal is a DFS so we can use `pop()` (O(1)) instead of a queue with
- * `shift()` (O(n)) — visit order doesn't matter because we dedupe implemented
- * types by identity. We also `continue` on already-visited bases before
- * touching `Set.add`, so a deep diamond hierarchy never quadruples work.
- */
-function implementedTypesIncludingBases(
-  type: unknown,
-  checker: Record<string, unknown>,
-): readonly never[] {
-  if (type === undefined || type === null) {
-    return [];
-  }
-  const visited = new Set<unknown>();
-  const seenImplemented = new Set<unknown>();
-  const implemented: never[] = [];
-  const stack: unknown[] = [type];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === undefined || current === null || visited.has(current)) {
-      continue;
-    }
-    visited.add(current);
-    const ownImplemented = heritageTypes(current, checker, "implements");
-    for (let index = 0; index < ownImplemented.length; index += 1) {
-      const ownType = ownImplemented[index];
-      if (seenImplemented.has(ownType)) {
-        continue;
-      }
-      seenImplemented.add(ownType);
-      implemented.push(ownType);
-    }
-    const directBases = asReadonlyArray(callChecker(checker, "getBaseTypes", current));
-    const bases = directBases.length > 0 ? directBases : heritageTypes(current, checker, "extends");
-    for (let index = bases.length - 1; index >= 0; index -= 1) {
-      const baseType = bases[index];
-      if (baseType === undefined || baseType === null || visited.has(baseType)) {
-        continue;
-      }
-      stack.push(baseType);
-    }
-  }
-  return implemented;
-}
-
-function heritageTypesFromDeclaration(
-  declaration: unknown,
-  checker: Record<string, unknown>,
-  keyword: "extends" | "implements",
-): readonly never[] {
-  const clauses = asReadonlyArray(
-    (declaration as { readonly heritageClauses?: unknown }).heritageClauses,
-  );
-  return clauses
-    .filter((clause) => heritageClauseText(clause).trimStart().startsWith(keyword))
-    .flatMap((clause) => asReadonlyArray((clause as { readonly types?: unknown }).types))
-    .map((node) => {
-      const expression = (node as { readonly expression?: unknown }).expression ?? node;
-      return callChecker(checker, "getTypeAtLocation", expression);
-    })
-    .filter((type): type is never => type !== undefined);
-}
-
-function heritageClauseText(clause: unknown): string {
-  const getText = (clause as { readonly getText?: unknown }).getText;
-  return typeof getText === "function" ? String(getText.call(clause)) : "";
 }
 
 function resolveEslintParserServices(
