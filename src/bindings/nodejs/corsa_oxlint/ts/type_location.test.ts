@@ -569,6 +569,75 @@ describe("corsa oxlint type locations", () => {
     expect(seen.intersectionBases).toContain("Animal");
   });
 
+  integrationCase("returns immediate instance type for superclass constructor types", () => {
+    const seen: Record<string, { readonly name: string; readonly bases: readonly string[] }> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "superclass-constructor-base-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise superclass constructor type fallback lookups",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassDeclaration(node: any) {
+            const className = node.id?.name;
+            if (!className || !node.superClass) {
+              return;
+            }
+            const superType = checker.getTypeAtLocation(node.superClass);
+            if (!superType) {
+              return;
+            }
+            seen[className] = {
+              name: checker.typeToString(superType),
+              bases: checker.getBaseTypes(superType).map((base) => checker.typeToString(base)),
+            };
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("superclass-constructor-base-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Animal {}",
+            "class Dog extends Animal {}",
+            "class GoldenRetriever extends Dog {}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.Dog?.name).toBe("typeof Animal");
+    expect(seen.Dog?.bases).toContain("Animal");
+    expect(seen.GoldenRetriever?.name).toBe("typeof Dog");
+    expect(seen.GoldenRetriever?.bases[0]).toBe("Dog");
+  });
+
   integrationCase("resolves symbol and node handles exposed by signatures and types", () => {
     const seen: Record<string, unknown> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
