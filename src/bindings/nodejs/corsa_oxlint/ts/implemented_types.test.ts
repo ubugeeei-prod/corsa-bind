@@ -149,6 +149,92 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.byType).toEqual(["IChild"]);
   });
 
+  integrationCase("resolves namespace-qualified implemented interfaces from class types", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "qualified-implemented-types-of-type",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise qualified implemented types resolved from a class type",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassDeclaration(node: any) {
+            const className = node.id?.name;
+            if (!className) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen[className] = type
+              ? checker
+                  .getImplementedTypesOfType(type)
+                  .map((implemented) => checker.typeToString(implemented))
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("qualified-implemented-types-of-type", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface IFoo {",
+            "  foo: string;",
+            "}",
+            "class A implements IFoo {",
+            '  foo = "";',
+            "}",
+            "namespace ns {",
+            "  export interface IBar {",
+            "    bar: number;",
+            "  }",
+            "}",
+            "class B implements ns.IBar {",
+            "  bar = 1;",
+            "}",
+            "namespace outer {",
+            "  export namespace inner {",
+            "    export interface IBaz {",
+            "      baz: boolean;",
+            "    }",
+            "  }",
+            "}",
+            "class C implements outer.inner.IBaz {",
+            "  baz = true;",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.A).toEqual(["IFoo"]);
+    expect(seen.B).toEqual(["IBar"]);
+    expect(seen.C).toEqual(["IBaz"]);
+  });
+
   integrationCase(
     "resolves implemented interfaces after getBaseTypes has been called on the same type",
     () => {

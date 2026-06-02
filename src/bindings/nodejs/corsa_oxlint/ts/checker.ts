@@ -418,10 +418,12 @@ function implementedTypesFromSourceText(
         end,
         range: [pos, end] as const,
       };
-      const symbol = checker.getSymbolAtLocation(lookupNode);
+      const nameNode = implementedClauseNameNode(lookupNode, raw);
+      const symbol =
+        checker.getSymbolAtLocation(nameNode) ?? checker.getSymbolAtLocation(lookupNode);
       const type = symbol
         ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
-        : checker.getTypeAtLocation(lookupNode);
+        : (checker.getTypeAtLocation(nameNode) ?? checker.getTypeAtLocation(lookupNode));
       if (type) {
         // Implemented-interface handles come back with empty `texts`, so warm
         // the type-text cache with the `implements` identifier. If upstream
@@ -432,6 +434,49 @@ function implementedTypesFromSourceText(
       return type;
     })
     .filter((type): type is CorsaType => type !== undefined);
+}
+
+function implementedClauseNameNode(node: CorsaNode, raw: string): CorsaNode {
+  const range = lastTypeNameIdentifierRange(raw);
+  if (!range) {
+    return node;
+  }
+  const pos = node.pos + range.start;
+  const end = node.pos + range.end;
+  return {
+    fileName: node.fileName,
+    pos,
+    end,
+    range: [pos, end] as const,
+  };
+}
+
+function lastTypeNameIdentifierRange(
+  text: string,
+): { readonly start: number; readonly end: number } | undefined {
+  let last: { start: number; end: number } | undefined;
+  const scanner = createScanner();
+  for (let index = 0; index < text.length; index += 1) {
+    const nextIndex = scanner.skip(text, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    const char = text[index];
+    if (char === "<") {
+      break;
+    }
+    if (!isIdentifierStart(char)) {
+      continue;
+    }
+    let end = index + 1;
+    while (isIdentifierPart(text[end])) {
+      end += 1;
+    }
+    last = { start: index, end };
+    index = end - 1;
+  }
+  return last;
 }
 
 function findClassBodyOpen(text: string, start: number): number {
@@ -491,7 +536,11 @@ function matchesKeyword(text: string, keyword: string, index: number): boolean {
 }
 
 function isIdentifierPart(char: string | undefined): boolean {
-  return char !== undefined && /[A-Za-z0-9_$]/.test(char);
+  return char !== undefined && (isIdentifierStart(char) || /[0-9]/.test(char));
+}
+
+function isIdentifierStart(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z_$]/.test(char);
 }
 
 function splitTopLevelRanges(
