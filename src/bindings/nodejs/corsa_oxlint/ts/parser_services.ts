@@ -129,6 +129,12 @@ function createEslintTypeChecker(
     getSymbolById(id) {
       return typeof id === "object" ? id : undefined;
     },
+    getSymbolOfType(type) {
+      return (
+        callChecker(source, "getSymbolOfType", type) ??
+        ((type as { readonly symbol?: unknown }).symbol as never)
+      );
+    },
     getNode(node) {
       return typeof node === "object" ? node : undefined;
     },

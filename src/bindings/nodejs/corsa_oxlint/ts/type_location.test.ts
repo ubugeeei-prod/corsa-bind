@@ -1027,6 +1027,61 @@ describe("corsa oxlint type locations", () => {
     expect(seen.mapped.target).toBe("Readonly<T>");
   });
 
+  integrationCase("exposes symbols from type handles", () => {
+    const seen: Record<string, string | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "type-symbol-accessor",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise type to symbol lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSPropertySignature(node: any) {
+            if (node.key?.name !== "animal") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.animal = type ? checker.getSymbolOfType(type)?.name : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("type-symbol-accessor", rule as any, {
+      valid: [
+        {
+          code: ["class Animal {}", "interface Bag {", "  animal: Animal;", "}"].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.animal).toBe("Animal");
+  });
+
   it("sends linted source text overlay changes when it differs from disk", () => {
     const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-overlay-"));
     const srcDir = resolve(workspace, "src");
