@@ -34,6 +34,9 @@ export declare class CorsaApiClient {
   /** Resolves the checker symbol visible at a file position. */
   getSymbolAtPosition(snapshot: string, project: string, file: string, position: number): any
   getSymbolAtPositionAsync(snapshot: string, project: string, file: string, position: number): Promise<unknown>
+  /** Resolves the symbol attached to a checker type. */
+  getSymbolOfType(snapshot: string, typeHandle: string): any
+  getSymbolOfTypeAsync(snapshot: string, typeHandle: string): Promise<unknown>
   /** Resolves type arguments for type-reference and mapped objects, and returns [] otherwise. */
   getTypeArguments(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): any
   /** Resolves type arguments and prefers structural handles from source locations when available. */

@@ -228,6 +228,7 @@ describe("corsa oxlint", () => {
       },
       types: [{ name: "string" }, { name: "number" }],
     };
+    const unionSymbol = { name: "UnionAlias" };
     const implementedType = { name: "Implemented" };
     const implementationExpression = { kind: "implementation-expression" };
     const implementedClause = {
@@ -256,6 +257,9 @@ describe("corsa oxlint", () => {
       },
       getSymbolAtLocation() {
         return { kind: "symbol" };
+      },
+      getSymbolOfType() {
+        return unionSymbol;
       },
       getTypeArguments() {
         return [typeArgument];
@@ -314,6 +318,7 @@ describe("corsa oxlint", () => {
     expect(corsaChecker.isUnionType(type as never)).toBe(true);
     expect(corsaChecker.getTypesOfType(type as never)).toEqual(unionType.types);
     expect(corsaChecker.getBaseTypes(type as never)).toEqual([]);
+    expect(corsaChecker.getSymbolOfType(type as never)).toBe(unionSymbol);
     expect(corsaChecker.getImplementedTypes(classNode as never)).toEqual([implementedType]);
     expect(corsaChecker.getImplementedTypesOfType(classType as never)).toEqual([implementedType]);
     expect(corsaChecker.getTypeArguments(type as never)).toEqual([typeArgument]);

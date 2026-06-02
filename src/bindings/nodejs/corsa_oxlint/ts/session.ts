@@ -190,11 +190,23 @@ export class CorsaProjectSession {
     if (!typeId || !this.#snapshot) {
       return undefined;
     }
-    const resolved = this.client().callJson<CorsaSymbol | null>("getSymbolOfType", {
-      snapshot: this.#snapshot,
-      type: typeId,
-    });
+    const resolved = this.client().getSymbolOfType(this.#snapshot, typeId) as CorsaSymbol | null;
     return resolved?.id === symbol ? this.rememberSymbol(resolved) : undefined;
+  }
+
+  getSymbolOfType(type: CorsaType): CorsaSymbol | undefined {
+    if (type.symbol) {
+      const symbol = this.getSymbol(type.symbol);
+      if (symbol) {
+        return symbol;
+      }
+    }
+    if (!this.#snapshot) {
+      return undefined;
+    }
+    return this.rememberSymbol(
+      this.client().getSymbolOfType(this.#snapshot, type.id) as CorsaSymbol | undefined,
+    );
   }
 
   getNode(node: string | CorsaNode): CorsaNode | undefined {

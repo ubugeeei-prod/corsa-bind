@@ -106,6 +106,7 @@ export interface CorsaTypeCheckerShape {
   getSymbolAtLocation(node: Node | CorsaNode): CorsaSymbol | undefined;
   getSymbol(symbol: string | CorsaSymbol): CorsaSymbol | undefined;
   getSymbolById(id: string): CorsaSymbol | undefined;
+  getSymbolOfType(type: CorsaType): CorsaSymbol | undefined;
   getNode(node: string | CorsaNode): CorsaNode | undefined;
   getNodeById(id: string): CorsaNode | undefined;
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined;
