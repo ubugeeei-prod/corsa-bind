@@ -134,6 +134,7 @@ impl ApiClient {
             else {
                 continue;
             };
+            append_unique_types(&mut construct_return_bases, vec![return_type.clone()]);
             let mut return_bases = self
                 .get_base_types_direct(snapshot.clone(), project.clone(), return_type.id.clone())
                 .await?;
