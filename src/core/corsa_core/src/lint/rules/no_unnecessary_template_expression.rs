@@ -52,7 +52,7 @@ impl RustLintRule for NoUnnecessaryTemplateExpressionRule {
 /// enables the type-only enum-member guard for the trivial special case.
 fn check_template(ctx: &mut RuleContext<'_>, node: &LintNode, is_type: bool) {
     // `tag` ${...}` `` is excluded from the rule entirely.
-    if !is_type && node.field_bool("__taggedTemplate").unwrap_or(false) {
+    if !is_type && is_tagged_template(node) {
         return;
     }
 
@@ -93,6 +93,10 @@ fn check_template(ctx: &mut RuleContext<'_>, node: &LintNode, is_type: bool) {
         }
         report_span(ctx, expr);
     }
+}
+
+fn is_tagged_template(node: &LintNode) -> bool {
+    node.field_str("__parentKind") == Some("TaggedTemplateExpression")
 }
 
 /// Reports the `${ ... }` span around `expr`. The `${` opens two bytes before
@@ -393,7 +397,7 @@ mod tests {
         let node = from(json!({
             "kind": "TemplateLiteral",
             "range": { "start": 0, "end": 6 },
-            "fields": { "__taggedTemplate": true },
+            "fields": { "__parentKind": "TaggedTemplateExpression" },
             "childLists": {
                 "quasis": [quasi(1, 1, ""), quasi(5, 5, "")],
                 "expressions": [{
