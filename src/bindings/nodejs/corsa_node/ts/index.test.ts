@@ -111,7 +111,8 @@ describe("CorsaApiClient", () => {
       },
     });
 
-    expect(nativeLintRuleMetas().map((meta) => meta.name)).toEqual([
+    const lintMetas = nativeLintRuleMetas();
+    expect(lintMetas.map((meta) => meta.name)).toEqual([
       "consistent-return",
       "consistent-type-exports",
       "dot-notation",
@@ -172,6 +173,21 @@ describe("CorsaApiClient", () => {
       "unbound-method",
       "use-unknown-in-catch-callback-variable",
     ]);
+    const bridgeMetas = new Map(lintMetas.map((meta) => [meta.name, meta.bridge]));
+    expect(bridgeMetas.get("consistent-return")).toEqual({ maxDepth: 5 });
+    expect(bridgeMetas.get("no-misused-promises")).toEqual({
+      maxDepth: 5,
+      typeTexts: { minDepth: 0, maxDepth: 2 },
+    });
+    expect(bridgeMetas.get("no-array-delete")).toEqual({
+      maxDepth: 2,
+      typeTexts: { minDepth: 2, maxDepth: 2 },
+    });
+    expect(bridgeMetas.get("await-thenable")).toEqual({
+      maxDepth: 3,
+      typeTexts: { minDepth: 1, maxDepth: 2 },
+      propertyNames: { minDepth: 1, maxDepth: 2 },
+    });
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].messageId).toBe("unexpected");
     expect(diagnostics[0].suggestions?.[0]?.fixes.map((fix) => fix.replacementText)).toEqual([

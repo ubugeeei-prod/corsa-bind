@@ -6,6 +6,7 @@ import type {
   NativeLintNode,
   NativeLintRange,
   NativeLintRuleMeta,
+  NativeNodeMetadataDepth,
 } from "@corsa-bind/napi";
 
 import { createNativeRule } from "./rule_creator";
@@ -55,6 +56,7 @@ export function createRustNativeRule(
               return;
             }
             const includeTypeTexts = includeTypeTextsOption(bridgeOptions, meta);
+            const includeText = includeTextOption(bridgeOptions, meta);
             reportNativeDiagnostics(
               context,
               node,
@@ -64,10 +66,10 @@ export function createRustNativeRule(
                   context,
                   node,
                   includeTypeTexts,
-                  bridgeOptions.maxDepth ?? MAX_NATIVE_NODE_DEPTH,
+                  maxDepthOption(bridgeOptions, meta),
                   true,
-                  includePropertyNamesOption(bridgeOptions, includeTypeTexts),
-                  bridgeOptions.includeText ?? false,
+                  includePropertyNamesOption(bridgeOptions, meta),
+                  includeText,
                 ),
               ),
             );
@@ -252,14 +254,35 @@ function includeTypeTextsOption(
   options: NativeRuleBridgeOptions,
   meta: NativeLintRuleMeta,
 ): NodeMetadataOption {
-  return options.includeTypeTexts ?? meta.requiresTypeTexts;
+  return options.includeTypeTexts ?? nodeMetadataDepthOption(meta.bridge.typeTexts, false);
 }
 
 function includePropertyNamesOption(
   options: NativeRuleBridgeOptions,
-  includeTypeTexts: NodeMetadataOption,
+  meta: NativeLintRuleMeta,
 ): NodeMetadataOption {
-  return options.includePropertyNames ?? includeTypeTexts;
+  return options.includePropertyNames ?? nodeMetadataDepthOption(meta.bridge.propertyNames, false);
+}
+
+function includeTextOption(
+  options: NativeRuleBridgeOptions,
+  meta: NativeLintRuleMeta,
+): NodeMetadataOption {
+  return options.includeText ?? nodeMetadataDepthOption(meta.bridge.text, false);
+}
+
+function maxDepthOption(options: NativeRuleBridgeOptions, meta: NativeLintRuleMeta): number {
+  return options.maxDepth ?? meta.bridge.maxDepth ?? MAX_NATIVE_NODE_DEPTH;
+}
+
+function nodeMetadataDepthOption(
+  metadata: NativeNodeMetadataDepth | undefined,
+  fallback: NodeMetadataOption,
+): NodeMetadataOption {
+  if (!metadata) {
+    return fallback;
+  }
+  return (_node, depth) => depth >= metadata.minDepth && depth <= metadata.maxDepth;
 }
 
 function includeMetadataForNode(

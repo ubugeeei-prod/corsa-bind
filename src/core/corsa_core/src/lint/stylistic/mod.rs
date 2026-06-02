@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{LintDiagnostic, RuleMeta};
+use super::{LintDiagnostic, RuleBridgeRequirements, RuleMeta};
 
 mod context;
 mod context_rules;
@@ -678,6 +678,7 @@ pub fn stylistic_rule_metas() -> Vec<RuleMeta> {
                 .map(|listener| (*listener).to_owned())
                 .collect(),
             requires_type_texts: false,
+            bridge: RuleBridgeRequirements::default_for_type_texts(false),
         })
         .collect()
 }

@@ -159,6 +159,113 @@ pub struct RuleMessage {
     pub description: &'static str,
 }
 
+/// Depth range for metadata the JavaScript host should attach to native nodes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeMetadataDepth {
+    /// Minimum recursive node depth, where the listener node is depth 0.
+    pub min_depth: u8,
+    /// Maximum recursive node depth, inclusive.
+    pub max_depth: u8,
+}
+
+impl NodeMetadataDepth {
+    /// Includes metadata at a single depth.
+    pub const fn exact(depth: u8) -> Self {
+        Self {
+            min_depth: depth,
+            max_depth: depth,
+        }
+    }
+
+    /// Includes metadata from the listener node through `max_depth`.
+    pub const fn through(max_depth: u8) -> Self {
+        Self {
+            min_depth: 0,
+            max_depth,
+        }
+    }
+
+    /// Includes metadata for the provided inclusive depth range.
+    pub const fn range(min_depth: u8, max_depth: u8) -> Self {
+        Self {
+            min_depth,
+            max_depth,
+        }
+    }
+}
+
+/// Host-side metadata requirements for a Rust-authored lint rule.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleBridgeRequirements {
+    /// Maximum AST recursion depth the host should serialize.
+    pub max_depth: u8,
+    /// Depths where rendered type text should be attached.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_texts: Option<NodeMetadataDepth>,
+    /// Depths where property names should be attached.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub property_names: Option<NodeMetadataDepth>,
+    /// Depths where source text should be attached.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<NodeMetadataDepth>,
+}
+
+impl RuleBridgeRequirements {
+    /// Default recursion depth used by the JavaScript host bridge.
+    pub const DEFAULT_MAX_DEPTH: u8 = 4;
+
+    /// Creates requirements for syntax-only rules.
+    pub const fn syntax_only(max_depth: u8) -> Self {
+        Self {
+            max_depth,
+            type_texts: None,
+            property_names: None,
+            text: None,
+        }
+    }
+
+    /// Creates requirements that attach type text in an inclusive depth range.
+    pub const fn type_texts(max_depth: u8, type_texts: NodeMetadataDepth) -> Self {
+        Self {
+            max_depth,
+            type_texts: Some(type_texts),
+            property_names: None,
+            text: None,
+        }
+    }
+
+    /// Creates requirements that attach type text and property names together.
+    pub const fn type_texts_and_properties(max_depth: u8, metadata: NodeMetadataDepth) -> Self {
+        Self {
+            max_depth,
+            type_texts: Some(metadata),
+            property_names: Some(metadata),
+            text: None,
+        }
+    }
+
+    /// Adds source text metadata to existing requirements.
+    pub const fn with_text(mut self, text: NodeMetadataDepth) -> Self {
+        self.text = Some(text);
+        self
+    }
+
+    /// Creates the default requirements for rules that only declare whether
+    /// they need type text.
+    pub const fn default_for_type_texts(requires_type_texts: bool) -> Self {
+        if requires_type_texts {
+            Self::type_texts_and_properties(
+                Self::DEFAULT_MAX_DEPTH,
+                NodeMetadataDepth::through(Self::DEFAULT_MAX_DEPTH),
+            )
+        } else {
+            Self::syntax_only(Self::DEFAULT_MAX_DEPTH)
+        }
+    }
+}
+
 /// Serializable metadata that describes one Rust-authored lint rule.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -175,4 +282,6 @@ pub struct RuleMeta {
     pub listeners: Vec<String>,
     /// Whether the host should include rendered TypeScript type text.
     pub requires_type_texts: bool,
+    /// Native bridge metadata requirements owned by the Rust rule registry.
+    pub bridge: RuleBridgeRequirements,
 }

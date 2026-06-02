@@ -5,12 +5,7 @@ export const restrictPlusOperandsRule = createRustNativeRule(
   {
     schema: { type: "array" },
   },
-  {
-    includePropertyNames: false,
-    includeTypeTexts: (_node, depth) => depth === 1,
-    maxDepth: 1,
-    shouldRun: shouldRunRestrictPlusOperands,
-  },
+  { shouldRun: shouldRunRestrictPlusOperands },
 );
 
 function shouldRunRestrictPlusOperands(node: any): boolean {

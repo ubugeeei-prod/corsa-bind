@@ -1,4 +1,7 @@
-use super::{LintDiagnostic, LintNode, LintSuggestion, RuleMessage, RuleMeta, TextRange};
+use super::{
+    LintDiagnostic, LintNode, LintSuggestion, NodeMetadataDepth, RuleBridgeRequirements,
+    RuleMessage, RuleMeta, TextRange,
+};
 
 /// A Rust-authored type-aware lint rule.
 ///
@@ -28,6 +31,11 @@ pub trait RustLintRule: Send + Sync {
         true
     }
 
+    /// Returns host metadata requirements for the JavaScript native bridge.
+    fn bridge_requirements(&self) -> RuleBridgeRequirements {
+        bridge_requirements_for_rule(self.name(), self.requires_type_texts())
+    }
+
     /// Checks one host-provided node and records diagnostics in `ctx`.
     fn check(&self, ctx: &mut RuleContext<'_>, node: &LintNode);
 
@@ -48,7 +56,84 @@ pub trait RustLintRule: Send + Sync {
                 .map(|listener| (*listener).to_owned())
                 .collect(),
             requires_type_texts: self.requires_type_texts(),
+            bridge: self.bridge_requirements(),
         }
+    }
+}
+
+fn bridge_requirements_for_rule(name: &str, requires_type_texts: bool) -> RuleBridgeRequirements {
+    match name {
+        "consistent-return"
+        | "consistent-type-exports"
+        | "dot-notation"
+        | "no-deprecated"
+        | "no-unnecessary-qualifier"
+        | "no-unnecessary-template-expression"
+        | "no-unnecessary-type-parameters"
+        | "no-useless-default-assignment"
+        | "prefer-optional-chain" => RuleBridgeRequirements::syntax_only(5),
+        "no-duplicate-type-constituents" | "no-redundant-type-constituents" => {
+            RuleBridgeRequirements::syntax_only(5).with_text(NodeMetadataDepth::through(1))
+        }
+        "no-confusing-void-expression"
+        | "no-unnecessary-condition"
+        | "no-unsafe-enum-comparison"
+        | "prefer-nullish-coalescing"
+        | "strict-boolean-expressions"
+        | "switch-exhaustiveness-check"
+        | "unbound-method" => RuleBridgeRequirements::type_texts(3, NodeMetadataDepth::through(1)),
+        "no-misused-promises"
+        | "no-misused-spread"
+        | "no-unnecessary-boolean-literal-compare"
+        | "no-unnecessary-type-arguments"
+        | "no-unnecessary-type-assertion"
+        | "no-unnecessary-type-conversion"
+        | "no-unsafe-argument"
+        | "non-nullable-type-assertion-style"
+        | "prefer-readonly"
+        | "prefer-readonly-parameter-types"
+        | "prefer-return-this-type"
+        | "promise-function-async"
+        | "related-getter-setter-pairs"
+        | "return-await"
+        | "strict-void-return" => {
+            RuleBridgeRequirements::type_texts(5, NodeMetadataDepth::through(2))
+        }
+        "require-await" => RuleBridgeRequirements::type_texts(5, NodeMetadataDepth::through(3)),
+        "await-thenable" => {
+            RuleBridgeRequirements::type_texts_and_properties(3, NodeMetadataDepth::range(1, 2))
+        }
+        "no-array-delete" => RuleBridgeRequirements::type_texts(2, NodeMetadataDepth::exact(2)),
+        "no-base-to-string" => {
+            RuleBridgeRequirements::type_texts(2, NodeMetadataDepth::range(1, 2))
+        }
+        "no-floating-promises" => {
+            RuleBridgeRequirements::type_texts_and_properties(4, NodeMetadataDepth::range(1, 2))
+        }
+        "no-for-in-array" => RuleBridgeRequirements::type_texts(1, NodeMetadataDepth::exact(1)),
+        "no-implied-eval" => RuleBridgeRequirements::type_texts(2, NodeMetadataDepth::exact(1)),
+        "no-meaningless-void-operator"
+        | "no-unsafe-call"
+        | "no-unsafe-member-access"
+        | "no-unsafe-return"
+        | "no-unsafe-type-assertion"
+        | "no-unsafe-unary-minus"
+        | "restrict-plus-operands" => {
+            RuleBridgeRequirements::type_texts(1, NodeMetadataDepth::exact(1))
+        }
+        "no-unsafe-assignment" => {
+            RuleBridgeRequirements::type_texts(2, NodeMetadataDepth::exact(1))
+        }
+        "only-throw-error" | "prefer-promise-reject-errors" => {
+            RuleBridgeRequirements::type_texts_and_properties(2, NodeMetadataDepth::range(1, 2))
+        }
+        "prefer-reduce-type-parameter" => {
+            RuleBridgeRequirements::type_texts(3, NodeMetadataDepth::exact(2))
+        }
+        "require-array-sort-compare" => {
+            RuleBridgeRequirements::type_texts(2, NodeMetadataDepth::exact(2))
+        }
+        _ => RuleBridgeRequirements::default_for_type_texts(requires_type_texts),
     }
 }
 

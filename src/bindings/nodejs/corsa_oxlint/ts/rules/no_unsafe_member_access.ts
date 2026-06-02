@@ -5,12 +5,7 @@ export const noUnsafeMemberAccessRule = createRustNativeRule(
   {
     schema: { type: "array" },
   },
-  {
-    includePropertyNames: false,
-    includeTypeTexts: (_node, depth) => depth === 1,
-    maxDepth: 1,
-    shouldRun: shouldRunNoUnsafeMemberAccess,
-  },
+  { shouldRun: shouldRunNoUnsafeMemberAccess },
 );
 
 function shouldRunNoUnsafeMemberAccess(node: any): boolean {

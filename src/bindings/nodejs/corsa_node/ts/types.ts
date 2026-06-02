@@ -172,6 +172,18 @@ export interface NativeLintDiagnostic {
   suggestions?: readonly NativeLintSuggestion[];
 }
 
+export interface NativeNodeMetadataDepth {
+  minDepth: number;
+  maxDepth: number;
+}
+
+export interface NativeRuleBridgeRequirements {
+  maxDepth: number;
+  typeTexts?: NativeNodeMetadataDepth;
+  propertyNames?: NativeNodeMetadataDepth;
+  text?: NativeNodeMetadataDepth;
+}
+
 export interface NativeLintRuleMeta {
   name: string;
   docsDescription: string;
@@ -179,6 +191,7 @@ export interface NativeLintRuleMeta {
   hasSuggestions: boolean;
   listeners: readonly string[];
   requiresTypeTexts: boolean;
+  bridge: NativeRuleBridgeRequirements;
 }
 
 export interface NativeStylisticRuleConfig {

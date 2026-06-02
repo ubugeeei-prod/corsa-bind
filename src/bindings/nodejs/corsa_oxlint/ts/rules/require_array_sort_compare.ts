@@ -6,12 +6,7 @@ export const requireArraySortCompareRule = createRustNativeRule(
   {
     schema: { type: "array" },
   },
-  {
-    includePropertyNames: false,
-    includeTypeTexts: (_node, depth) => depth === 2,
-    maxDepth: 2,
-    shouldRun: shouldRunRequireArraySortCompare,
-  },
+  { shouldRun: shouldRunRequireArraySortCompare },
 );
 
 function shouldRunRequireArraySortCompare(node: any): boolean {
