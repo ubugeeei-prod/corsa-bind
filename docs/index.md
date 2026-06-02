@@ -14,10 +14,10 @@ line, commonly known as **`tsgo`**. It is the same engine that powers `tsgo`'s
 `--noEmit` type checking, exposed over stdio.
 
 `corsa-bind` is a multi-crate workspace for talking to that checker. Hot paths
-live in Rust and stay zero-cost; `napi-rs` and a shared C ABI surface that
-performance to JavaScript, C, C++, Go, Zig, C#, Swift, and MoonBit — so you can
-build custom checker tooling and type-aware lint rules on top of the real
-upstream checker, with no forks and no patches.
+live in Rust and stay zero-cost; `napi-rs`, Rustler, and a shared C ABI carry
+that performance to JavaScript, Elixir, C, C++, Go, Zig, C#, Swift, and MoonBit
+— so you can build custom checker tooling and type-aware lint rules on top of
+the real upstream checker, with no forks and no patches.
 
 ## Quick start
 
@@ -73,7 +73,8 @@ points.
   backed by [native rule implementations](./native_rules.md) ported from
   `tsgolint`.
 - **Bindings everywhere.** One C ABI (`corsa_ffi`) powers C, C++, Go, Zig, C#,
-  Swift, and MoonBit; `@corsa-bind/napi` covers Node.js, Deno, and Bun.
+  Swift, and MoonBit; Rustler powers Elixir; `@corsa-bind/napi` covers Node.js,
+  Deno, and Bun.
 - **Reproducible upstream.** `ref/corsa-upstream` is pinned by exact commit with
   a strict **no forks, no patches** policy, so behavior stays auditable.
 
@@ -85,7 +86,7 @@ points.
 ## Use the bindings
 
 - [Node.js binding](./nodejs_binding.md) — the full `@corsa-bind/napi` surface for Node, Deno, and Bun.
-- [Language bindings](./language_bindings.md) — the `corsa_ffi` C ABI for C, C++, Go, Zig, C#, Swift, MoonBit.
+- [Language bindings](./language_bindings.md) — native bindings for Elixir, C, C++, Go, Zig, C#, Swift, MoonBit.
 - [Type-aware Oxlint](./oxlint_guide.md) — `corsa-oxlint` rule authoring, native rules, and stylistic rules.
 - [Native rules](./native_rules.md) — the full set of type-aware rules implemented natively in Rust.
 - [Stylistic rules](./stylistic_rules.md) — the Rust-backed `@stylistic`-compatible formatting rules.

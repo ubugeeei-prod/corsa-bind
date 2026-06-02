@@ -8,6 +8,7 @@ members = [
   "src/core/corsa_runtime",
   "src/core/corsa_ref",
   "src/bindings/c/corsa_ffi",
+  "src/bindings/elixir/corsa_utils/native/corsa_elixir",
   "src/bindings/rust/corsa",
   "src/bindings/nodejs/corsa_node",
 ]
