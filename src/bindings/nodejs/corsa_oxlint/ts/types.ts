@@ -69,8 +69,19 @@ export interface CorsaSignature {
   readonly declaration?: string;
   readonly typeParameters: readonly string[];
   readonly parameters: readonly string[];
+  readonly parameterSymbols?: readonly CorsaSymbol[];
+  readonly parameterTypeTexts?: readonly (readonly string[])[];
   readonly thisParameter?: string;
+  readonly thisParameterSymbol?: CorsaSymbol;
+  readonly thisParameterTypeTexts?: readonly string[];
   readonly target?: string;
+  readonly typeParameterDefaultTexts?: readonly string[];
+}
+
+export interface CorsaCallSignatureFacts {
+  readonly signature?: CorsaSignature;
+  readonly expectedArgumentTypeTexts?: readonly (readonly string[])[];
+  readonly explicitTypeArgumentsRequired?: boolean;
 }
 
 export enum SignatureKind {
@@ -118,6 +129,12 @@ export interface CorsaTypeCheckerShape {
   getBaseTypeOfLiteralType(type: CorsaType): CorsaType | undefined;
   getPropertiesOfType(type: CorsaType): readonly CorsaSymbol[];
   getSignaturesOfType(type: CorsaType, kind: SignatureKind): readonly CorsaSignature[];
+  getCallSignatureFacts(
+    type: CorsaType,
+    kind: SignatureKind,
+    argumentTypeTexts: readonly (readonly string[])[],
+    explicitTypeArgumentTexts: readonly string[],
+  ): CorsaCallSignatureFacts;
   getReturnTypeOfSignature(signature: CorsaSignature): CorsaType | undefined;
   getTypePredicateOfSignature(signature: CorsaSignature): CorsaTypePredicate | undefined;
   getBaseTypes(type: CorsaType): readonly CorsaType[];

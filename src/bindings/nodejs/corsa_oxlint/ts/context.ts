@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
 import type {
@@ -21,7 +22,10 @@ const DEFAULT_TS_CONFIG = {
 };
 
 export function defaultCorsaExecutable(rootDir: string, platform = process.platform): string {
-  return resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa");
+  return (
+    resolveNativePreviewExecutable(rootDir) ??
+    resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa")
+  );
 }
 
 export function resolveProjectConfig(context: ContextWithParserOptions): ResolvedProjectConfig {
@@ -55,11 +59,13 @@ export function resolveProjectConfig(context: ContextWithParserOptions): Resolve
  */
 export function resolveTypeAwareParserOptions(
   context: ContextWithParserOptions,
+  defaults: { readonly projectService?: boolean } = {},
 ): TypeAwareParserOptions {
-  return mergeTypeAwareParserOptions(
+  const parserOptions = mergeTypeAwareParserOptions(
     resolveSettingsParserOptions(context.settings?.corsaOxlint),
     mergeTypeAwareParserOptions(context.parserOptions, context.languageOptions?.parserOptions),
   );
+  return applyTypeAwareParserOptionDefaults(parserOptions, defaults);
 }
 
 function resolveRuntimeOptions(
@@ -157,6 +163,45 @@ function asArray(value: string | string[] | undefined): string[] {
   return value ? (Array.isArray(value) ? value : [value]) : [];
 }
 
+function resolveNativePreviewExecutable(rootDir: string): string | undefined {
+  const requireFromRoot = createRequire(resolve(rootDir, "package.json"));
+  const packageJsonPath = resolveOptional(
+    requireFromRoot,
+    "@typescript/native-preview/package.json",
+  );
+  if (packageJsonPath) {
+    const binPath = nativePreviewBinPath(packageJsonPath);
+    if (binPath && existsSync(binPath)) {
+      return binPath;
+    }
+  }
+  const packageEntry = resolveOptional(requireFromRoot, "@typescript/native-preview");
+  return packageEntry && existsSync(packageEntry) ? packageEntry : undefined;
+}
+
+function resolveOptional(requireFromRoot: NodeJS.Require, specifier: string): string | undefined {
+  try {
+    return requireFromRoot.resolve(specifier);
+  } catch {
+    return undefined;
+  }
+}
+
+function nativePreviewBinPath(packageJsonPath: string): string | undefined {
+  try {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      readonly bin?: string | Record<string, string>;
+    };
+    const bin =
+      typeof packageJson.bin === "string"
+        ? packageJson.bin
+        : (packageJson.bin?.tsgo ?? Object.values(packageJson.bin ?? {})[0]);
+    return bin ? resolve(dirname(packageJsonPath), bin) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function resolveSettingsParserOptions(
   settings: CorsaOxlintSettings | undefined,
 ): TypeAwareParserOptions {
@@ -165,6 +210,23 @@ function resolveSettingsParserOptions(
   }
   const { parserOptions, ...inline } = settings;
   return mergeTypeAwareParserOptions(inline, parserOptions);
+}
+
+function applyTypeAwareParserOptionDefaults(
+  parserOptions: TypeAwareParserOptions,
+  defaults: { readonly projectService?: boolean },
+): TypeAwareParserOptions {
+  if (
+    defaults.projectService !== true ||
+    parserOptions.projectService !== undefined ||
+    parserOptions.project !== undefined
+  ) {
+    return parserOptions;
+  }
+  return {
+    ...parserOptions,
+    projectService: true,
+  };
 }
 
 export function mergeTypeAwareParserOptions(

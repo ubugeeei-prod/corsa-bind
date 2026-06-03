@@ -142,12 +142,27 @@ pub struct SignatureResponse {
     /// Parameter symbols in declaration order.
     #[serde(default)]
     pub parameters: Vec<SymbolHandle>,
+    /// Full parameter symbol metadata in declaration order when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_symbols: Vec<SymbolResponse>,
+    /// Rendered parameter type texts aligned with [`Self::parameters`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_type_texts: Vec<Vec<String>>,
     /// `this` parameter symbol when explicitly modeled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub this_parameter: Option<SymbolHandle>,
+    /// Full `this` parameter symbol metadata when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub this_parameter_symbol: Option<SymbolResponse>,
+    /// Rendered `this` parameter type texts when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub this_parameter_type_texts: Vec<String>,
     /// Target signature for instantiated or wrapped signatures.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<SignatureHandle>,
+    /// Rendered default type argument texts aligned with [`Self::type_parameters`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_parameter_default_texts: Vec<String>,
 }
 
 /// Type predicate metadata such as `value is Foo`.

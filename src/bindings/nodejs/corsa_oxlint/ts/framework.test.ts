@@ -103,6 +103,46 @@ describe("corsa oxlint", () => {
     });
   });
 
+  it("defaults projectService for type-aware rules", () => {
+    let seen: Record<string, unknown> | undefined;
+    const rule = decorateRule({
+      meta: {
+        docs: {
+          requiresTypeChecking: true,
+        },
+        messages: {
+          demo: "demo",
+        },
+        schema: [],
+      },
+      create(context: any) {
+        seen = {
+          parserProjectService: context.parserOptions.projectService,
+          languageProjectService: context.languageOptions?.parserOptions?.projectService,
+        };
+        return {};
+      },
+    } as any);
+
+    rule.create!({
+      cwd: workspaceRoot,
+      filename: resolve(workspaceRoot, "fixture.ts"),
+      languageOptions: {
+        parserOptions: {},
+      },
+      report() {},
+      settings: {},
+      sourceCode: {
+        text: "const fixture = 1;",
+      },
+    } as any);
+
+    expect(seen).toEqual({
+      parserProjectService: true,
+      languageProjectService: true,
+    });
+  });
+
   it("reuses existing parserServices when ESLint already provides type information", () => {
     const program = {
       getTypeChecker() {

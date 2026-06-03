@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { nativeLintRuleMetas, runNativeLintRule } from "@corsa-bind/napi";
 import type {
   NativeLintDiagnostic,
@@ -11,14 +9,7 @@ import type {
 
 import { createNativeRule } from "./rule_creator";
 import { checkerFor, propertyNamesOfNode, typeAtNode, typeTextsAtNode } from "./type_utils";
-import type {
-  ContextWithParserOptions,
-  CorsaNode,
-  CorsaSignature,
-  CorsaSymbol,
-  CorsaType,
-  CorsaTypeCheckerShape,
-} from "../types";
+import type { ContextWithParserOptions, CorsaCallSignatureFacts, CorsaType } from "../types";
 
 type RangedNode = {
   readonly type: string;
@@ -157,7 +148,7 @@ export function toNativeNode(
     fields.__ruleOptions = options;
   }
   if (includeRuleOptions) {
-    addHostFacts(context, node, fields);
+    addHostInputs(context, node, fields);
   }
 
   const nativeNode: NativeLintNode = {
@@ -324,119 +315,194 @@ function sameRange(range: readonly [number, number], expected: NativeLintRange):
   return range[0] === expected.start && range[1] === expected.end;
 }
 
-function addHostFacts(
+function addHostInputs(
   context: ContextWithParserOptions,
   node: RangedNode,
   fields: Record<string, unknown>,
 ): void {
   const current = node as any;
-  if (current.type === "ExpressionStatement") {
-    fields.__nearestFunctionAsync = nearestFunctionAncestor(context, current)?.async === true;
-  }
-  if (current.type === "CallExpression" && isPromiseExecutorRejectCall(context, current)) {
-    fields.__promiseExecutorRejectCall = true;
+  const ancestors = ancestorFacts(context, current);
+  if (ancestors.length > 0) {
+    fields.__ancestorFacts = ancestors;
   }
   if (current.type === "CallExpression" || current.type === "NewExpression") {
-    const expectedArgumentTypeTexts = expectedArgumentTypeTextsOfCall(context, current);
-    if (expectedArgumentTypeTexts.length > 0) {
-      fields.__expectedArgumentTypeTexts = expectedArgumentTypeTexts;
-    }
-    if (hasUnnecessaryExplicitTypeArguments(context, current)) {
-      fields.__explicitTypeArgumentsRequired = false;
+    const callFacts = callFactsOfNode(context, current);
+    if (Object.keys(callFacts).length > 0) {
+      fields.__callFacts = callFacts;
     }
   }
   if (current.parent?.type) {
     fields.__parentKind = current.parent.type;
   }
-  if (
-    (current.type === "Identifier" || current.type === "MemberExpression") &&
-    isDeprecatedSymbolUse(context, current)
-  ) {
-    fields.__deprecated = true;
+  const symbolFacts = symbolFactsOfNode(context, current);
+  if (Object.keys(symbolFacts).length > 0) {
+    fields.__symbolFacts = symbolFacts;
   }
-  if (
-    current.type === "TSTypeParameterDeclaration" &&
-    hasSingleUseTypeParameter(context, current)
-  ) {
-    fields.__hasSingleUseTypeParameter = true;
+  const typeParameterFacts = typeParameterFactsOfNode(context, current);
+  if (Object.keys(typeParameterFacts).length > 0) {
+    fields.__typeParameterFacts = typeParameterFacts;
   }
-  if (current.type === "ReturnStatement") {
-    const returnTypeTexts = returnTypeTextsOfNearestFunction(context, current);
-    if (returnTypeTexts.length > 0) {
-      fields.__returnTypeTexts = returnTypeTexts;
-    }
-    if (returnAwaitRequiresAwait(context, current)) {
-      fields.__returnAwaitRequiresAwait = true;
-    }
-  }
-  if (isFunctionLike(current)) {
-    const returnTypeTexts = returnTypeTextsOfFunction(context, current);
-    if (returnTypeTexts.length > 0) {
-      fields.__returnTypeTexts = returnTypeTexts;
-    }
-    const nearestClass = nearestClassAncestor(context, current);
-    const className = nearestClass?.id?.name;
-    if (typeof className === "string" && className.length > 0) {
-      fields.__nearestClassName = className;
-    }
-  }
-  if (current.type === "ArrowFunctionExpression" && current.body?.type !== "BlockStatement") {
-    const returnTypeTexts = returnTypeTextsOfFunction(context, current);
-    if (returnTypeTexts.length > 0) {
-      fields.__returnTypeTexts = returnTypeTexts;
-    }
+  const returnTypeFacts = returnTypeFactsOfNode(context, current);
+  if (Object.keys(returnTypeFacts).length > 0) {
+    fields.__returnTypeFacts = returnTypeFacts;
   }
 }
 
-function expectedArgumentTypeTextsOfCall(
+function callFactsOfNode(context: ContextWithParserOptions, node: any): Record<string, unknown> {
+  const facts: Record<string, unknown> = {};
+  const calleeName = identifierName(stripChainExpression(node.callee));
+  if (calleeName) {
+    facts.calleeName = calleeName;
+  }
+  const signatureFacts = callSignatureFactsOfNode(context, node);
+  if (signatureFacts.expectedArgumentTypeTexts?.length) {
+    facts.expectedArgumentTypeTexts = signatureFacts.expectedArgumentTypeTexts;
+  }
+  if (signatureFacts.explicitTypeArgumentsRequired !== undefined) {
+    facts.explicitTypeArgumentsRequired = signatureFacts.explicitTypeArgumentsRequired;
+  }
+  const typeArgumentFacts = typeArgumentFactsOfCall(node, signatureFacts);
+  for (const [key, value] of Object.entries(typeArgumentFacts)) {
+    facts[key] = value;
+  }
+  return facts;
+}
+
+function symbolFactsOfNode(context: ContextWithParserOptions, node: any): Record<string, unknown> {
+  if (node.type !== "Identifier" && node.type !== "MemberExpression") {
+    return {};
+  }
+  const target = node.type === "MemberExpression" ? node.property : node;
+  if (target?.type !== "Identifier") {
+    return {};
+  }
+  const symbol = checkerFor(context).getSymbolAtLocation(target);
+  const declarations = symbol?.declarations?.filter(
+    (declaration): declaration is string => typeof declaration === "string",
+  );
+  if (!declarations || declarations.length === 0) {
+    return {};
+  }
+  return {
+    declarations,
+    filename: context.filename,
+    cwd: context.cwd,
+    sourceText: context.sourceCode.text,
+  };
+}
+
+function typeParameterFactsOfNode(
   context: ContextWithParserOptions,
   node: any,
-): readonly (readonly string[])[] {
+): Record<string, unknown> {
+  if (node.type !== "TSTypeParameterDeclaration") {
+    return {};
+  }
+  const params = Array.isArray(node.params) ? node.params : [];
+  if (params.length !== 1) {
+    return {};
+  }
+  const name = typeParameterName(params[0]);
+  if (!name) {
+    return {};
+  }
+  return {
+    name,
+    ownerText: node.parent
+      ? context.sourceCode.getText(node.parent)
+      : context.sourceCode.getText(node),
+  };
+}
+
+function returnTypeFactsOfNode(
+  context: ContextWithParserOptions,
+  node: any,
+): Record<string, unknown> {
+  const returnTypeTexts =
+    node.type === "ReturnStatement"
+      ? returnTypeTextsOfNearestFunction(context, node)
+      : isFunctionLike(node) || node.type === "ArrowFunctionExpression"
+        ? returnTypeTextsOfFunction(context, node)
+        : [];
+  return returnTypeTexts.length > 0 ? { texts: returnTypeTexts } : {};
+}
+
+function ancestorFacts(
+  context: ContextWithParserOptions,
+  node: any,
+): readonly Record<string, unknown>[] {
+  const ancestors = (context.sourceCode as any)?.getAncestors?.(node) ?? [];
+  return ancestors
+    .filter((ancestor: any) => typeof ancestor?.type === "string")
+    .map((ancestor: any) => {
+      const fact: Record<string, unknown> = { kind: ancestor.type };
+      if (isRange(ancestor.range)) {
+        fact.start = ancestor.range[0];
+        fact.end = ancestor.range[1];
+      }
+      if (typeof ancestor.async === "boolean") {
+        fact.async = ancestor.async;
+      }
+      const className = ancestor.id?.name;
+      if (
+        (ancestor.type === "ClassDeclaration" || ancestor.type === "ClassExpression") &&
+        typeof className === "string" &&
+        className.length > 0
+      ) {
+        fact.className = className;
+      }
+      if (isFunctionLike(ancestor)) {
+        const paramNames = Array.isArray(ancestor.params)
+          ? ancestor.params
+              .map(identifierName)
+              .filter((name: string | undefined): name is string => name !== undefined)
+          : [];
+        if (paramNames.length > 0) {
+          fact.paramNames = paramNames;
+        }
+        if (ancestor.parent?.type) {
+          fact.parentKind = ancestor.parent.type;
+        }
+        const parentCalleeName = identifierName(stripChainExpression(ancestor.parent?.callee));
+        if (parentCalleeName) {
+          fact.parentCalleeName = parentCalleeName;
+        }
+        if (ancestor.parent?.parent?.type) {
+          fact.parentParentKind = ancestor.parent.parent.type;
+        }
+        const parentParentCalleeName = identifierName(
+          stripChainExpression(ancestor.parent?.parent?.callee),
+        );
+        if (parentParentCalleeName) {
+          fact.parentParentCalleeName = parentParentCalleeName;
+        }
+      }
+      return fact;
+    });
+}
+
+function callSignatureFactsOfNode(
+  context: ContextWithParserOptions,
+  node: any,
+): CorsaCallSignatureFacts {
   const callee = stripChainExpression(node.callee);
   if (!callee) {
-    return [];
+    return {};
   }
   const calleeType = typeAtNode(context, callee);
   if (!calleeType) {
-    return [];
-  }
-  const signature = signatureForCall(context, node, calleeType);
-  const parameters = signatureParameters(signature);
-  if (parameters.length === 0) {
-    return [];
+    return {};
   }
   const args = Array.isArray(node.arguments) ? node.arguments : [];
-  return args.map((_arg: unknown, index: number) => {
-    const parameterId = parameters[Math.min(index, parameters.length - 1)];
-    return parameterId ? parameterTypeTexts(context, parameterId) : [];
-  });
-}
-
-function hasUnnecessaryExplicitTypeArguments(
-  context: ContextWithParserOptions,
-  node: any,
-): boolean {
-  const explicitTypeArguments = typeArgumentNodes(node);
-  if (explicitTypeArguments.length === 0) {
-    return false;
-  }
-  const callee = stripChainExpression(node.callee);
-  const calleeType = callee ? typeAtNode(context, callee) : undefined;
-  const signature = calleeType ? signatureForCall(context, node, calleeType) : undefined;
-  const defaultTypeArguments = signature
-    ? defaultTypeArgumentTextsForSignature(context, signature)
-    : [];
-  if (defaultTypeArguments.length === 0) {
-    return false;
-  }
-  return explicitTypeArguments.every((typeArgument, index) => {
-    const defaultTypeArgument = defaultTypeArguments[index];
-    if (!defaultTypeArgument) {
-      return false;
-    }
-    const explicit = normalizeTypeText(context.sourceCode.getText(typeArgument));
-    return normalizeTypeText(defaultTypeArgument) === explicit;
-  });
+  const explicitTypeArguments = typeArgumentNodes(node)
+    .map((typeArgument) => context.sourceCode.getText(typeArgument))
+    .filter((text: string): text is string => text.length > 0);
+  return checkerFor(context).getCallSignatureFacts(
+    calleeType,
+    node.type === "NewExpression" ? 1 : 0,
+    args.map((arg: unknown) => typeTextsAtNode(context, arg as never)),
+    explicitTypeArguments,
+  );
 }
 
 function typeArgumentNodes(node: any): readonly any[] {
@@ -448,290 +514,65 @@ function typeArgumentNodes(node: any): readonly any[] {
   return candidates.find(Array.isArray) ?? [];
 }
 
-function signatureForCall(
-  context: ContextWithParserOptions,
+function typeArgumentFactsOfCall(
   node: any,
-  calleeType: CorsaType,
-): CorsaSignature | undefined {
-  const checker = checkerFor(context);
-  const signatures = checker.getSignaturesOfType(calleeType, node.type === "NewExpression" ? 1 : 0);
-  if (signatures.length <= 1) {
-    return signatures[0];
+  signatureFacts: CorsaCallSignatureFacts,
+): Record<string, unknown> {
+  const typeArguments = typeArgumentNodes(node);
+  if (typeArguments.length === 0) {
+    return {};
   }
-  const args = Array.isArray(node.arguments) ? node.arguments : [];
-  return signatures
-    .map((signature) => ({
-      signature,
-      score: scoreSignatureForArguments(context, signature, args),
-    }))
-    .sort((left, right) => right.score - left.score)[0]?.signature;
-}
-
-function scoreSignatureForArguments(
-  context: ContextWithParserOptions,
-  signature: CorsaSignature,
-  args: readonly any[],
-): number {
-  const parameterTypes = signatureParameters(signature).map((parameterId) =>
-    parameterTypeTexts(context, parameterId),
-  );
-  let score = -Math.abs(args.length - parameterTypes.length);
-  for (const [index, arg] of args.entries()) {
-    const expected = parameterTypes[Math.min(index, parameterTypes.length - 1)] ?? [];
-    const actual = typeTextsAtNode(context, arg);
-    if (expected.length === 0) {
-      score -= 2;
-    } else if (isPermissiveTypeTexts(expected)) {
-      score += 1;
-    } else if (typeTextsOverlap(actual, expected)) {
-      score += 4;
-    } else {
-      score -= 1;
+  const facts: Record<string, unknown> = {
+    typeArgumentRanges: typeArguments
+      .map((typeArgument) => rangeObject(typeArgument.range))
+      .filter((range): range is { start: number; end: number } => range !== undefined),
+  };
+  const listRange = typeArgumentListRange(node, typeArguments);
+  if (listRange) {
+    facts.typeArgumentListRange = listRange;
+  }
+  const parameterCount =
+    signatureFacts.signature?.typeParameters?.length ??
+    signatureFacts.signature?.typeParameterDefaultTexts?.length ??
+    0;
+  if (parameterCount > 0) {
+    facts.typeParameterCount = parameterCount;
+  }
+  const defaultTexts = signatureFacts.signature?.typeParameterDefaultTexts ?? [];
+  const lastIndex = typeArguments.length - 1;
+  const lastDefaultText = defaultTexts[lastIndex];
+  if (lastDefaultText !== undefined) {
+    const hasDefault = lastDefaultText.trim().length > 0;
+    facts.lastTypeParameterHasDefault = hasDefault;
+    if (hasDefault && signatureFacts.explicitTypeArgumentsRequired === false) {
+      facts.lastTypeArgumentEqualsDefault = true;
+      facts.lastTypeArgumentSameTypeFlagsAsDefault = true;
+      facts.lastTypeArgumentIdenticalToDefault = true;
     }
   }
-  return score;
+  return facts;
 }
 
-function signatureParameters(signature: CorsaSignature | undefined): readonly string[] {
-  return Array.isArray(signature?.parameters) ? signature.parameters : [];
-}
-
-function parameterTypeTexts(
-  context: ContextWithParserOptions,
-  parameterId: string,
-): readonly string[] {
-  const checker = checkerFor(context);
-  const parameterSymbol = checker.getSymbol(parameterId);
-  const declaration = parameterSymbol ? declarationForSymbol(checker, parameterSymbol) : undefined;
-  const parameterType =
-    (parameterSymbol && declaration
-      ? checker.getTypeOfSymbolAtLocation(parameterSymbol, declaration)
-      : undefined) ??
-    (parameterSymbol ? checker.getTypeOfSymbol(parameterSymbol) : undefined) ??
-    (parameterSymbol ? checker.getDeclaredTypeOfSymbol(parameterSymbol) : undefined) ??
-    checker.getTypeOfSymbolById(parameterId) ??
-    checker.getDeclaredTypeOfSymbolById(parameterId);
-  return parameterType ? renderTypeTexts(context, parameterType) : [];
-}
-
-function declarationForSymbol(
-  checker: CorsaTypeCheckerShape,
-  symbol: CorsaSymbol,
-): CorsaNode | undefined {
-  const valueDeclaration = symbol.valueDeclaration;
-  const firstDeclaration = symbol.declarations?.[0];
-  return (
-    (valueDeclaration ? checker.getNode(valueDeclaration) : undefined) ??
-    (firstDeclaration ? checker.getNode(firstDeclaration) : undefined)
-  );
-}
-
-function typeTextsOverlap(actual: readonly string[], expected: readonly string[]): boolean {
-  const normalizedExpected = expected.map(normalizeTypeText);
-  return actual.some((actualText) => {
-    const normalizedActual = normalizeTypeText(actualText);
-    return normalizedExpected.some(
-      (expectedText) =>
-        expectedText === normalizedActual ||
-        expectedText.includes(normalizedActual) ||
-        normalizedActual.includes(expectedText),
-    );
-  });
-}
-
-function defaultTypeArgumentTextsForSignature(
-  context: ContextWithParserOptions,
-  signature: CorsaSignature,
-): readonly string[] {
-  const declarationText = declarationTextForHandle(context, signature.declaration);
-  if (!declarationText) {
-    return [];
+function typeArgumentListRange(
+  node: any,
+  typeArguments: readonly any[],
+): { start: number; end: number } | undefined {
+  const candidates = [node.typeArguments, node.typeParameters, node.typeParameterInstantiation];
+  const list = candidates.find((candidate) => Array.isArray(candidate?.params));
+  const fromList = rangeObject(list?.range);
+  if (fromList) {
+    return fromList;
   }
-  return typeParameterDefaultTexts(declarationText);
-}
-
-function declarationTextForHandle(
-  context: ContextWithParserOptions,
-  handleText: string | undefined,
-): string | undefined {
-  if (!handleText) {
+  const first = rangeObject(typeArguments[0]?.range);
+  const last = rangeObject(typeArguments[typeArguments.length - 1]?.range);
+  if (!first || !last || first.start <= 0) {
     return undefined;
   }
-  const handle = parseNodeHandle(handleText);
-  if (!handle) {
-    return undefined;
-  }
-  const sourceText = sourceTextForPath(context, handle.path);
-  if (!sourceText || handle.pos < 0 || handle.end > sourceText.length || handle.pos >= handle.end) {
-    return undefined;
-  }
-  return sourceText.slice(handle.pos, handle.end);
+  return { start: first.start - 1, end: last.end + 1 };
 }
 
-function typeParameterDefaultTexts(declarationText: string): readonly string[] {
-  const parametersText = firstDelimitedText(declarationText, "<", ">");
-  if (!parametersText) {
-    return [];
-  }
-  return splitTopLevel(parametersText, ",").map((parameterText) => {
-    const defaultStart = topLevelIndexOf(parameterText, "=");
-    return defaultStart >= 0 ? parameterText.slice(defaultStart + 1).trim() : "";
-  });
-}
-
-function firstDelimitedText(text: string, open: string, close: string): string | undefined {
-  const start = text.indexOf(open);
-  if (start < 0) {
-    return undefined;
-  }
-  let depth = 0;
-  for (let index = start; index < text.length; index += 1) {
-    const char = text[index];
-    if (char === open) {
-      depth += 1;
-    } else if (char === close) {
-      depth -= 1;
-      if (depth === 0) {
-        return text.slice(start + 1, index);
-      }
-    }
-  }
-  return undefined;
-}
-
-function splitTopLevel(text: string, delimiter: string): readonly string[] {
-  const parts: string[] = [];
-  let start = 0;
-  let angleDepth = 0;
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  let braceDepth = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (char === "<") angleDepth += 1;
-    else if (char === ">") angleDepth = Math.max(0, angleDepth - 1);
-    else if (char === "(") parenDepth += 1;
-    else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
-    else if (char === "[") bracketDepth += 1;
-    else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
-    else if (char === "{") braceDepth += 1;
-    else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
-    else if (
-      char === delimiter &&
-      angleDepth === 0 &&
-      parenDepth === 0 &&
-      bracketDepth === 0 &&
-      braceDepth === 0
-    ) {
-      parts.push(text.slice(start, index).trim());
-      start = index + 1;
-    }
-  }
-  parts.push(text.slice(start).trim());
-  return parts;
-}
-
-function topLevelIndexOf(text: string, needle: string): number {
-  let angleDepth = 0;
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  let braceDepth = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (char === "<") angleDepth += 1;
-    else if (char === ">") angleDepth = Math.max(0, angleDepth - 1);
-    else if (char === "(") parenDepth += 1;
-    else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
-    else if (char === "[") bracketDepth += 1;
-    else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
-    else if (char === "{") braceDepth += 1;
-    else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
-    else if (
-      char === needle &&
-      angleDepth === 0 &&
-      parenDepth === 0 &&
-      bracketDepth === 0 &&
-      braceDepth === 0
-    ) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function isDeprecatedSymbolUse(context: ContextWithParserOptions, node: any): boolean {
-  const target = node.type === "MemberExpression" ? node.property : node;
-  if (target?.type !== "Identifier") {
-    return false;
-  }
-  const symbol = checkerFor(context).getSymbolAtLocation(target);
-  return (
-    symbol?.declarations?.some((declaration) =>
-      declarationHasDeprecatedJSDoc(context, declaration),
-    ) === true
-  );
-}
-
-function declarationHasDeprecatedJSDoc(
-  context: ContextWithParserOptions,
-  declaration: string,
-): boolean {
-  const handle = parseNodeHandle(declaration);
-  if (!handle) {
-    return false;
-  }
-  const sourceText = sourceTextForPath(context, handle.path);
-  if (!sourceText) {
-    return false;
-  }
-  const pos = handle.pos;
-  if (!Number.isFinite(pos)) {
-    return false;
-  }
-  return sourceText.slice(Math.max(0, pos - 500), pos).includes("@deprecated");
-}
-
-function parseNodeHandle(
-  value: string,
-): { readonly pos: number; readonly end: number; readonly path: string } | undefined {
-  const [posText, endText, _kindText, ...pathParts] = value.split(".");
-  const pos = Number(posText);
-  const end = Number(endText);
-  if (!Number.isFinite(pos) || !Number.isFinite(end)) {
-    return undefined;
-  }
-  return { pos, end, path: pathParts.join(".") };
-}
-
-function sourceTextForPath(context: ContextWithParserOptions, path: string): string | undefined {
-  if (!path || path === context.filename || context.filename.endsWith(path)) {
-    return context.sourceCode.text;
-  }
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    try {
-      return readFileSync(`${context.cwd}/${path}`, "utf8");
-    } catch {
-      return undefined;
-    }
-  }
-}
-
-function hasSingleUseTypeParameter(context: ContextWithParserOptions, node: any): boolean {
-  const params = Array.isArray(node.params) ? node.params : [];
-  if (params.length !== 1) {
-    return false;
-  }
-  const name = typeParameterName(params[0]);
-  if (!name) {
-    return false;
-  }
-  const ownerText = node.parent
-    ? context.sourceCode.getText(node.parent)
-    : context.sourceCode.getText(node);
-  const matches = ownerText.match(new RegExp(`\\b${escapeRegExp(name)}\\b`, "g")) ?? [];
-  return matches.length <= 2;
+function rangeObject(range: unknown): { start: number; end: number } | undefined {
+  return isRange(range) ? { start: range[0], end: range[1] } : undefined;
 }
 
 function typeParameterName(node: any): string | undefined {
@@ -742,14 +583,6 @@ function typeParameterName(node: any): string | undefined {
     return node.name.name;
   }
   return undefined;
-}
-
-function normalizeTypeText(text: string): string {
-  return text.replace(/\s+/g, "");
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function renderTypeTexts(context: ContextWithParserOptions, type: CorsaType): readonly string[] {
@@ -763,58 +596,9 @@ function renderTypeTexts(context: ContextWithParserOptions, type: CorsaType): re
   return [...texts];
 }
 
-function isPromiseExecutorRejectCall(context: ContextWithParserOptions, node: any): boolean {
-  const callee = stripChainExpression(node.callee);
-  if (callee?.type !== "Identifier") {
-    return false;
-  }
-  const nearestFunction = nearestFunctionAncestor(context, node);
-  const rejectParam = nearestFunction?.params?.[1];
-  if (!rejectParam || rejectParam.type !== "Identifier" || rejectParam.name !== callee.name) {
-    return false;
-  }
-  const promiseConstructor = stripChainExpression(nearestFunction.parent?.parent);
-  return (
-    (nearestFunction.parent?.type === "NewExpression" &&
-      isIdentifierNamed(nearestFunction.parent.callee, "Promise")) ||
-    (promiseConstructor?.type === "NewExpression" &&
-      isIdentifierNamed(promiseConstructor.callee, "Promise"))
-  );
-}
-
-function returnAwaitRequiresAwait(context: ContextWithParserOptions, node: any): boolean {
-  const ancestors = (context.sourceCode as any)?.getAncestors?.(node) ?? [];
-  return ancestors.some(
-    (ancestor: any) =>
-      ancestor.type === "TryStatement" &&
-      (rangeContains(ancestor.block, node) ||
-        rangeContains(ancestor.handler?.body, node) ||
-        rangeContains(ancestor.finalizer, node)),
-  );
-}
-
-function rangeContains(container: any, node: any): boolean {
-  return (
-    isRange(container?.range) &&
-    isRange(node?.range) &&
-    container.range[0] <= node.range[0] &&
-    node.range[1] <= container.range[1]
-  );
-}
-
 function nearestFunctionAncestor(context: ContextWithParserOptions, node: any): any {
   const ancestors = (context.sourceCode as any)?.getAncestors?.(node) ?? [];
   return [...ancestors].reverse().find((ancestor: any) => ancestor.type?.includes("Function"));
-}
-
-function nearestClassAncestor(context: ContextWithParserOptions, node: any): any {
-  const ancestors = (context.sourceCode as any)?.getAncestors?.(node) ?? [];
-  return [...ancestors]
-    .reverse()
-    .find(
-      (ancestor: any) =>
-        ancestor.type === "ClassDeclaration" || ancestor.type === "ClassExpression",
-    );
 }
 
 function isFunctionLike(node: any): boolean {
@@ -868,10 +652,6 @@ function isPermissiveTypeText(text: string): boolean {
   return text === "any" || text === "unknown" || text === "never";
 }
 
-function isPermissiveTypeTexts(texts: readonly string[]): boolean {
-  return texts.some((text) => isPermissiveTypeText(normalizeTypeText(text)));
-}
-
 function stripChainExpression(node: any): any {
   let current = node;
   while (current?.type === "ChainExpression") {
@@ -880,9 +660,11 @@ function stripChainExpression(node: any): any {
   return current;
 }
 
-function isIdentifierNamed(node: any, name: string): boolean {
+function identifierName(node: any): string | undefined {
   const current = stripChainExpression(node);
-  return current?.type === "Identifier" && current.name === name;
+  return current?.type === "Identifier" && typeof current.name === "string"
+    ? current.name
+    : undefined;
 }
 
 function isNativeChildNode(value: unknown): value is RangedNode {

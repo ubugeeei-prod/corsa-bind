@@ -17,7 +17,7 @@ use super::{
     RequireArraySortCompareRule, RequireAwaitRule, RestrictPlusOperandsRule,
     RestrictTemplateExpressionsRule, ReturnAwaitRule, RuleContext, RuleMeta, RustLintRule,
     StrictBooleanExpressionsRule, StrictVoidReturnRule, SwitchExhaustivenessCheckRule,
-    UnboundMethodRule, UseUnknownInCatchCallbackVariableRule,
+    UnboundMethodRule, UseUnknownInCatchCallbackVariableRule, host_facts,
 };
 
 /// Collection of Rust-authored lint rules addressable by stable rule name.
@@ -121,7 +121,8 @@ impl LintRuleRegistry {
             .iter()
             .find(|candidate| candidate.name() == rule_name)?;
         let mut ctx = RuleContext::new(rule.as_ref());
-        rule.check(&mut ctx, node);
+        let prepared = host_facts::prepare_node_for_rule(node);
+        rule.check(&mut ctx, &prepared);
         Some(ctx.finish())
     }
 }

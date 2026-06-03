@@ -99,13 +99,7 @@ describe("CorsaProjectSession", () => {
     }
   });
 
-  // Regression for GH#206: upstream Corsa occasionally drops a type handle
-  // from its snapshot registry after a base-types query on a class with no
-  // explicit `extends` clause, which then makes a follow-up
-  // `getImplementedTypesOfType` on the same handle throw "type handle ...
-  // not found in snapshot registry". The wrapper should treat that as "no
-  // base types" so the caller can still see the type's own `implements`.
-  it("treats a 'handle not found in snapshot registry' error from getBaseTypes as no bases", () => {
+  it("uses the client-normalized base-types result", () => {
     clients.length = 0;
     const runtime = {
       executable: "/tmp/corsa",
@@ -128,11 +122,7 @@ describe("CorsaProjectSession", () => {
     if (!client) {
       throw new Error("expected a fake client");
     }
-    client.callJson.mockImplementationOnce(() => {
-      throw new Error(
-        'protocol error: api: client error: type handle "t0000000000000057" not found in snapshot registry',
-      );
-    });
+    client.callJson.mockImplementationOnce(() => [] as never);
 
     const result = session.getBaseTypes({
       id: "type-1",
@@ -179,12 +169,7 @@ describe("CorsaProjectSession", () => {
     ).toThrow(/unexpected failure/);
   });
 
-  // Regression for GH#211 crash site 1: implemented-interface handles have
-  // empty `texts`, and upstream Corsa sometimes evicts the handle from its
-  // snapshot registry before typeToString runs. The checker warms the cache
-  // with the `implements` identifier via rememberTypeText, so typeToString
-  // should return that name instead of rethrowing the stale-handle error.
-  it("returns a remembered type text when typeToString hits a stale handle", () => {
+  it("returns a server-rendered cached type text when typeToString later hits a stale handle", () => {
     clients.length = 0;
     const runtime = {
       executable: "/tmp/corsa",
@@ -209,7 +194,8 @@ describe("CorsaProjectSession", () => {
     }
 
     const type = { id: "type-7", flags: 0, texts: [] as string[] };
-    session.rememberTypeText(type.id, "Serializable");
+    client.typeToString.mockReturnValueOnce("Serializable");
+    expect(session.typeToString(type as never)).toBe("Serializable");
     client.typeToString.mockImplementationOnce(() => {
       throw new Error(
         'protocol error: api: client error: type handle "type-7" not found in snapshot registry',

@@ -3,6 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 import { type ProjectResponse, CorsaApiClient } from "@corsa-bind/napi";
 
 import type {
+  CorsaCallSignatureFacts,
   CorsaNode,
   CorsaSignature,
   CorsaSymbol,
@@ -38,11 +39,6 @@ type TypeLookup = {
   sourceText?: string;
 };
 
-type ParameterInfo = {
-  name: string;
-  node: CorsaNode;
-};
-
 const typeFlags = {
   object: 1 << 20,
   index: 1 << 21,
@@ -68,7 +64,6 @@ export class CorsaProjectSession {
   #projects: ProjectResponse[] = [];
   #files = new Map<string, FileCache>();
   #symbolsById = new Map<string, CorsaSymbol>();
-  #syntheticSymbolsById = new Map<string, CorsaSymbol>();
   #symbolTypeById = new Map<string, string>();
   #nodesById = new Map<string, CorsaNode>();
   #typeLookupById = new Map<string, TypeLookup>();
@@ -182,10 +177,6 @@ export class CorsaProjectSession {
     if (typeof symbol !== "string") {
       return this.rememberSymbol(symbol);
     }
-    const synthetic = this.#syntheticSymbolsById.get(symbol);
-    if (synthetic) {
-      return synthetic;
-    }
     const cached = this.#symbolsById.get(symbol);
     if (cached) {
       return cached;
@@ -195,21 +186,21 @@ export class CorsaProjectSession {
       return undefined;
     }
     const resolved = this.client().getSymbolOfType(this.#snapshot, typeId) as CorsaSymbol | null;
-    return resolved?.id === symbol ? this.rememberSymbol(resolved) : undefined;
+    return resolved?.id === symbol ? this.rememberUsableSymbol(resolved) : undefined;
   }
 
   getSymbolOfType(type: CorsaType): CorsaSymbol | undefined {
     if (type.symbol) {
       const symbol = this.getSymbol(type.symbol);
-      if (symbol) {
+      if (isUsableSymbol(symbol)) {
         return symbol;
       }
     }
     if (!this.#snapshot) {
       return undefined;
     }
-    return this.rememberSymbol(
-      this.client().getSymbolOfType(this.#snapshot, type.id) as CorsaSymbol | undefined,
+    return this.rememberUsableSymbol(
+      this.client().getSymbolOfType(this.#snapshot, type.id) as CorsaSymbol | null,
     );
   }
 
@@ -266,18 +257,6 @@ export class CorsaProjectSession {
     }
   }
 
-  // Seeds the type-text cache from a name the caller already knows (for
-  // example the identifier in an `implements` clause). Implemented-interface
-  // handles come back with empty `texts`, and upstream Corsa sometimes evicts
-  // them from its snapshot registry before `typeToString` runs, so warming the
-  // cache here lets `typeToString` fall back to the source name instead of
-  // throwing (GH#211). Never overwrites a value the server already provided.
-  rememberTypeText(typeId: string, text: string): void {
-    if (!this.#typeTextById.has(typeId)) {
-      this.#typeTextById.set(typeId, text);
-    }
-  }
-
   getBaseTypeOfLiteralType(type: CorsaType): CorsaType | undefined {
     return this.rememberType(
       this.client().callJson("getBaseTypeOfLiteralType", {
@@ -299,14 +278,38 @@ export class CorsaProjectSession {
   }
 
   getSignaturesOfType(type: CorsaType, kind: number): readonly CorsaSignature[] {
+    const source = this.sourceContextForType(type);
     return this.rememberSignatures(
       this.client().callJson("getSignaturesOfType", {
         snapshot: this.#snapshot,
         project: this.projectId(),
         type: type.id,
         kind,
+        ...source,
       }) ?? [],
     );
+  }
+
+  getCallSignatureFacts(
+    type: CorsaType,
+    kind: number,
+    argumentTypeTexts: readonly (readonly string[])[],
+    explicitTypeArgumentTexts: readonly string[],
+  ): CorsaCallSignatureFacts {
+    const source = this.sourceContextForType(type);
+    const facts = this.client().callJson<CorsaCallSignatureFacts>("getCallSignatureFacts", {
+      snapshot: this.#snapshot,
+      project: this.projectId(),
+      type: type.id,
+      kind,
+      ...source,
+      argumentTypeTexts,
+      explicitTypeArgumentTexts,
+    });
+    if (facts?.signature) {
+      this.rememberSignature(facts.signature);
+    }
+    return facts ?? {};
   }
 
   getReturnTypeOfSignature(signature: CorsaSignature): CorsaType | undefined {
@@ -338,26 +341,14 @@ export class CorsaProjectSession {
     if (isArrayOrTupleLikeType(this, type)) {
       return [];
     }
-    try {
-      return this.rememberTypes(
-        this.client().callJson("getBaseTypes", {
-          snapshot: this.#snapshot,
-          project: this.projectId(),
-          type: type.id,
-          texts: this.typeTexts(type),
-        }) ?? [],
-      );
-    } catch (error) {
-      // Upstream Corsa occasionally drops a type handle from its snapshot
-      // registry after the first base-types query on a class that has no
-      // explicit `extends` clause. Treating that as "no base types" lets a
-      // follow-up `getImplementedTypesOfType` on the same handle still report
-      // the type's own `implements` clause instead of throwing (GH#206).
-      if (isProtocolPanicError(error) || isStaleHandleError(error)) {
-        return [];
-      }
-      throw error;
-    }
+    return this.rememberTypes(
+      this.client().callJson("getBaseTypes", {
+        snapshot: this.#snapshot,
+        project: this.projectId(),
+        type: type.id,
+        texts: this.typeTexts(type),
+      }) ?? [],
+    );
   }
 
   getTypeArguments(type: CorsaType): readonly CorsaType[] {
@@ -604,15 +595,25 @@ export class CorsaProjectSession {
     return cached === undefined ? [] : [cached];
   }
 
+  private sourceContextForType(type: CorsaType): { file?: string; sourceText?: string } {
+    const lookup = this.#typeLookupById.get(type.id);
+    if (lookup) {
+      const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
+      return sourceText ? { file: lookup.fileName, sourceText } : {};
+    }
+    const source = this.#typeSourceById.get(type.id);
+    if (source) {
+      const sourceText = this.sourceTextForPath(source.node.fileName);
+      return sourceText ? { file: source.node.fileName, sourceText } : {};
+    }
+    return {};
+  }
+
   private rememberSymbol<T extends CorsaSymbol | undefined>(symbol: T): T {
     if (!symbol) {
       return symbol;
     }
     this.#snapshotHasIssuedHandles = true;
-    const synthetic = this.#syntheticSymbolsById.get(symbol.id);
-    if (synthetic) {
-      return synthetic as T;
-    }
     this.#symbolsById.set(symbol.id, symbol);
     for (const declaration of symbol.declarations ?? []) {
       this.rememberNode(declaration);
@@ -621,6 +622,10 @@ export class CorsaProjectSession {
       this.rememberNode(symbol.valueDeclaration);
     }
     return symbol;
+  }
+
+  private rememberUsableSymbol(symbol: CorsaSymbol | null | undefined): CorsaSymbol | undefined {
+    return isUsableSymbol(symbol) ? this.rememberSymbol(symbol) : undefined;
   }
 
   private rememberSymbols<T extends readonly CorsaSymbol[]>(symbols: T): T {
@@ -641,43 +646,13 @@ export class CorsaProjectSession {
     if (signature.declaration) {
       this.rememberNode(signature.declaration);
     }
-    const parameterIds = Array.isArray(signature.parameters) ? signature.parameters : [];
-    const parameters = signature.declaration
-      ? this.parameterInfosForDeclaration(signature.declaration, parameterIds.length)
-      : [];
-    parameterIds.forEach((id, index) => {
-      this.rememberSyntheticSymbol(id, parameters[index]);
-    });
-    if (signature.thisParameter) {
-      this.rememberSyntheticSymbol(signature.thisParameter, undefined, "this");
+    for (const symbol of signature.parameterSymbols ?? []) {
+      this.rememberSymbol(symbol);
+    }
+    if (signature.thisParameterSymbol) {
+      this.rememberSymbol(signature.thisParameterSymbol);
     }
     return signature;
-  }
-
-  private rememberSyntheticSymbol(
-    id: string,
-    parameter?: ParameterInfo,
-    fallbackName = "",
-  ): CorsaSymbol {
-    const cached = this.#syntheticSymbolsById.get(id);
-    if (cached && (cached.name || !parameter?.name)) {
-      return cached;
-    }
-    const declaration = parameter?.node.id;
-    const symbol: CorsaSymbol = {
-      id,
-      name: parameter?.name ?? fallbackName,
-      flags: cached?.flags ?? 0,
-      checkFlags: cached?.checkFlags ?? 0,
-      declarations: declaration ? [declaration] : (cached?.declarations ?? []),
-      valueDeclaration: declaration ?? cached?.valueDeclaration,
-    };
-    this.#syntheticSymbolsById.set(id, symbol);
-    this.#symbolsById.set(id, symbol);
-    if (declaration) {
-      this.#nodesById.set(declaration, parameter.node);
-    }
-    return symbol;
   }
 
   private rememberNode(handle: string): CorsaNode | undefined {
@@ -691,7 +666,6 @@ export class CorsaProjectSession {
 
   private clearHandleCaches(): void {
     this.#symbolsById.clear();
-    this.#syntheticSymbolsById.clear();
     this.#symbolTypeById.clear();
     this.#nodesById.clear();
     this.#typeLookupById.clear();
@@ -699,50 +673,18 @@ export class CorsaProjectSession {
     this.#snapshotHasIssuedHandles = false;
   }
 
-  private parameterInfosForDeclaration(
-    handle: string,
-    expectedCount: number,
-  ): readonly ParameterInfo[] {
-    const source = this.sourceSliceForHandle(handle);
-    if (!source) {
-      return this.parameterInfosForUtf8ByteDeclaration(handle);
-    }
-    const parameters = parameterInfosForSource(source);
-    if (parameters.length >= expectedCount || expectedCount === 0) {
-      return parameters;
-    }
-    const utf8Parameters = this.parameterInfosForUtf8ByteDeclaration(handle);
-    return utf8Parameters.length > parameters.length ? utf8Parameters : parameters;
-  }
-
-  private parameterInfosForUtf8ByteDeclaration(handle: string): readonly ParameterInfo[] {
-    const source = this.sourceSliceForHandle(handle, "utf8-byte");
-    return source ? parameterInfosForSource(source) : [];
-  }
-
-  private sourceSliceForHandle(
-    handle: string,
-    offsetUnit: "utf16" | "utf8-byte" = "utf16",
-  ): SourceSlice | undefined {
+  private sourceSliceForHandle(handle: string): SourceSlice | undefined {
     const node = this.getNode(handle);
     if (!node) {
       return undefined;
     }
     const sourceText = this.sourceTextForPath(node.fileName);
-    const normalizedNode =
-      offsetUnit === "utf8-byte" ? nodeFromUtf8ByteOffsets(node, sourceText) : node;
-    if (
-      !sourceText ||
-      !normalizedNode ||
-      normalizedNode.pos < 0 ||
-      normalizedNode.end > sourceText.length ||
-      normalizedNode.pos >= normalizedNode.end
-    ) {
+    if (!sourceText || node.pos < 0 || node.end > sourceText.length || node.pos >= node.end) {
       return undefined;
     }
     return {
-      node: normalizedNode,
-      text: sourceText.slice(normalizedNode.pos, normalizedNode.end),
+      node,
+      text: sourceText.slice(node.pos, node.end),
     };
   }
 
@@ -912,21 +854,6 @@ export class CorsaProjectSession {
   }
 }
 
-function parameterInfosForSource(source: SourceSlice): readonly ParameterInfo[] {
-  const open = findConstructorParameterOpen(source.text);
-  if (open < 0) {
-    return [];
-  }
-  const close = matchingCloseParen(source.text, open);
-  if (close < 0) {
-    return [];
-  }
-  const parametersText = source.text.slice(open + 1, close);
-  return splitTopLevelRanges(parametersText, ",")
-    .map((range) => parameterInfoForText(source.node, parametersText, range, open + 1))
-    .filter((parameter): parameter is ParameterInfo => parameter !== undefined);
-}
-
 function isArrayOrTupleLikeType(session: CorsaProjectSession, type: CorsaType): boolean {
   const texts =
     Array.isArray(type.texts) && type.texts.length > 0 ? type.texts : [session.typeToString(type)];
@@ -938,17 +865,8 @@ function isArrayOrTupleLikeType(session: CorsaProjectSession, type: CorsaType): 
   });
 }
 
-function findConstructorParameterOpen(text: string): number {
-  const constructorPattern = /\bconstructor\s*\(/g;
-  let match: RegExpExecArray | null;
-  let open = -1;
-  while ((match = constructorPattern.exec(text)) !== null) {
-    open = match.index + match[0].lastIndexOf("(");
-  }
-  if (open >= 0) {
-    return open;
-  }
-  return text.indexOf("(");
+function isUsableSymbol(symbol: CorsaSymbol | null | undefined): symbol is CorsaSymbol {
+  return symbol != null && !symbol.name.includes("\ufffd");
 }
 
 function overlayTextFor(fileName: string, sourceText?: string): string | undefined {
@@ -960,16 +878,6 @@ function overlayTextFor(fileName: string, sourceText?: string): string | undefin
   } catch {
     return sourceText;
   }
-}
-
-function isProtocolPanicError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("protocol error: panic:") || message.includes("panic: runtime error");
-}
-
-function isStaleHandleError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /handle "[^"]*" not found in snapshot registry/.test(message);
 }
 
 function statMtimeMs(fileName: string): number {
@@ -1002,233 +910,6 @@ function parseNodeHandle(value: string): CorsaNode | undefined {
     return undefined;
   }
   return { id: value, fileName, pos, end, range: [pos, end] };
-}
-
-function nodeFromUtf8ByteOffsets(
-  node: CorsaNode,
-  sourceText: string | undefined,
-): CorsaNode | undefined {
-  if (sourceText === undefined) {
-    return undefined;
-  }
-  const pos = utf16IndexFromUtf8ByteOffset(sourceText, node.pos);
-  const end = utf16IndexFromUtf8ByteOffset(sourceText, node.end);
-  if (pos === undefined || end === undefined || end < pos) {
-    return undefined;
-  }
-  return {
-    ...node,
-    pos,
-    end,
-    range: [pos, end],
-  };
-}
-
-function utf16IndexFromUtf8ByteOffset(text: string, byteOffset: number): number | undefined {
-  if (!Number.isInteger(byteOffset) || byteOffset < 0) {
-    return undefined;
-  }
-  let bytes = 0;
-  for (let index = 0; index < text.length; ) {
-    if (bytes === byteOffset) {
-      return index;
-    }
-    const codePoint = text.codePointAt(index);
-    if (codePoint === undefined) {
-      break;
-    }
-    const nextBytes = bytes + utf8ByteLengthOfCodePoint(codePoint);
-    if (nextBytes > byteOffset) {
-      return undefined;
-    }
-    bytes = nextBytes;
-    index += codePoint > 0xffff ? 2 : 1;
-  }
-  return bytes === byteOffset ? text.length : undefined;
-}
-
-function utf8ByteLengthOfCodePoint(codePoint: number): number {
-  if (codePoint <= 0x7f) {
-    return 1;
-  }
-  if (codePoint <= 0x7ff) {
-    return 2;
-  }
-  if (codePoint <= 0xffff) {
-    return 3;
-  }
-  return 4;
-}
-
-function parameterInfoForText(
-  declarationNode: CorsaNode,
-  parametersText: string,
-  range: { readonly start: number; readonly end: number },
-  parametersStart: number,
-): ParameterInfo | undefined {
-  const raw = parametersText.slice(range.start, range.end);
-  const leading = raw.search(/\S/);
-  if (leading < 0) {
-    return undefined;
-  }
-  const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
-  const text = raw.slice(leading, raw.length - trailing);
-  const name = parameterNameForText(text);
-  if (!name) {
-    return undefined;
-  }
-  const pos = declarationNode.pos + parametersStart + range.start + leading;
-  const end = declarationNode.pos + parametersStart + range.end - trailing;
-  const id = `${pos}.${end}.0.${declarationNode.fileName}`;
-  return {
-    name,
-    node: {
-      id,
-      fileName: declarationNode.fileName,
-      pos,
-      end,
-      range: [pos, end],
-    },
-  };
-}
-
-function parameterNameForText(text: string): string | undefined {
-  let candidate = text.trim().replace(/^\.\.\.\s*/, "");
-  let changed = true;
-  while (changed) {
-    const previous = candidate;
-    candidate = candidate.replace(
-      /^(?:public|private|protected|readonly|override|static|abstract|declare)\s+/,
-      "",
-    );
-    changed = candidate !== previous;
-  }
-  const separator = firstTopLevelIndexOfAny(candidate, [":", "="]);
-  let left = (separator >= 0 ? candidate.slice(0, separator) : candidate).trim();
-  if (left.endsWith("?")) {
-    left = left.slice(0, -1).trim();
-  }
-  if (left.startsWith("{") || left.startsWith("[")) {
-    return left;
-  }
-  return left.split(/\s+/).at(-1);
-}
-
-function matchingCloseParen(text: string, open: number): number {
-  let depth = 0;
-  const scanner = createScanner();
-  for (let index = open; index < text.length; index += 1) {
-    const char = text[index];
-    if (scanner.inQuote(char)) {
-      continue;
-    }
-    if (char === "(") {
-      depth += 1;
-    } else if (char === ")") {
-      depth -= 1;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function splitTopLevelRanges(
-  text: string,
-  delimiter: string,
-): readonly { readonly start: number; readonly end: number }[] {
-  const ranges: { start: number; end: number }[] = [];
-  const scanner = createScanner();
-  let start = 0;
-  let angleDepth = 0;
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  let braceDepth = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (scanner.inQuote(char)) {
-      continue;
-    }
-    if (char === "<") angleDepth += 1;
-    else if (char === ">") angleDepth = Math.max(0, angleDepth - 1);
-    else if (char === "(") parenDepth += 1;
-    else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
-    else if (char === "[") bracketDepth += 1;
-    else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
-    else if (char === "{") braceDepth += 1;
-    else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
-    else if (
-      char === delimiter &&
-      angleDepth === 0 &&
-      parenDepth === 0 &&
-      bracketDepth === 0 &&
-      braceDepth === 0
-    ) {
-      ranges.push({ start, end: index });
-      start = index + 1;
-    }
-  }
-  ranges.push({ start, end: text.length });
-  return ranges;
-}
-
-function firstTopLevelIndexOfAny(text: string, needles: readonly string[]): number {
-  const scanner = createScanner();
-  let angleDepth = 0;
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  let braceDepth = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (scanner.inQuote(char)) {
-      continue;
-    }
-    if (char === "<") angleDepth += 1;
-    else if (char === ">") angleDepth = Math.max(0, angleDepth - 1);
-    else if (char === "(") parenDepth += 1;
-    else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
-    else if (char === "[") bracketDepth += 1;
-    else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
-    else if (char === "{") braceDepth += 1;
-    else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
-    else if (
-      needles.includes(char) &&
-      angleDepth === 0 &&
-      parenDepth === 0 &&
-      bracketDepth === 0 &&
-      braceDepth === 0
-    ) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function createScanner(): {
-  inQuote(char: string): boolean;
-} {
-  let quote: string | undefined;
-  let escaped = false;
-  return {
-    inQuote(char) {
-      if (quote) {
-        if (escaped) {
-          escaped = false;
-        } else if (char === "\\") {
-          escaped = true;
-        } else if (char === quote) {
-          quote = undefined;
-        }
-        return true;
-      }
-      if (char === '"' || char === "'" || char === "`") {
-        quote = char;
-        return true;
-      }
-      return false;
-    },
-  };
 }
 
 function readFileOrUndefined(path: string): string | undefined {

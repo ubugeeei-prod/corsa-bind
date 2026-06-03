@@ -55,7 +55,7 @@ export function decorateRule(rule: Rule): Rule {
     return {
       ...rule,
       create(context) {
-        return rule.create!(decorateContext(context));
+        return rule.create!(decorateContext(context, rule));
       },
     } as Rule;
   }
@@ -63,7 +63,7 @@ export function decorateRule(rule: Rule): Rule {
     return {
       ...rule,
       createOnce(context) {
-        return (rule as any).createOnce(decorateContext(context));
+        return (rule as any).createOnce(decorateContext(context, rule));
       },
     } as Rule;
   }
@@ -76,8 +76,12 @@ function wrapRules(rules: Record<string, Rule>): Record<string, Rule> {
   );
 }
 
-function decorateContext(context: ContextWithParserOptions): ContextWithParserOptions {
-  const parserOptions = Object.freeze(resolveTypeAwareParserOptions(context));
+function decorateContext(context: ContextWithParserOptions, rule: Rule): ContextWithParserOptions {
+  const parserOptions = Object.freeze(
+    resolveTypeAwareParserOptions(context, {
+      projectService: requiresTypeChecking(rule),
+    }),
+  );
   const baseLanguageOptions = context.languageOptions;
   const languageOptions = Object.freeze({
     ...baseLanguageOptions,
@@ -106,4 +110,11 @@ function decorateContext(context: ContextWithParserOptions): ContextWithParserOp
       },
     },
   }) as ContextWithParserOptions;
+}
+
+function requiresTypeChecking(rule: Rule): boolean {
+  return (
+    (rule.meta as { readonly docs?: { readonly requiresTypeChecking?: unknown } } | undefined)?.docs
+      ?.requiresTypeChecking === true
+  );
 }
