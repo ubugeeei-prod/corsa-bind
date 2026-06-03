@@ -2,6 +2,7 @@
 
 mod context;
 mod helpers;
+mod host_facts;
 mod registry;
 mod rules;
 mod stylistic;

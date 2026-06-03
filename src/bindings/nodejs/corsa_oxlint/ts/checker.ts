@@ -110,6 +110,14 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
     getSignaturesOfType(type, kind) {
       return sessionForContext(context).session.getSignaturesOfType(type, kind);
     },
+    getCallSignatureFacts(type, kind, argumentTypeTexts, explicitTypeArgumentTexts) {
+      return sessionForContext(context).session.getCallSignatureFacts(
+        type,
+        kind,
+        argumentTypeTexts,
+        explicitTypeArgumentTexts,
+      );
+    },
     getReturnTypeOfSignature(signature) {
       return sessionForContext(context).session.getReturnTypeOfSignature(signature);
     },
@@ -405,7 +413,6 @@ function implementedTypesFromSourceText(
   if (implementsIndex < 0) {
     return [];
   }
-  const session = sessionForContext(context).session;
   const clauseText = headerText.slice(implementsIndex + "implements".length);
   const clauseStart = node.pos + headerStart + implementsIndex + "implements".length;
   return splitTopLevelRanges(clauseText, ",")
@@ -431,11 +438,12 @@ function implementedTypesFromSourceText(
         ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
         : (checker.getTypeAtLocation(nameNode) ?? checker.getTypeAtLocation(lookupNode));
       if (type) {
-        // Implemented-interface handles come back with empty `texts`, so warm
-        // the type-text cache with the `implements` identifier. If upstream
-        // later evicts the handle, `typeToString` falls back to this name
-        // instead of throwing (GH#211).
-        session.rememberTypeText(type.id, raw.slice(leading, raw.length - trailing));
+        try {
+          checker.typeToString(type);
+        } catch {
+          // Corsa-side relation fallbacks handle stale type handles; avoid
+          // deriving replacement text from source names in the JS bridge.
+        }
       }
       return type;
     })

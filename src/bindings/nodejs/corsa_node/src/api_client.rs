@@ -1,10 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    fs,
+    sync::{Arc, Mutex},
+};
 
 use corsa::{
     CorsaError,
     api::{
-        ApiClient, ManagedSnapshot, ProjectHandle, SnapshotHandle, SymbolHandle, TypeHandle,
-        TypeResponse, UpdateSnapshotParams,
+        ApiClient, ManagedSnapshot, NodeHandle, ProjectHandle, SignatureResponse, SnapshotHandle,
+        SymbolHandle, SymbolResponse, TypeHandle, TypeResponse, UpdateSnapshotParams,
     },
     fast::{CompactString, FastMap},
     runtime::block_on,
@@ -51,6 +54,70 @@ struct TypeOnlyParams {
     snapshot: String,
     #[serde(rename = "type")]
     type_handle: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SignatureOfTypeParams {
+    snapshot: String,
+    project: String,
+    #[serde(rename = "type")]
+    type_handle: String,
+    kind: i32,
+    file: Option<String>,
+    source_text: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CallSignatureFactsParams {
+    snapshot: String,
+    project: String,
+    #[serde(rename = "type")]
+    type_handle: String,
+    kind: i32,
+    file: Option<String>,
+    source_text: Option<String>,
+    #[serde(default)]
+    argument_type_texts: Vec<Vec<String>>,
+    #[serde(default)]
+    explicit_type_argument_texts: Vec<String>,
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CallSignatureFactsResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature: Option<SignatureResponse>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    expected_argument_type_texts: Vec<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    explicit_type_arguments_required: Option<bool>,
+}
+
+struct SignatureSourceOverride {
+    file: String,
+    source_text: String,
+}
+
+struct CallSignatureFactsLookup<'a> {
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    r#type: TypeHandle,
+    kind: i32,
+    source_override: Option<&'a SignatureSourceOverride>,
+    argument_type_texts: Vec<Vec<String>>,
+    explicit_type_argument_texts: Vec<String>,
+}
+
+fn signature_source_override(
+    file: Option<String>,
+    source_text: Option<String>,
+) -> Option<SignatureSourceOverride> {
+    Some(SignatureSourceOverride {
+        file: file?,
+        source_text: source_text?,
+    })
 }
 
 struct SourceRangeLookup {
@@ -1877,6 +1944,508 @@ fn is_stale_handle_message(message: &str) -> bool {
     message.contains("not found in snapshot registry")
 }
 
+async fn get_signatures_of_type_with_parameter_texts(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    r#type: TypeHandle,
+    kind: i32,
+    source_override: Option<&SignatureSourceOverride>,
+) -> corsa::Result<Vec<SignatureResponse>> {
+    let mut signatures = client
+        .get_signatures_of_type(snapshot.clone(), project.clone(), r#type, kind)
+        .await?;
+    for signature in &mut signatures {
+        if signature.parameter_symbols.is_empty() && !signature.parameters.is_empty() {
+            signature.parameter_symbols = parameter_symbols_for_signature(
+                client,
+                snapshot.clone(),
+                project.clone(),
+                signature,
+                source_override,
+            )
+            .await?;
+        }
+        if signature.type_parameter_default_texts.is_empty()
+            && !signature.type_parameters.is_empty()
+        {
+            signature.type_parameter_default_texts = type_parameter_default_texts_for_signature(
+                client,
+                snapshot.clone(),
+                project.clone(),
+                signature,
+                source_override,
+            )
+            .await?;
+        }
+        if !signature.parameter_type_texts.is_empty() {
+            continue;
+        }
+        signature.parameter_type_texts = render_symbol_type_texts(
+            client,
+            snapshot.clone(),
+            project.clone(),
+            &signature.parameters,
+        )
+        .await?;
+        if let Some(this_parameter) = &signature.this_parameter {
+            signature.this_parameter_type_texts = render_symbol_type_texts(
+                client,
+                snapshot.clone(),
+                project.clone(),
+                std::slice::from_ref(this_parameter),
+            )
+            .await?
+            .into_iter()
+            .next()
+            .unwrap_or_default();
+        }
+    }
+    Ok(signatures)
+}
+
+async fn parameter_symbols_for_signature(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    signature: &SignatureResponse,
+    source_override: Option<&SignatureSourceOverride>,
+) -> corsa::Result<Vec<SymbolResponse>> {
+    let Some(declaration) = &signature.declaration else {
+        return Ok(Vec::new());
+    };
+    let Ok(parsed) = declaration.parse() else {
+        return Ok(Vec::new());
+    };
+    let source_text = source_text_for_signature_declaration(
+        client,
+        snapshot,
+        project,
+        parsed.path.as_str(),
+        source_override,
+    )
+    .await?;
+    let Some((start, end)) = utf16_byte_range(&source_text, parsed.pos, parsed.end) else {
+        return Ok(Vec::new());
+    };
+    let Some(declaration_text) = source_text.get(start..end) else {
+        return Ok(Vec::new());
+    };
+    let parameters = parameter_ranges_in_signature_declaration(declaration_text, start)
+        .into_iter()
+        .filter_map(|parameter| {
+            let pos = utf16_index_from_byte(&source_text, parameter.start)?;
+            let end = utf16_index_from_byte(&source_text, parameter.end)?;
+            Some((parameter.name, pos, end))
+        })
+        .collect::<Vec<_>>();
+    if parameters.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    Ok(signature
+        .parameters
+        .iter()
+        .zip(parameters)
+        .map(|(symbol, (name, pos, end))| {
+            let declaration =
+                NodeHandle::from(format!("{}.{}.0.{}", pos, end, parsed.path.as_str()));
+            SymbolResponse {
+                id: symbol.clone(),
+                name,
+                flags: 1,
+                check_flags: 0,
+                declarations: vec![declaration.clone()],
+                value_declaration: Some(declaration),
+            }
+        })
+        .collect())
+}
+
+async fn type_parameter_default_texts_for_signature(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    signature: &SignatureResponse,
+    source_override: Option<&SignatureSourceOverride>,
+) -> corsa::Result<Vec<String>> {
+    let Some(declaration) = &signature.declaration else {
+        return Ok(Vec::new());
+    };
+    let Ok(parsed) = declaration.parse() else {
+        return Ok(Vec::new());
+    };
+    let source_text = source_text_for_signature_declaration(
+        client,
+        snapshot,
+        project,
+        parsed.path.as_str(),
+        source_override,
+    )
+    .await?;
+    let Some((start, end)) = utf16_byte_range(&source_text, parsed.pos, parsed.end) else {
+        return Ok(Vec::new());
+    };
+    let Some(declaration_text) = source_text.get(start..end) else {
+        return Ok(Vec::new());
+    };
+    Ok(type_parameter_default_texts_in_signature_declaration(
+        declaration_text,
+    ))
+}
+
+fn type_parameter_default_texts_in_signature_declaration(declaration_text: &str) -> Vec<String> {
+    let Some(open) = first_top_level_opening_angle(declaration_text) else {
+        return Vec::new();
+    };
+    let Some(first_paren) = first_top_level_opening_paren(declaration_text) else {
+        return Vec::new();
+    };
+    if open > first_paren {
+        return Vec::new();
+    }
+    let Some(close) = matching_angle_close(declaration_text, open) else {
+        return Vec::new();
+    };
+    let parameters_text = &declaration_text[open + 1..close];
+    split_top_level_ranges(parameters_text, ',')
+        .into_iter()
+        .map(|range| {
+            let parameter_text = &parameters_text[range.start..range.end];
+            first_top_level_index_of_any(parameter_text, &['='])
+                .and_then(|index| char_len_at(parameter_text, index).map(|len| index + len))
+                .map(|start| parameter_text[start..].trim().to_owned())
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+async fn source_text_for_signature_declaration(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    path: &str,
+    source_override: Option<&SignatureSourceOverride>,
+) -> corsa::Result<String> {
+    if let Some(source_override) = source_override
+        && (source_override.file == path || source_override.file.ends_with(path))
+    {
+        return Ok(source_override.source_text.clone());
+    }
+    if let Ok(source_text) = fs::read_to_string(path) {
+        return Ok(source_text);
+    }
+    let Some(source) = client
+        .get_source_file(snapshot, project, path.to_owned())
+        .await?
+    else {
+        return Ok(String::new());
+    };
+    Ok(String::from_utf8(source.into_bytes()).unwrap_or_default())
+}
+
+struct ParameterSourceRange {
+    name: String,
+    start: usize,
+    end: usize,
+}
+
+fn parameter_ranges_in_signature_declaration(
+    declaration_text: &str,
+    declaration_start: usize,
+) -> Vec<ParameterSourceRange> {
+    let Some(open) = first_top_level_opening_paren(declaration_text) else {
+        return Vec::new();
+    };
+    let Some(close) = matching_paren_close(declaration_text, open) else {
+        return Vec::new();
+    };
+    let parameters_text = &declaration_text[open + 1..close];
+    split_top_level_ranges(parameters_text, ',')
+        .into_iter()
+        .filter_map(|range| {
+            let raw = &parameters_text[range.start..range.end];
+            let leading = first_non_whitespace(raw)?;
+            let trailing = raw
+                .char_indices()
+                .rev()
+                .find(|(_, ch)| !ch.is_whitespace())
+                .map(|(index, ch)| index + ch.len_utf8())?;
+            let name = parameter_name(raw)?;
+            Some(ParameterSourceRange {
+                name,
+                start: declaration_start + open + 1 + range.start + leading,
+                end: declaration_start + open + 1 + range.start + trailing,
+            })
+        })
+        .collect()
+}
+
+fn parameter_name(text: &str) -> Option<String> {
+    let mut index = skip_whitespace(text, 0);
+    loop {
+        if text.get(index..)?.starts_with("...") {
+            index = skip_whitespace(text, index + 3);
+        }
+        let (start, end) = read_identifier(text, index)?;
+        let word = &text[start..end];
+        if is_modifier(word) {
+            index = skip_whitespace(text, end);
+            continue;
+        }
+        return Some(word.to_owned());
+    }
+}
+
+fn first_top_level_opening_paren(text: &str) -> Option<usize> {
+    let mut angle_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut index = 0usize;
+    let mut scanner = SourceScanner::default();
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        let ch = char_at(text, index)?;
+        match ch {
+            '<' => angle_depth += 1,
+            '>' => angle_depth = angle_depth.saturating_sub(1),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            '{' => brace_depth += 1,
+            '}' => brace_depth = brace_depth.saturating_sub(1),
+            '(' if angle_depth == 0 && bracket_depth == 0 && brace_depth == 0 => {
+                return Some(index);
+            }
+            _ => {}
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+fn matching_paren_close(text: &str, open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut index = open;
+    let mut scanner = SourceScanner::default();
+    while index < text.len() {
+        let next = scanner.skip(text, index);
+        if next > index {
+            index = next;
+            continue;
+        }
+        let ch = char_at(text, index)?;
+        if ch == '(' {
+            depth += 1;
+        } else if ch == ')' {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(index);
+            }
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+async fn get_call_signature_facts(
+    client: &ApiClient,
+    lookup: CallSignatureFactsLookup<'_>,
+) -> corsa::Result<CallSignatureFactsResponse> {
+    let signatures = get_signatures_of_type_with_parameter_texts(
+        client,
+        lookup.snapshot,
+        lookup.project,
+        lookup.r#type,
+        lookup.kind,
+        lookup.source_override,
+    )
+    .await?;
+    let Some(signature) =
+        select_signature_for_argument_texts(&signatures, &lookup.argument_type_texts)
+    else {
+        return Ok(CallSignatureFactsResponse::default());
+    };
+
+    let expected_argument_type_texts =
+        expected_argument_type_texts(signature, lookup.argument_type_texts.len());
+    let explicit_type_arguments_required =
+        explicit_type_arguments_required(signature, &lookup.explicit_type_argument_texts);
+
+    Ok(CallSignatureFactsResponse {
+        signature: Some(signature.clone()),
+        expected_argument_type_texts,
+        explicit_type_arguments_required,
+    })
+}
+
+fn select_signature_for_argument_texts<'a>(
+    signatures: &'a [SignatureResponse],
+    argument_type_texts: &[Vec<String>],
+) -> Option<&'a SignatureResponse> {
+    if signatures.len() <= 1 {
+        return signatures.first();
+    }
+    signatures
+        .iter()
+        .max_by_key(|signature| score_signature_for_arguments(signature, argument_type_texts))
+}
+
+fn expected_argument_type_texts(
+    signature: &SignatureResponse,
+    argument_count: usize,
+) -> Vec<Vec<String>> {
+    if signature.parameter_type_texts.is_empty() {
+        return Vec::new();
+    }
+    (0..argument_count)
+        .map(|index| {
+            signature
+                .parameter_type_texts
+                .get(index.min(signature.parameter_type_texts.len().saturating_sub(1)))
+                .cloned()
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn explicit_type_arguments_required(
+    signature: &SignatureResponse,
+    explicit_type_argument_texts: &[String],
+) -> Option<bool> {
+    if explicit_type_argument_texts.is_empty() || signature.type_parameter_default_texts.is_empty()
+    {
+        return None;
+    }
+    explicit_type_argument_texts
+        .iter()
+        .enumerate()
+        .all(|(index, explicit)| {
+            signature
+                .type_parameter_default_texts
+                .get(index)
+                .filter(|default| !default.trim().is_empty())
+                .is_some_and(|default| {
+                    normalize_type_text(default) == normalize_type_text(explicit)
+                })
+        })
+        .then_some(false)
+}
+
+fn score_signature_for_arguments(
+    signature: &SignatureResponse,
+    argument_type_texts: &[Vec<String>],
+) -> i32 {
+    let parameter_types = &signature.parameter_type_texts;
+    let mut score = -(argument_type_texts.len().abs_diff(parameter_types.len()) as i32);
+    for (index, actual) in argument_type_texts.iter().enumerate() {
+        let expected = parameter_types
+            .get(index.min(parameter_types.len().saturating_sub(1)))
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        if expected.is_empty() {
+            score -= 2;
+        } else if is_permissive_type_texts(expected) {
+            score += 1;
+        } else if fuzzy_type_texts_overlap(actual, expected) {
+            score += 4;
+        } else {
+            score -= 1;
+        }
+    }
+    score
+}
+
+fn fuzzy_type_texts_overlap(actual: &[String], expected: &[String]) -> bool {
+    let expected = expected
+        .iter()
+        .map(|text| normalize_type_text(text))
+        .collect::<Vec<_>>();
+    actual.iter().any(|actual_text| {
+        let actual = normalize_type_text(actual_text);
+        expected.iter().any(|expected| {
+            expected == &actual || expected.contains(actual.as_str()) || actual.contains(expected)
+        })
+    })
+}
+
+fn is_permissive_type_texts(texts: &[String]) -> bool {
+    texts.iter().any(|text| {
+        matches!(
+            normalize_type_text(text).as_str(),
+            "any" | "unknown" | "never"
+        )
+    })
+}
+
+fn normalize_type_text(text: &str) -> String {
+    text.split_whitespace().collect()
+}
+
+async fn render_symbol_type_texts(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    symbols: &[SymbolHandle],
+) -> corsa::Result<Vec<Vec<String>>> {
+    let mut rendered = Vec::with_capacity(symbols.len());
+    for symbol in symbols {
+        let type_response = match client
+            .get_type_of_symbol(snapshot.clone(), project.clone(), symbol.clone())
+            .await
+        {
+            Ok(Some(type_response)) => Some(type_response),
+            Ok(None) => {
+                client
+                    .get_declared_type_of_symbol(snapshot.clone(), project.clone(), symbol.clone())
+                    .await?
+            }
+            Err(error) if is_stale_handle_error(&error) => None,
+            Err(error) => return Err(error),
+        };
+        match type_response {
+            Some(type_response) => {
+                rendered.push(
+                    render_type_texts(client, snapshot.clone(), project.clone(), type_response)
+                        .await?,
+                );
+            }
+            None => rendered.push(Vec::new()),
+        }
+    }
+    Ok(rendered)
+}
+
+async fn render_type_texts(
+    client: &ApiClient,
+    snapshot: SnapshotHandle,
+    project: ProjectHandle,
+    type_response: TypeResponse,
+) -> corsa::Result<Vec<String>> {
+    let mut texts = Vec::with_capacity(type_response.texts.len() + 1);
+    for text in &type_response.texts {
+        push_unique_text(&mut texts, text);
+    }
+    if texts.is_empty() {
+        let rendered = client
+            .type_to_string(snapshot, project, type_response.id, None, None)
+            .await?;
+        push_unique_text(&mut texts, rendered.as_str());
+    }
+    Ok(texts)
+}
+
+fn push_unique_text(texts: &mut Vec<String>, text: &str) {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || texts.iter().any(|existing| existing == trimmed) {
+        return;
+    }
+    texts.push(trimmed.to_owned());
+}
+
 #[derive(Default)]
 struct SourceScanner {
     quote: Option<char>,
@@ -1949,6 +2518,42 @@ fn call_json_blocking(client: &ApiClient, method: &str, params: Option<Value>) -
         let response = block_on(client.get_types_of_type(
             SnapshotHandle::from(params.snapshot.as_str()),
             TypeHandle::from(params.type_handle.as_str()),
+        ))
+        .map_err(into_napi_error)?;
+        return to_value(&response);
+    }
+    if method == "getSignaturesOfType" {
+        let params =
+            params.ok_or_else(|| into_napi_error("getSignaturesOfType requires params"))?;
+        let params = from_value::<SignatureOfTypeParams>(params)?;
+        let source_override = signature_source_override(params.file, params.source_text);
+        let response = block_on(get_signatures_of_type_with_parameter_texts(
+            client,
+            SnapshotHandle::from(params.snapshot.as_str()),
+            ProjectHandle::from(params.project.as_str()),
+            TypeHandle::from(params.type_handle.as_str()),
+            params.kind,
+            source_override.as_ref(),
+        ))
+        .map_err(into_napi_error)?;
+        return to_value(&response);
+    }
+    if method == "getCallSignatureFacts" {
+        let params =
+            params.ok_or_else(|| into_napi_error("getCallSignatureFacts requires params"))?;
+        let params = from_value::<CallSignatureFactsParams>(params)?;
+        let source_override = signature_source_override(params.file, params.source_text);
+        let response = block_on(get_call_signature_facts(
+            client,
+            CallSignatureFactsLookup {
+                snapshot: SnapshotHandle::from(params.snapshot.as_str()),
+                project: ProjectHandle::from(params.project.as_str()),
+                r#type: TypeHandle::from(params.type_handle.as_str()),
+                kind: params.kind,
+                source_override: source_override.as_ref(),
+                argument_type_texts: params.argument_type_texts,
+                explicit_type_argument_texts: params.explicit_type_argument_texts,
+            },
         ))
         .map_err(into_napi_error)?;
         return to_value(&response);

@@ -288,6 +288,23 @@ describe("CorsaApiClient", () => {
       );
       expect(Buffer.from(sourceFile ?? []).toString("utf8")).toBe("source-file");
       expect(client.callJson<string>("ping")).toBe("pong");
+      expect(
+        client.callJson<Array<{ parameterTypeTexts?: string[][] }>>("getSignaturesOfType", {
+          snapshot: snapshot.snapshot,
+          project: project.id,
+          type: "t0000000000000001",
+          kind: 0,
+        })[0]?.parameterTypeTexts,
+      ).toEqual([["type-text"]]);
+      expect(
+        client.callJson<{ expectedArgumentTypeTexts?: string[][] }>("getCallSignatureFacts", {
+          snapshot: snapshot.snapshot,
+          project: project.id,
+          type: "t0000000000000001",
+          kind: 0,
+          argumentTypeTexts: [["type-text"]],
+        }).expectedArgumentTypeTexts,
+      ).toEqual([["type-text"]]);
       const sourceViaGeneric = client.callBinary("getSourceFile", {
         snapshot: snapshot.snapshot,
         project: project.id,

@@ -802,7 +802,7 @@ describe("corsa oxlint type locations", () => {
     expect(seen.declarationText).toContain("class Construct");
   });
 
-  integrationCase("resolves constructor parameter symbols from dependency declarations", () => {
+  integrationCase("resolves constructor parameter type texts from dependency declarations", () => {
     const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-external-symbols-"));
     const depDir = resolve(workspace, "node_modules", "external-dep");
     const srcDir = resolve(workspace, "src");
@@ -913,17 +913,12 @@ describe("corsa oxlint type locations", () => {
     expect(constructType ? checker.typeToString(constructType) : undefined).toBe("typeof Stack");
     const signature = constructType ? checker.getSignaturesOfType(constructType, 1)[0] : undefined;
 
-    expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual([
-      "scope",
-      "id",
-      "props",
+    expect(signature?.parameters).toHaveLength(3);
+    expect(signature?.parameterTypeTexts).toEqual([
+      ["Construct | undefined"],
+      ["string | undefined"],
+      ["StackProps | undefined"],
     ]);
-    expect(
-      signature?.parameters.map((id) => {
-        const type = checker.getTypeOfSymbolById(id) ?? checker.getDeclaredTypeOfSymbolById(id);
-        return type ? checker.typeToString(type) : undefined;
-      }),
-    ).toEqual(["Construct | undefined", "string | undefined", "StackProps | undefined"]);
   });
 
   integrationCase("resolves the symbol type at a location instead of the node type", () => {

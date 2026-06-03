@@ -185,6 +185,9 @@ function createEslintTypeChecker(
     getSignaturesOfType(type, kind) {
       return asReadonlyArray(callChecker(source, "getSignaturesOfType", type, kind));
     },
+    getCallSignatureFacts() {
+      return {};
+    },
     getReturnTypeOfSignature(signature) {
       return callChecker(source, "getReturnTypeOfSignature", signature);
     },
