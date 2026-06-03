@@ -102,11 +102,11 @@
   },
   "dependencies": {
     "@corsa-bind/napi": "workspace:*",
-    "@oxlint/plugins": "1.66.0",
-    "oxlint": "1.66.0"
+    "@oxlint/plugins": "1.68.0",
+    "oxlint": "1.68.0"
   },
   "devDependencies": {
-    "@typescript-eslint/utils": "8.59.3"
+    "@typescript-eslint/utils": "8.60.1"
   },
   "engines": {
     "bun": ">=1.2",
