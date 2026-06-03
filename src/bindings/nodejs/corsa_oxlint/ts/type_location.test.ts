@@ -1157,6 +1157,101 @@ describe("corsa oxlint type locations", () => {
     expect(seen.animal).toBe("Animal");
   });
 
+  integrationCase("does not expose corrupted mapped utility type symbols", () => {
+    const seen: Record<
+      string,
+      | {
+          readonly name: string | undefined;
+          readonly codepoints: readonly number[] | null;
+        }
+      | undefined
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "mapped-utility-type-symbols",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise mapped utility type symbols",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          PropertyDefinition(node: any) {
+            const keyName = node.key?.name;
+            if (!keyName) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            const symbol = type ? checker.getSymbolOfType(type) : undefined;
+            seen[keyName] = {
+              name: symbol?.name,
+              codepoints: symbol ? [...symbol.name].map((char) => char.codePointAt(0) ?? 0) : null,
+            };
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("mapped-utility-type-symbols", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Animal {}",
+            "interface IDog {",
+            "  name: string;",
+            "}",
+            "class Dog extends Animal implements IDog {",
+            '  readonly name: string = "Rex";',
+            "}",
+            "interface Box<T> {",
+            "  value: T;",
+            "}",
+            "class Holder {",
+            "  readonly readonlyDog: Readonly<Dog> = {} as Readonly<Dog>;",
+            "  readonly partialDog: Partial<Dog> = {} as Partial<Dog>;",
+            "  readonly requiredDog: Required<Dog> = {} as Required<Dog>;",
+            "  readonly boxedDog: Box<Dog> = { value: {} as Dog };",
+            "  readonly dogList: Dog[] = [];",
+            "  readonly bareDog: Dog = {} as Dog;",
+            '  readonly text: string = "";',
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    for (const key of ["readonlyDog", "partialDog", "requiredDog"] as const) {
+      expect(seen[key]?.codepoints ?? []).not.toContain(0xfffd);
+    }
+    expect([undefined, "Readonly"]).toContain(seen.readonlyDog?.name);
+    expect([undefined, "Partial"]).toContain(seen.partialDog?.name);
+    expect([undefined, "Required"]).toContain(seen.requiredDog?.name);
+    expect(seen.boxedDog?.name).toBe("Box");
+    expect(seen.dogList?.name).toBe("Array");
+    expect(seen.bareDog?.name).toBe("Dog");
+    expect(seen.text?.name).toBeUndefined();
+  });
+
   it("sends linted source text overlay changes when it differs from disk", () => {
     const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-overlay-"));
     const srcDir = resolve(workspace, "src");

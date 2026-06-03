@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -88,5 +88,25 @@ describe("context", () => {
   it("resolves the platform-specific default corsa executable", () => {
     expect(defaultCorsaExecutable("/repo", "linux")).toBe(resolve("/repo", ".cache/corsa"));
     expect(defaultCorsaExecutable("/repo", "win32")).toBe(resolve("/repo", ".cache/corsa.exe"));
+  });
+
+  it("prefers the installed native-preview tsgo binary when available", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const packageDir = resolve(workspace, "node_modules/@typescript/native-preview");
+    const binPath = resolve(packageDir, "bin/tsgo.js");
+    mkdirSync(dirname(binPath), { recursive: true });
+    writeFileSync(
+      resolve(packageDir, "package.json"),
+      JSON.stringify({
+        name: "@typescript/native-preview",
+        bin: {
+          tsgo: "bin/tsgo.js",
+        },
+      }),
+    );
+    writeFileSync(binPath, "#!/usr/bin/env node\n");
+
+    expect(defaultCorsaExecutable(workspace)).toBe(realpathSync(binPath));
   });
 });

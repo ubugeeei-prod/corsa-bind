@@ -195,21 +195,21 @@ export class CorsaProjectSession {
       return undefined;
     }
     const resolved = this.client().getSymbolOfType(this.#snapshot, typeId) as CorsaSymbol | null;
-    return resolved?.id === symbol ? this.rememberSymbol(resolved) : undefined;
+    return resolved?.id === symbol ? this.rememberUsableSymbol(resolved) : undefined;
   }
 
   getSymbolOfType(type: CorsaType): CorsaSymbol | undefined {
     if (type.symbol) {
       const symbol = this.getSymbol(type.symbol);
-      if (symbol) {
+      if (isUsableSymbol(symbol)) {
         return symbol;
       }
     }
     if (!this.#snapshot) {
       return undefined;
     }
-    return this.rememberSymbol(
-      this.client().getSymbolOfType(this.#snapshot, type.id) as CorsaSymbol | undefined,
+    return this.rememberUsableSymbol(
+      this.client().getSymbolOfType(this.#snapshot, type.id) as CorsaSymbol | null,
     );
   }
 
@@ -623,6 +623,10 @@ export class CorsaProjectSession {
     return symbol;
   }
 
+  private rememberUsableSymbol(symbol: CorsaSymbol | null | undefined): CorsaSymbol | undefined {
+    return isUsableSymbol(symbol) ? this.rememberSymbol(symbol) : undefined;
+  }
+
   private rememberSymbols<T extends readonly CorsaSymbol[]>(symbols: T): T {
     for (const symbol of symbols) {
       this.rememberSymbol(symbol);
@@ -936,6 +940,10 @@ function isArrayOrTupleLikeType(session: CorsaProjectSession, type: CorsaType): 
       normalized.startsWith("readonly [") || normalized.startsWith("[") || normalized.endsWith("[]")
     );
   });
+}
+
+function isUsableSymbol(symbol: CorsaSymbol | null | undefined): symbol is CorsaSymbol {
+  return symbol != null && !symbol.name.includes("\ufffd");
 }
 
 function findConstructorParameterOpen(text: string): number {
