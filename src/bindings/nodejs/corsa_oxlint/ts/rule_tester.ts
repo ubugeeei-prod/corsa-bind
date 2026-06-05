@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { RuleTester as OxlintRuleTester } from "oxlint/plugins-dev";
 
-import { mergeTypeAwareParserOptions } from "./context";
+import { defaultCorsaExecutable, mergeTypeAwareParserOptions } from "./context";
 import { decorateRule } from "./plugin";
 import type { CorsaOxlintSettings, TypeAwareParserOptions } from "./types";
 
@@ -123,6 +123,7 @@ function prepareTestCase(
       test.languageOptions?.parserOptions as TypeAwareParserOptions | undefined,
     ),
   );
+  const parserOptionsWithRuntime = applyRuleTesterRuntimeDefaults(parserOptions, test, config);
   return {
     ...test,
     filename,
@@ -132,17 +133,33 @@ function prepareTestCase(
       corsaOxlint: {
         ...testerConfig?.settings?.corsaOxlint,
         ...(test.settings as { corsaOxlint?: CorsaOxlintSettings })?.corsaOxlint,
-        parserOptions,
+        parserOptions: parserOptionsWithRuntime,
       },
     } as never,
     languageOptions: {
       ...config?.languageOptions,
       ...test.languageOptions,
       parserOptions: {
-        ...parserOptions,
+        ...parserOptionsWithRuntime,
       } as never,
     },
   };
+}
+
+function applyRuleTesterRuntimeDefaults(
+  parserOptions: TypeAwareParserOptions,
+  test: TestCase,
+  config: RuleTesterConfig | undefined,
+): TypeAwareParserOptions {
+  if (parserOptions.corsa?.executable !== undefined) {
+    return parserOptions;
+  }
+  const rootDir = resolve(test.cwd ?? config?.cwd ?? process.cwd());
+  return mergeTypeAwareParserOptions(parserOptions, {
+    corsa: {
+      executable: process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir),
+    },
+  });
 }
 
 function writeFixture(filename: string, code: string): void {
