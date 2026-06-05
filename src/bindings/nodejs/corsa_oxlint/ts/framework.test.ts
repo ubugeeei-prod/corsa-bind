@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { defaultCorsaExecutable } from "./context";
 import { OxlintUtils } from "./oxlint_utils";
@@ -11,6 +12,14 @@ import { RuleTester } from "./rule_tester";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const realCorsaBinary = defaultCorsaExecutable(workspaceRoot);
+const cleanupDirs = new Set<string>();
+
+afterEach(() => {
+  for (const dir of cleanupDirs) {
+    rmSync(dir, { force: true, recursive: true });
+  }
+  cleanupDirs.clear();
+});
 
 describe("corsa oxlint", () => {
   it("creates docs URLs through the Oxlint RuleCreator", () => {
@@ -527,6 +536,58 @@ describe("corsa oxlint", () => {
     });
   });
 
+  it("defaults RuleTester corsa executable from the configured cwd", () => {
+    const previousExecutable = process.env.CORSA_EXECUTABLE;
+    delete process.env.CORSA_EXECUTABLE;
+    let seen: Record<string, unknown> | undefined;
+    try {
+      const packageRoot = createNativePreviewPackage();
+      const expectedExecutable = realpathSync(
+        resolve(packageRoot, "node_modules/@typescript/native-preview/bin/tsgo.js"),
+      );
+      const tester = new RuleTester({
+        cwd: packageRoot,
+      });
+      tester.run(
+        "default-executable-roundtrip",
+        {
+          meta: {
+            messages: {
+              demo: "demo",
+            },
+            schema: [],
+          },
+          create(context: any) {
+            seen = {
+              languageExecutable: context.languageOptions?.parserOptions?.corsa?.executable,
+              parserExecutable: context.parserOptions?.corsa?.executable,
+              settingsExecutable: context.settings?.corsaOxlint?.parserOptions?.corsa?.executable,
+              tsconfigRootDir: context.parserOptions?.tsconfigRootDir,
+            };
+            return {};
+          },
+        } as any,
+        {
+          valid: [{ code: "const value = 1;" }],
+          invalid: [],
+        },
+      );
+
+      expect(seen).toEqual({
+        languageExecutable: expectedExecutable,
+        parserExecutable: expectedExecutable,
+        settingsExecutable: expectedExecutable,
+        tsconfigRootDir: expect.not.stringContaining(packageRoot),
+      });
+    } finally {
+      if (previousExecutable === undefined) {
+        delete process.env.CORSA_EXECUTABLE;
+      } else {
+        process.env.CORSA_EXECUTABLE = previousExecutable;
+      }
+    }
+  });
+
   const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
 
   integrationCase("runs a type-aware custom rule through oxlint RuleTester", () => {
@@ -609,3 +670,22 @@ describe("corsa oxlint", () => {
     });
   });
 });
+
+function createNativePreviewPackage(): string {
+  const packageRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-runtime-"));
+  cleanupDirs.add(packageRoot);
+  const packageDir = resolve(packageRoot, "node_modules/@typescript/native-preview");
+  const binPath = resolve(packageDir, "bin/tsgo.js");
+  mkdirSync(dirname(binPath), { recursive: true });
+  writeFileSync(
+    resolve(packageDir, "package.json"),
+    JSON.stringify({
+      name: "@typescript/native-preview",
+      bin: {
+        tsgo: "bin/tsgo.js",
+      },
+    }),
+  );
+  writeFileSync(binPath, "#!/usr/bin/env node\n");
+  return packageRoot;
+}
