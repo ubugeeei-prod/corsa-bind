@@ -1,7 +1,7 @@
 defmodule CorsaUtils.MixProject do
   use Mix.Project
 
-  @version "0.37.0"
+  @version "0.38.0"
   @source_url "https://github.com/ubugeeei-prod/corsa-bind"
 
   def project do
