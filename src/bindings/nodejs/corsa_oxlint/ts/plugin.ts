@@ -77,9 +77,11 @@ function wrapRules(rules: Record<string, Rule>): Record<string, Rule> {
 }
 
 function decorateContext(context: ContextWithParserOptions, rule: Rule): ContextWithParserOptions {
+  const typeAware = requiresTypeChecking(rule);
   const parserOptions = Object.freeze(
     resolveTypeAwareParserOptions(context, {
-      projectService: requiresTypeChecking(rule),
+      corsa: typeAware,
+      projectService: typeAware,
     }),
   );
   const baseLanguageOptions = context.languageOptions;

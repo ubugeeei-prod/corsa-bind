@@ -1152,6 +1152,65 @@ describe("corsa oxlint type locations", () => {
     expect(seen.animal).toBe("Animal");
   });
 
+  integrationCase("exposes symbols for type references with the default corsa executable", () => {
+    const seen: Record<string, string | null> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "type-reference-symbol-accessor",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise type reference symbol lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSTypeReference(node: any) {
+            const name = node.typeName?.name;
+            if (!name) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen[name] = type ? (checker.getSymbolOfType(type)?.name ?? null) : null;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("type-reference-symbol-accessor", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface IThing {",
+            "  readonly id: string;",
+            "}",
+            "class Animal {}",
+            "class Dog extends Animal implements IThing {",
+            '  readonly id: string = "rex";',
+            "}",
+            "const animal: Animal = new Dog();",
+            "const thing: IThing = new Dog();",
+          ].join("\n"),
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen).toEqual({
+      Animal: "Animal",
+      IThing: "IThing",
+    });
+  });
+
   integrationCase("does not expose corrupted mapped utility type symbols", () => {
     const seen: Record<
       string,
