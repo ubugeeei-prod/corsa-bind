@@ -588,6 +588,64 @@ describe("corsa oxlint", () => {
     }
   });
 
+  it("defaults decorated type-aware rules to the corsa executable", () => {
+    const previousExecutable = process.env.CORSA_EXECUTABLE;
+    delete process.env.CORSA_EXECUTABLE;
+    let seen: Record<string, unknown> | undefined;
+    try {
+      const packageRoot = createNativePreviewPackage();
+      const expectedExecutable = realpathSync(
+        resolve(packageRoot, "node_modules/@typescript/native-preview/bin/tsgo.js"),
+      );
+      const rule = decorateRule({
+        meta: {
+          docs: {
+            requiresTypeChecking: true,
+          },
+          messages: {
+            demo: "demo",
+          },
+          schema: [],
+        },
+        create(context: any) {
+          seen = {
+            languageExecutable: context.languageOptions?.parserOptions?.corsa?.executable,
+            parserExecutable: context.parserOptions?.corsa?.executable,
+            settingsExecutable: context.settings?.corsaOxlint?.parserOptions?.corsa?.executable,
+            projectService: context.parserOptions?.projectService,
+          };
+          return {};
+        },
+      } as any);
+
+      rule.create!({
+        cwd: packageRoot,
+        filename: resolve(packageRoot, "fixture.ts"),
+        languageOptions: {
+          parserOptions: {},
+        },
+        report() {},
+        settings: {},
+        sourceCode: {
+          text: "const fixture = 1;",
+        },
+      } as any);
+
+      expect(seen).toEqual({
+        languageExecutable: expectedExecutable,
+        parserExecutable: expectedExecutable,
+        settingsExecutable: undefined,
+        projectService: true,
+      });
+    } finally {
+      if (previousExecutable === undefined) {
+        delete process.env.CORSA_EXECUTABLE;
+      } else {
+        process.env.CORSA_EXECUTABLE = previousExecutable;
+      }
+    }
+  });
+
   const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
 
   integrationCase("runs a type-aware custom rule through oxlint RuleTester", () => {
