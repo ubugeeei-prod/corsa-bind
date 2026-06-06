@@ -921,6 +921,93 @@ describe("corsa oxlint type locations", () => {
     ]);
   });
 
+  integrationCase("resolves imported constructor parameter symbols after non-ASCII JSDoc", () => {
+    const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-constructor-params-"));
+    const depDir = resolve(workspace, "src");
+    mkdirSync(depDir, { recursive: true });
+    writeFileSync(
+      resolve(workspace, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: "esnext",
+            moduleResolution: "node",
+            target: "es2022",
+            strict: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(
+      resolve(depDir, "dep.ts"),
+      [
+        "export interface ThingProps {",
+        "  readonly name?: string;",
+        "}",
+        "export abstract class Base {",
+        "  /** doesn’t “one” – */",
+        "  constructor(scope: unknown, id: string) {}",
+        "}",
+        "export class Thing extends Base {",
+        "  /** doesn’t “one” – */",
+        "  constructor(scope: unknown, id: string, props?: ThingProps) {",
+        "    void props;",
+        "    super(scope, id);",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
+    const filename = resolve(depDir, "index.ts");
+    const sourceText = [
+      'import { Thing } from "./dep";',
+      "declare const scope: unknown;",
+      'new Thing(scope, "id");',
+    ].join("\n");
+    writeFileSync(filename, sourceText);
+    const checker = createTypeChecker({
+      cwd: workspace,
+      filename,
+      sourceCode: { text: sourceText },
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            project: "tsconfig.json",
+            corsa: {
+              executable: realCorsaBinary,
+              cwd: workspace,
+              mode: "jsonrpc",
+            },
+          },
+        },
+      },
+    } as any);
+    const calleeStart = sourceText.indexOf("Thing(");
+    const callee = {
+      fileName: filename,
+      pos: calleeStart,
+      end: calleeStart + "Thing".length,
+      range: [calleeStart, calleeStart + "Thing".length] as const,
+    };
+    const constructType = checker.getTypeAtLocation(callee);
+    const signature = constructType
+      ? checker.getSignaturesOfType(constructType, 1)[0]
+      : undefined;
+
+    expect(signature?.parameterSymbols?.map((symbol) => symbol.name)).toEqual([
+      "scope",
+      "id",
+      "props",
+    ]);
+    expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual([
+      "scope",
+      "id",
+      "props",
+    ]);
+  });
+
   integrationCase("resolves the symbol type at a location instead of the node type", () => {
     const seen: Record<string, string | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
