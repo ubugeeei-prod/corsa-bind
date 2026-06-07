@@ -1,6 +1,6 @@
 [package]
 name = "corsa_elixir"
-version = "0.40.1"
+version = "0.41.0"
 edition = "2024"
 description = "Rustler NIF for the corsa-bind Elixir binding"
 publish = false
@@ -15,10 +15,10 @@ rust-version.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-corsa_client = { version = "0.40.1", path = "../../../../../core/corsa_client" }
-corsa_core = { version = "0.40.1", path = "../../../../../core/corsa_core" }
-corsa_lsp = { version = "0.40.1", path = "../../../../../core/corsa_lsp" }
-corsa_runtime = { version = "0.40.1", path = "../../../../../core/corsa_runtime" }
+corsa_client = { version = "0.41.0", path = "../../../../../core/corsa_client" }
+corsa_core = { version = "0.41.0", path = "../../../../../core/corsa_core" }
+corsa_lsp = { version = "0.41.0", path = "../../../../../core/corsa_lsp" }
+corsa_runtime = { version = "0.41.0", path = "../../../../../core/corsa_runtime" }
 lsp-types = "0.97"
 rustler = { version = "0.37.3", features = ["nif_version_2_16"] }
 serde = { version = "1", features = ["derive"] }
