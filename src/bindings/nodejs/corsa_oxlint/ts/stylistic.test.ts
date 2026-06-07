@@ -159,4 +159,55 @@ describe("corsa stylistic rules", () => {
       "requireSpaceBefore",
     ]);
   });
+
+  it("maps native stylistic byte ranges to Oxlint UTF-16 source ranges", () => {
+    const sourceText = "// 日本語\nconst a = [\n  1\n]\n";
+    const sourceCode = {
+      text: sourceText,
+      getText() {
+        return this.text;
+      },
+    };
+    const reports: Array<{
+      node?: { range?: [number, number] };
+      suggest?: Array<{
+        fix(fixer: {
+          replaceTextRange(range: [number, number], replacementText: string): unknown;
+        }): unknown;
+      }>;
+    }> = [];
+    const context = {
+      sourceCode,
+      cwd: process.cwd(),
+      languageOptions: {},
+      settings: {
+        corsaStylistic: {
+          rules: {
+            "comma-dangle": ["always"],
+          },
+        },
+      },
+      options: [],
+      report(descriptor: (typeof reports)[number]) {
+        reports.push(descriptor);
+      },
+    };
+    const rule = corsaStylisticRules["comma-dangle"] as {
+      create(context: unknown): { Program(node: { type: string; range: [number, number] }): void };
+    };
+
+    rule.create(context).Program({ type: "Program", range: [0, sourceText.length] });
+
+    const insertAt = sourceText.indexOf("1") + 1;
+    expect(reports).toHaveLength(1);
+    const [report] = reports as [(typeof reports)[number]];
+    expect(report.node?.range).toEqual([insertAt, insertAt]);
+    expect(
+      report.suggest?.[0]?.fix({
+        replaceTextRange(range, replacementText) {
+          return { range, replacementText };
+        },
+      }),
+    ).toEqual([{ range: [insertAt, insertAt], replacementText: "," }]);
+  });
 });

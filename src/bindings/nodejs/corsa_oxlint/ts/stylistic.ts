@@ -2,8 +2,10 @@ import {
   nativeStylisticRuleMetas,
   runNativeStylisticLint,
   type NativeLintDiagnostic,
+  type NativeLintFix,
   type NativeLintRange,
   type NativeLintRuleMeta,
+  type NativeLintSuggestion,
   type NativeStylisticRuleConfig,
 } from "@corsa-bind/napi";
 
@@ -77,6 +79,15 @@ const stylisticMetasByName = new Map(stylisticMetas.map((meta) => [meta.name, me
 type CachedStylisticDiagnostics = {
   readonly sourceText: string;
   readonly diagnostics: readonly NativeLintDiagnostic[];
+};
+
+type ByteToUtf16Mapper = (offset: number) => number;
+
+type NonAsciiSpan = {
+  readonly byteStart: number;
+  readonly byteEnd: number;
+  readonly utf16Start: number;
+  readonly deltaAfter: number;
 };
 
 const diagnosticsCache = new WeakMap<object, Map<string, CachedStylisticDiagnostics>>();
@@ -202,7 +213,10 @@ function diagnosticsForRule(
     return cached.diagnostics;
   }
 
-  const diagnostics = runNativeStylisticLint(sourceText, { rules: config });
+  const diagnostics = mapNativeDiagnosticRanges(
+    runNativeStylisticLint(sourceText, { rules: config }),
+    sourceText,
+  );
   sourceCache.set(key, { sourceText, diagnostics });
   return diagnostics;
 }
@@ -267,6 +281,129 @@ function rangeNode(program: ProgramNode, range: NativeLintRange): ProgramNode {
 
 function oxlintRange(range: NativeLintRange): [number, number] {
   return [range.start, range.end];
+}
+
+function mapNativeDiagnosticRanges(
+  diagnostics: readonly NativeLintDiagnostic[],
+  sourceText: string,
+): readonly NativeLintDiagnostic[] {
+  const byteToUtf16 = createByteToUtf16Mapper(sourceText);
+  return diagnostics.map((diagnostic) => ({
+    ...diagnostic,
+    range: mapNativeRange(diagnostic.range, byteToUtf16),
+    ...(diagnostic.suggestions?.length
+      ? {
+          suggestions: diagnostic.suggestions.map((suggestion) =>
+            mapNativeSuggestion(suggestion, byteToUtf16),
+          ),
+        }
+      : {}),
+  }));
+}
+
+function mapNativeSuggestion(
+  suggestion: NativeLintSuggestion,
+  byteToUtf16: ByteToUtf16Mapper,
+): NativeLintSuggestion {
+  return {
+    ...suggestion,
+    fixes: suggestion.fixes.map((fix) => mapNativeFix(fix, byteToUtf16)),
+  };
+}
+
+function mapNativeFix(fix: NativeLintFix, byteToUtf16: ByteToUtf16Mapper): NativeLintFix {
+  return {
+    ...fix,
+    range: mapNativeRange(fix.range, byteToUtf16),
+  };
+}
+
+function mapNativeRange(range: NativeLintRange, byteToUtf16: ByteToUtf16Mapper): NativeLintRange {
+  return {
+    start: byteToUtf16(range.start),
+    end: byteToUtf16(range.end),
+  };
+}
+
+function createByteToUtf16Mapper(sourceText: string): ByteToUtf16Mapper {
+  const nonAsciiSpans: NonAsciiSpan[] = [];
+  let byteOffset = 0;
+  let utf16Offset = 0;
+
+  while (utf16Offset < sourceText.length) {
+    const codePoint = sourceText.codePointAt(utf16Offset);
+    if (codePoint === undefined) {
+      break;
+    }
+    const utf16Length = codePoint > 0xffff ? 2 : 1;
+    const byteLength = utf8ByteLength(codePoint);
+    const byteEnd = byteOffset + byteLength;
+    const utf16End = utf16Offset + utf16Length;
+    if (byteLength !== utf16Length) {
+      nonAsciiSpans.push({
+        byteStart: byteOffset,
+        byteEnd,
+        utf16Start: utf16Offset,
+        deltaAfter: byteEnd - utf16End,
+      });
+    }
+    byteOffset = byteEnd;
+    utf16Offset = utf16End;
+  }
+
+  if (nonAsciiSpans.length === 0) {
+    return (offset) => clampOffset(offset, sourceText.length);
+  }
+
+  const totalBytes = byteOffset;
+  return (offset) => {
+    const byteOffset = clampOffset(offset, totalBytes);
+    let low = 0;
+    let high = nonAsciiSpans.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (nonAsciiSpans[mid].byteEnd <= byteOffset) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+
+    const nextSpan = nonAsciiSpans[low];
+    if (nextSpan && byteOffset >= nextSpan.byteStart && byteOffset < nextSpan.byteEnd) {
+      return nextSpan.utf16Start;
+    }
+
+    const previousSpan = nonAsciiSpans[low - 1];
+    const delta = previousSpan?.deltaAfter ?? 0;
+    return clampOffset(byteOffset - delta, sourceText.length);
+  };
+}
+
+function utf8ByteLength(codePoint: number): number {
+  if (codePoint <= 0x7f) {
+    return 1;
+  }
+  if (codePoint <= 0x7ff) {
+    return 2;
+  }
+  if (codePoint <= 0xffff) {
+    return 3;
+  }
+  return 4;
+}
+
+function clampOffset(offset: number, max: number): number {
+  if (!Number.isFinite(offset)) {
+    return 0;
+  }
+  if (offset <= 0) {
+    return 0;
+  }
+  if (offset >= max) {
+    return max;
+  }
+  return Math.trunc(offset);
 }
 
 function sourceTextForContext(context: ContextWithParserOptions): string {
