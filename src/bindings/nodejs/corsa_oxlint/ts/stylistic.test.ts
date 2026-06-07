@@ -7,9 +7,11 @@ import {
   corsaStylisticRules,
   implementedStylisticRuleNames,
 } from "./stylistic";
+import defaultStylisticPlugin from "./stylistic";
 
 describe("corsa stylistic rules", () => {
   it("exports a separate stylistic plugin surface", () => {
+    expect(defaultStylisticPlugin).toBe(corsaStylisticPlugin);
     expect(Object.keys(corsaStylisticPlugin.rules ?? {}).sort()).toEqual(
       [...implementedStylisticRuleNames].sort(),
     );

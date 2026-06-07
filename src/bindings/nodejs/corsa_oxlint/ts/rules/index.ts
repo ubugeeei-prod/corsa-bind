@@ -219,3 +219,5 @@ export const corsaOxlintPlugin = definePlugin({
   meta: { name: "oxlint-plugin-corsa" },
   rules: corsaOxlintRules,
 });
+
+export default corsaOxlintPlugin;

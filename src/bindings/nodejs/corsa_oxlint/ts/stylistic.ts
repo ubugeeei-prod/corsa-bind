@@ -144,6 +144,8 @@ export const corsaStylisticPlugin = definePlugin({
   rules: corsaStylisticRules,
 });
 
+export default corsaStylisticPlugin;
+
 function createStylisticRule(ruleName: CorsaStylisticRuleName) {
   const meta = stylisticRuleMeta(ruleName);
   return defineRule({

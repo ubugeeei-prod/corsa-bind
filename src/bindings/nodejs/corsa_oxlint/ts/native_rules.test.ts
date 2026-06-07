@@ -11,6 +11,7 @@ import {
   corsaOxlintPlugin,
   corsaOxlintRules,
 } from "./rules";
+import defaultCorsaOxlintPlugin from "./rules";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const upstreamRulesDir = resolve(workspaceRoot, ".cache/tsgolint_upstream/internal/rules");
@@ -20,6 +21,7 @@ const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
 
 describe("corsa oxlint native rules", () => {
   it("exports the native plugin surface", () => {
+    expect(defaultCorsaOxlintPlugin).toBe(corsaOxlintPlugin);
     expect(Object.keys(corsaOxlintPlugin.rules ?? {}).sort()).toEqual(
       [...implementedNativeRuleNames].sort(),
     );
