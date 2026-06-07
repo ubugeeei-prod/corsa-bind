@@ -74,7 +74,12 @@ export interface CorsaStylisticSettings {
 
 const stylisticMetas = nativeStylisticRuleMetas();
 const stylisticMetasByName = new Map(stylisticMetas.map((meta) => [meta.name, meta]));
-const diagnosticsCache = new WeakMap<object, Map<string, readonly NativeLintDiagnostic[]>>();
+type CachedStylisticDiagnostics = {
+  readonly sourceText: string;
+  readonly diagnostics: readonly NativeLintDiagnostic[];
+};
+
+const diagnosticsCache = new WeakMap<object, Map<string, CachedStylisticDiagnostics>>();
 
 /**
  * Native stylistic rule names exported by `corsa-oxlint/stylistic`.
@@ -193,12 +198,12 @@ function diagnosticsForRule(
   }
 
   const cached = sourceCache.get(key);
-  if (cached) {
-    return cached;
+  if (cached?.sourceText === sourceText) {
+    return cached.diagnostics;
   }
 
   const diagnostics = runNativeStylisticLint(sourceText, { rules: config });
-  sourceCache.set(key, diagnostics);
+  sourceCache.set(key, { sourceText, diagnostics });
   return diagnostics;
 }
 

@@ -119,4 +119,44 @@ describe("corsa stylistic rules", () => {
       ],
     });
   });
+
+  it("does not reuse native diagnostics across files sharing a sourceCode object", () => {
+    const sourceCode = {
+      text: "const source = { foo: 1 };\n",
+      getText() {
+        return this.text;
+      },
+    };
+    const reports: Array<{ messageId?: string }> = [];
+    const context = {
+      sourceCode,
+      cwd: process.cwd(),
+      languageOptions: {},
+      settings: {
+        corsaStylistic: {
+          rules: {
+            "object-curly-spacing": ["always"],
+          },
+        },
+      },
+      options: [],
+      report(descriptor: { messageId?: string }) {
+        reports.push(descriptor);
+      },
+    };
+    const rule = corsaStylisticRules["object-curly-spacing"] as {
+      create(context: unknown): { Program(node: { type: string; range: [number, number] }): void };
+    };
+
+    rule.create(context).Program({ type: "Program", range: [0, sourceCode.text.length] });
+    expect(reports).toEqual([]);
+
+    sourceCode.text = "const {foo} = source;\n";
+    rule.create(context).Program({ type: "Program", range: [0, sourceCode.text.length] });
+
+    expect(reports.map((report) => report.messageId)).toEqual([
+      "requireSpaceAfter",
+      "requireSpaceBefore",
+    ]);
+  });
 });
