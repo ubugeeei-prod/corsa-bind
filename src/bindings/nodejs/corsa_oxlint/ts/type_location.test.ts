@@ -992,9 +992,7 @@ describe("corsa oxlint type locations", () => {
       range: [calleeStart, calleeStart + "Thing".length] as const,
     };
     const constructType = checker.getTypeAtLocation(callee);
-    const signature = constructType
-      ? checker.getSignaturesOfType(constructType, 1)[0]
-      : undefined;
+    const signature = constructType ? checker.getSignaturesOfType(constructType, 1)[0] : undefined;
 
     expect(signature?.parameterSymbols?.map((symbol) => symbol.name)).toEqual([
       "scope",
