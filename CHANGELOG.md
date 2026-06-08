@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- `corsa-oxlint` now exposes per-node-type `ESTree.*` aliases from the root entrypoint.
+
+### Fixed
+
+- `corsa-oxlint` now reports a dependency-focused error when no default Corsa runtime executable can be found.
+- constructor signature parameter symbol fallback now preserves non-ASCII parameter names.
+- imported inherited constructor signatures with non-ASCII JSDoc retain resolvable parameter symbols.
+
 ## 0.7.1 - 2026-05-16
 
 ### Added

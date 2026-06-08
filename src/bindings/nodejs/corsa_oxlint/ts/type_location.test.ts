@@ -10,10 +10,18 @@ import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = defaultCorsaExecutable(workspaceRoot);
+const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+
+function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
+  try {
+    return defaultCorsaExecutable(rootDir);
+  } catch {
+    return undefined;
+  }
+}
 
 describe("corsa oxlint type locations", () => {
   integrationCase("resolves types from declaration wrapper nodes", () => {
@@ -1003,6 +1011,150 @@ describe("corsa oxlint type locations", () => {
       "scope",
       "id",
       "props",
+    ]);
+  });
+
+  integrationCase(
+    "resolves imported inherited constructor parameter symbols with non-ASCII JSDoc",
+    () => {
+      const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-inherited-constructor-"));
+      const depDir = resolve(workspace, "src");
+      mkdirSync(depDir, { recursive: true });
+      writeFileSync(
+        resolve(workspace, "tsconfig.json"),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              module: "esnext",
+              moduleResolution: "node",
+              target: "es2022",
+              strict: true,
+            },
+            include: ["src/**/*.ts"],
+          },
+          null,
+          2,
+        ),
+      );
+      writeFileSync(
+        resolve(depDir, "dep.ts"),
+        [
+          "abstract class Base {",
+          "  /** doesn't 'one' \"two\" – */",
+          "  constructor() {}",
+          "}",
+          "export class Leaf extends Base {",
+          "  /** doesn't 'one' \"two\" – */",
+          "  constructor(public id: string) {",
+          "    super();",
+          "  }",
+          "}",
+        ].join("\n"),
+      );
+      const filename = resolve(depDir, "index.ts");
+      const sourceText = ['import { Leaf } from "./dep";', 'new Leaf("x");'].join("\n");
+      writeFileSync(filename, sourceText);
+      const checker = createTypeChecker({
+        cwd: workspace,
+        filename,
+        sourceCode: { text: sourceText },
+        settings: {
+          corsaOxlint: {
+            parserOptions: {
+              project: "tsconfig.json",
+              corsa: {
+                executable: realCorsaBinary,
+                cwd: workspace,
+                mode: "jsonrpc",
+              },
+            },
+          },
+        },
+      } as any);
+      const calleeStart = sourceText.indexOf("Leaf(");
+      const callee = {
+        fileName: filename,
+        pos: calleeStart,
+        end: calleeStart + "Leaf".length,
+        range: [calleeStart, calleeStart + "Leaf".length] as const,
+      };
+      const constructType = checker.getTypeAtLocation(callee);
+      const signature = constructType
+        ? checker.getSignaturesOfType(constructType, 1)[0]
+        : undefined;
+
+      expect(signature?.parameterSymbols?.map((symbol) => symbol.name)).toEqual(["id"]);
+      expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual(["id"]);
+    },
+  );
+
+  integrationCase("resolves non-ASCII constructor parameter symbols", () => {
+    const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-non-ascii-params-"));
+    const srcDir = resolve(workspace, "src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(
+      resolve(workspace, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: "esnext",
+            target: "es2022",
+            strict: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      ),
+    );
+    const filename = resolve(srcDir, "fixture.ts");
+    const sourceText = [
+      "class C {",
+      "  constructor(",
+      "    public name: string,",
+      "    public 識別子: number,",
+      "    public other: boolean,",
+      "  ) {}",
+      "}",
+      'new C("a", 1, true);',
+    ].join("\n");
+    writeFileSync(filename, sourceText);
+    const checker = createTypeChecker({
+      cwd: workspace,
+      filename,
+      sourceCode: { text: sourceText },
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            project: "tsconfig.json",
+            corsa: {
+              executable: realCorsaBinary,
+              cwd: workspace,
+              mode: "jsonrpc",
+            },
+          },
+        },
+      },
+    } as any);
+    const calleeStart = sourceText.indexOf("C(", sourceText.indexOf("new C"));
+    const callee = {
+      fileName: filename,
+      pos: calleeStart,
+      end: calleeStart + "C".length,
+      range: [calleeStart, calleeStart + "C".length] as const,
+    };
+    const constructType = checker.getTypeAtLocation(callee);
+    const signature = constructType ? checker.getSignaturesOfType(constructType, 1)[0] : undefined;
+
+    expect(signature?.parameterSymbols?.map((symbol) => symbol.name)).toEqual([
+      "name",
+      "識別子",
+      "other",
+    ]);
+    expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual([
+      "name",
+      "識別子",
+      "other",
     ]);
   });
 

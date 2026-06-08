@@ -155,11 +155,23 @@ function applyRuleTesterRuntimeDefaults(
     return parserOptions;
   }
   const rootDir = resolve(test.cwd ?? config?.cwd ?? process.cwd());
+  const executable = process.env.CORSA_EXECUTABLE ?? optionalDefaultCorsaExecutable(rootDir);
+  if (!executable) {
+    return parserOptions;
+  }
   return mergeTypeAwareParserOptions(parserOptions, {
     corsa: {
-      executable: process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir),
+      executable,
     },
   });
+}
+
+function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
+  try {
+    return defaultCorsaExecutable(rootDir);
+  } catch {
+    return undefined;
+  }
 }
 
 function writeFixture(filename: string, code: string): void {

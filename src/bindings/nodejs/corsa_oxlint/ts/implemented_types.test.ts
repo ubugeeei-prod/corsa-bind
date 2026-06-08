@@ -10,8 +10,16 @@ import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = defaultCorsaExecutable(workspaceRoot);
+const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+
+function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
+  try {
+    return defaultCorsaExecutable(rootDir);
+  } catch {
+    return undefined;
+  }
+}
 
 describe("corsa oxlint implemented types", () => {
   integrationCase("exposes class implements clause types", () => {

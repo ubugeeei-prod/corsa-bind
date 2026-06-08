@@ -22,9 +22,19 @@ const DEFAULT_TS_CONFIG = {
 };
 
 export function defaultCorsaExecutable(rootDir: string, platform = process.platform): string {
-  return (
-    resolveNativePreviewExecutable(rootDir) ??
-    resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa")
+  const nativePreview = resolveNativePreviewExecutable(rootDir);
+  if (nativePreview) {
+    return nativePreview;
+  }
+  const fallback = resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa");
+  if (existsSync(fallback)) {
+    return fallback;
+  }
+  throw new Error(
+    [
+      "corsa-oxlint could not locate a Corsa runtime executable.",
+      "Install `@typescript/native-preview`, set `CORSA_EXECUTABLE`, or configure `parserOptions.corsa.executable`.",
+    ].join(" "),
   );
 }
 

@@ -42,7 +42,10 @@ describe("api surface", () => {
   });
 
   it("re-exports ESTree types from the root entry", () => {
+    expectTypeOf<RootESTree.Identifier>().toMatchTypeOf<{ type: "Identifier" }>();
+    expectTypeOf<RootESTree.MemberExpression>().toMatchTypeOf<{ type: "MemberExpression" }>();
     expectTypeOf<RootESTree["NewExpression"]>().toMatchTypeOf<{ type: "NewExpression" }>();
+    expectTypeOf<RootESTree["Identifier"]>().toMatchTypeOf<RootESTree.Identifier>();
     expectTypeOf<RootESTree["BindingIdentifier"]["typeAnnotation"]>().toEqualTypeOf<
       RootESTree["TSTypeAnnotation"] | null | undefined
     >();
