@@ -1,8 +1,12 @@
 import * as oxlintPluginApi from "@oxlint/plugins";
 import type {
   Context as OxlintContext,
+  Diagnostic,
   Plugin as OxlintPlugin,
   Rule as OxlintRule,
+  RuleMeta,
+  Visitor,
+  VisitorWithHooks,
 } from "@oxlint/plugins";
 
 import { resolveTypeAwareParserOptions } from "./context";
@@ -13,6 +17,35 @@ export type Plugin = Omit<OxlintPlugin, "rules"> & {
   readonly rules: Record<string, Rule>;
 } & Record<string, unknown>;
 export type Rule = OxlintRule & Record<string, unknown>;
+export type RuleDiagnostic<MessageId extends string = string> = Diagnostic & {
+  readonly messageId?: MessageId | null | undefined;
+};
+export type RuleContext<
+  MessageId extends string = string,
+  Options extends readonly unknown[] = readonly unknown[],
+> = Omit<ContextWithParserOptions, "options" | "report"> & {
+  readonly options: Readonly<Options>;
+  report(this: void, diagnostic: RuleDiagnostic<MessageId>): void;
+};
+export type RuleMetaWithMessages<MessageId extends string = string> = RuleMeta & {
+  readonly messages?: Record<MessageId, string>;
+};
+export type RuleDefinition<
+  MessageId extends string = string,
+  Options extends readonly unknown[] = readonly unknown[],
+> = Record<string, unknown> & {
+  readonly defaultOptions?: Options;
+  readonly meta?: RuleMetaWithMessages<MessageId>;
+} & (
+    | {
+        readonly create: (context: RuleContext<MessageId, Options>) => Visitor;
+        readonly createOnce?: never;
+      }
+    | {
+        readonly create?: (context: RuleContext<MessageId, Options>) => Visitor;
+        readonly createOnce: (context: RuleContext<MessageId, Options>) => VisitorWithHooks;
+      }
+  );
 
 const defineOxlintPlugin = oxlintPluginApi.definePlugin;
 const defineOxlintRule = oxlintPluginApi.defineRule;
@@ -42,6 +75,10 @@ export function definePlugin(plugin: Plugin): Plugin {
  * });
  * ```
  */
+export function defineRule<
+  MessageId extends string = string,
+  const Options extends readonly unknown[] = readonly unknown[],
+>(rule: RuleDefinition<MessageId, Options>): Rule;
 export function defineRule(rule: Rule): Rule {
   return defineOxlintRule(decorateRule(rule) as OxlintRule) as Rule;
 }

@@ -4,6 +4,7 @@
 
 ### Added
 
+- `corsa-oxlint` now exposes a `RuleContext<MessageId, Options>` type and generic `defineRule` wrapper for narrowing rule options and report message IDs.
 - `corsa-oxlint` now exposes per-node-type `ESTree.*` aliases from the root entrypoint.
 
 ### Fixed
