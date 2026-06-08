@@ -182,6 +182,7 @@ dependencies = [
  "napi-derive",
  "serde",
  "serde_json",
+ "unicode-ident",
 ]
 
 [[package]]

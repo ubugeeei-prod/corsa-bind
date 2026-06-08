@@ -1,4 +1,12 @@
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  mkdtempSync,
+  mkdirSync,
+  openSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -85,9 +93,26 @@ describe("context", () => {
     expect(resolved.runtime.executable).toBe(resolve(workspace, ".cache/corsa"));
   });
 
-  it("resolves the platform-specific default corsa executable", () => {
-    expect(defaultCorsaExecutable("/repo", "linux")).toBe(resolve("/repo", ".cache/corsa"));
-    expect(defaultCorsaExecutable("/repo", "win32")).toBe(resolve("/repo", ".cache/corsa.exe"));
+  it("resolves the platform-specific default corsa executable when it exists", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    mkdirSync(resolve(workspace, ".cache"), { recursive: true });
+    const linuxBin = resolve(workspace, ".cache/corsa");
+    const windowsBin = resolve(workspace, ".cache/corsa.exe");
+    closeSync(openSync(linuxBin, "w"));
+    closeSync(openSync(windowsBin, "w"));
+
+    expect(defaultCorsaExecutable(workspace, "linux")).toBe(linuxBin);
+    expect(defaultCorsaExecutable(workspace, "win32")).toBe(windowsBin);
+  });
+
+  it("throws a dependency-focused error when no default executable exists", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+
+    expect(() => defaultCorsaExecutable(workspace, "linux")).toThrow(
+      "Install `@typescript/native-preview`",
+    );
   });
 
   it("prefers the installed native-preview tsgo binary when available", () => {

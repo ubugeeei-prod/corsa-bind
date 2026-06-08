@@ -1904,11 +1904,13 @@ fn is_modifier(word: &str) -> bool {
 }
 
 fn is_identifier_start(ch: char) -> bool {
-    ch == '_' || ch == '$' || ch.is_ascii_alphabetic()
+    ch == '_' || ch == '$' || unicode_ident::is_xid_start(ch)
 }
 
 fn is_identifier_part(ch: char) -> bool {
-    is_identifier_start(ch) || ch.is_ascii_digit()
+    is_identifier_start(ch)
+        || unicode_ident::is_xid_continue(ch)
+        || matches!(ch, '\u{200c}' | '\u{200d}')
 }
 
 fn identifier_part_before(text: &str, index: usize) -> bool {
@@ -2693,6 +2695,30 @@ mod tests {
                 .map(|(name, _, _)| name)
                 .collect::<Vec<_>>(),
             vec!["scope", "id", "props"]
+        );
+    }
+
+    #[test]
+    fn resolves_non_ascii_parameter_names_from_declaration_ranges() {
+        let declaration =
+            "constructor(public name: string, public 識別子: number, public other: boolean) {}";
+        let source_text = format!("class C {{\n  {declaration}\n}}");
+        let declaration_start = source_text.find(declaration).unwrap();
+        let declaration_end = declaration_start + declaration.len();
+
+        let parameters = parameter_ranges_for_signature_declaration(
+            &source_text,
+            declaration_start as u32,
+            declaration_end as u32,
+            3,
+        );
+
+        assert_eq!(
+            parameters
+                .into_iter()
+                .map(|(name, _, _)| name)
+                .collect::<Vec<_>>(),
+            vec!["name", "識別子", "other"]
         );
     }
 }

@@ -11,8 +11,16 @@ import { decorateRule, definePlugin } from "./plugin";
 import { RuleTester } from "./rule_tester";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = defaultCorsaExecutable(workspaceRoot);
+const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
 const cleanupDirs = new Set<string>();
+
+function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
+  try {
+    return defaultCorsaExecutable(rootDir);
+  } catch {
+    return undefined;
+  }
+}
 
 afterEach(() => {
   for (const dir of cleanupDirs) {
@@ -113,6 +121,8 @@ describe("corsa oxlint", () => {
   });
 
   it("defaults projectService for type-aware rules", () => {
+    const previousExecutable = process.env.CORSA_EXECUTABLE;
+    process.env.CORSA_EXECUTABLE = resolve(workspaceRoot, "target/test-corsa");
     let seen: Record<string, unknown> | undefined;
     const rule = decorateRule({
       meta: {
@@ -133,23 +143,31 @@ describe("corsa oxlint", () => {
       },
     } as any);
 
-    rule.create!({
-      cwd: workspaceRoot,
-      filename: resolve(workspaceRoot, "fixture.ts"),
-      languageOptions: {
-        parserOptions: {},
-      },
-      report() {},
-      settings: {},
-      sourceCode: {
-        text: "const fixture = 1;",
-      },
-    } as any);
+    try {
+      rule.create!({
+        cwd: workspaceRoot,
+        filename: resolve(workspaceRoot, "fixture.ts"),
+        languageOptions: {
+          parserOptions: {},
+        },
+        report() {},
+        settings: {},
+        sourceCode: {
+          text: "const fixture = 1;",
+        },
+      } as any);
 
-    expect(seen).toEqual({
-      parserProjectService: true,
-      languageProjectService: true,
-    });
+      expect(seen).toEqual({
+        parserProjectService: true,
+        languageProjectService: true,
+      });
+    } finally {
+      if (previousExecutable == null) {
+        delete process.env.CORSA_EXECUTABLE;
+      } else {
+        process.env.CORSA_EXECUTABLE = previousExecutable;
+      }
+    }
   });
 
   it("reuses existing parserServices when ESLint already provides type information", () => {
