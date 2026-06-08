@@ -10,7 +10,14 @@ export * as Utils from "./utils";
 
 export { ESLintUtils, OxlintUtils, RuleCreator } from "./oxlint_utils";
 export { compatPlugin, definePlugin, defineRule } from "./plugin";
-export type { Plugin, Rule } from "./plugin";
+export type {
+  Plugin,
+  Rule,
+  RuleContext,
+  RuleDefinition,
+  RuleDiagnostic,
+  RuleMetaWithMessages,
+} from "./plugin";
 export { getParserServices } from "./parser_services";
 export { RuleTester } from "./rule_tester";
 export { SignatureKind } from "./types";
