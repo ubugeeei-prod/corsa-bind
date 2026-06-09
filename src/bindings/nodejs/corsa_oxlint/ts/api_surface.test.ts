@@ -42,10 +42,64 @@ describe("api surface", () => {
   });
 
   it("re-exports ESTree types from the root entry", () => {
+    expectTypeOf<RootESTree.Identifier>().toMatchTypeOf<{ type: "Identifier" }>();
+    expectTypeOf<RootESTree.MemberExpression>().toMatchTypeOf<{ type: "MemberExpression" }>();
     expectTypeOf<RootESTree["NewExpression"]>().toMatchTypeOf<{ type: "NewExpression" }>();
+    expectTypeOf<RootESTree["Identifier"]>().toMatchTypeOf<RootESTree.Identifier>();
     expectTypeOf<RootESTree["BindingIdentifier"]["typeAnnotation"]>().toEqualTypeOf<
       RootESTree["TSTypeAnnotation"] | null | undefined
     >();
+  });
+
+  it("narrows defineRule context by message ids and options", () => {
+    type Options = readonly [{ readonly ignore?: readonly string[] }?];
+    const node = { range: [0, 1] } as any;
+
+    const typedRule = main.defineRule<"unused" | "duplicate", Options>({
+      meta: {
+        type: "problem",
+        messages: {
+          duplicate: "'{{ name }}' is declared twice.",
+          unused: "'{{ name }}' is declared but never used.",
+        },
+        schema: [],
+      },
+      create(context) {
+        expectTypeOf(context).toMatchTypeOf<main.RuleContext<"unused" | "duplicate", Options>>();
+        expectTypeOf(context.options[0]).toEqualTypeOf<
+          { readonly ignore?: readonly string[] } | undefined
+        >();
+
+        context.report({ node, message: "custom message" });
+        context.report({ node, messageId: "unused" });
+        // @ts-expect-error unknown message ids are rejected.
+        context.report({ node, messageId: "typo" });
+
+        return {};
+      },
+    });
+
+    const inferredRule = main.defineRule({
+      defaultOptions: [{ ignore: [] as string[] }],
+      meta: {
+        type: "problem",
+        messages: {
+          unused: "'{{ name }}' is declared but never used.",
+        },
+        schema: [],
+      },
+      create(context) {
+        expectTypeOf(context.options[0].ignore).toEqualTypeOf<string[]>();
+        context.report({ node, messageId: "unused" });
+        // @ts-expect-error inferred message ids are rejected when not declared in meta.messages.
+        context.report({ node, messageId: "typo" });
+
+        return {};
+      },
+    });
+
+    expect(typedRule).toBeDefined();
+    expect(inferredRule).toBeDefined();
   });
 
   it(

@@ -7,9 +7,11 @@ import {
   corsaStylisticRules,
   implementedStylisticRuleNames,
 } from "./stylistic";
+import defaultStylisticPlugin from "./stylistic";
 
 describe("corsa stylistic rules", () => {
   it("exports a separate stylistic plugin surface", () => {
+    expect(defaultStylisticPlugin).toBe(corsaStylisticPlugin);
     expect(Object.keys(corsaStylisticPlugin.rules ?? {}).sort()).toEqual(
       [...implementedStylisticRuleNames].sort(),
     );
@@ -116,5 +118,96 @@ describe("corsa stylistic rules", () => {
         },
       ],
     });
+  });
+
+  it("does not reuse native diagnostics across files sharing a sourceCode object", () => {
+    const sourceCode = {
+      text: "const source = { foo: 1 };\n",
+      getText() {
+        return this.text;
+      },
+    };
+    const reports: Array<{ messageId?: string }> = [];
+    const context = {
+      sourceCode,
+      cwd: process.cwd(),
+      languageOptions: {},
+      settings: {
+        corsaStylistic: {
+          rules: {
+            "object-curly-spacing": ["always"],
+          },
+        },
+      },
+      options: [],
+      report(descriptor: { messageId?: string }) {
+        reports.push(descriptor);
+      },
+    };
+    const rule = corsaStylisticRules["object-curly-spacing"] as {
+      create(context: unknown): { Program(node: { type: string; range: [number, number] }): void };
+    };
+
+    rule.create(context).Program({ type: "Program", range: [0, sourceCode.text.length] });
+    expect(reports).toEqual([]);
+
+    sourceCode.text = "const {foo} = source;\n";
+    rule.create(context).Program({ type: "Program", range: [0, sourceCode.text.length] });
+
+    expect(reports.map((report) => report.messageId)).toEqual([
+      "requireSpaceAfter",
+      "requireSpaceBefore",
+    ]);
+  });
+
+  it("maps native stylistic byte ranges to Oxlint UTF-16 source ranges", () => {
+    const sourceText = "// 日本語\nconst a = [\n  1\n]\n";
+    const sourceCode = {
+      text: sourceText,
+      getText() {
+        return this.text;
+      },
+    };
+    const reports: Array<{
+      node?: { range?: [number, number] };
+      suggest?: Array<{
+        fix(fixer: {
+          replaceTextRange(range: [number, number], replacementText: string): unknown;
+        }): unknown;
+      }>;
+    }> = [];
+    const context = {
+      sourceCode,
+      cwd: process.cwd(),
+      languageOptions: {},
+      settings: {
+        corsaStylistic: {
+          rules: {
+            "comma-dangle": ["always"],
+          },
+        },
+      },
+      options: [],
+      report(descriptor: (typeof reports)[number]) {
+        reports.push(descriptor);
+      },
+    };
+    const rule = corsaStylisticRules["comma-dangle"] as {
+      create(context: unknown): { Program(node: { type: string; range: [number, number] }): void };
+    };
+
+    rule.create(context).Program({ type: "Program", range: [0, sourceText.length] });
+
+    const insertAt = sourceText.indexOf("1") + 1;
+    expect(reports).toHaveLength(1);
+    const [report] = reports as [(typeof reports)[number]];
+    expect(report.node?.range).toEqual([insertAt, insertAt]);
+    expect(
+      report.suggest?.[0]?.fix({
+        replaceTextRange(range, replacementText) {
+          return { range, replacementText };
+        },
+      }),
+    ).toEqual([{ range: [insertAt, insertAt], replacementText: "," }]);
   });
 });

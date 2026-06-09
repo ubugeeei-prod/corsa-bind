@@ -1904,11 +1904,13 @@ fn is_modifier(word: &str) -> bool {
 }
 
 fn is_identifier_start(ch: char) -> bool {
-    ch == '_' || ch == '$' || ch.is_ascii_alphabetic()
+    ch == '_' || ch == '$' || unicode_ident::is_xid_start(ch)
 }
 
 fn is_identifier_part(ch: char) -> bool {
-    is_identifier_start(ch) || ch.is_ascii_digit()
+    is_identifier_start(ch)
+        || unicode_ident::is_xid_continue(ch)
+        || matches!(ch, '\u{200c}' | '\u{200d}')
 }
 
 fn identifier_part_before(text: &str, index: usize) -> bool {
@@ -2025,20 +2027,12 @@ async fn parameter_symbols_for_signature(
         source_override,
     )
     .await?;
-    let Some((start, end)) = utf16_byte_range(&source_text, parsed.pos, parsed.end) else {
-        return Ok(Vec::new());
-    };
-    let Some(declaration_text) = source_text.get(start..end) else {
-        return Ok(Vec::new());
-    };
-    let parameters = parameter_ranges_in_signature_declaration(declaration_text, start)
-        .into_iter()
-        .filter_map(|parameter| {
-            let pos = utf16_index_from_byte(&source_text, parameter.start)?;
-            let end = utf16_index_from_byte(&source_text, parameter.end)?;
-            Some((parameter.name, pos, end))
-        })
-        .collect::<Vec<_>>();
+    let parameters = parameter_ranges_for_signature_declaration(
+        &source_text,
+        parsed.pos,
+        parsed.end,
+        signature.parameters.len(),
+    );
     if parameters.is_empty() {
         return Ok(Vec::new());
     }
@@ -2083,14 +2077,11 @@ async fn type_parameter_default_texts_for_signature(
         source_override,
     )
     .await?;
-    let Some((start, end)) = utf16_byte_range(&source_text, parsed.pos, parsed.end) else {
-        return Ok(Vec::new());
-    };
-    let Some(declaration_text) = source_text.get(start..end) else {
-        return Ok(Vec::new());
-    };
-    Ok(type_parameter_default_texts_in_signature_declaration(
-        declaration_text,
+    Ok(type_parameter_default_texts_for_declaration_range(
+        &source_text,
+        parsed.pos,
+        parsed.end,
+        signature.type_parameters.len(),
     ))
 }
 
@@ -2179,6 +2170,90 @@ fn parameter_ranges_in_signature_declaration(
             })
         })
         .collect()
+}
+
+fn parameter_ranges_for_signature_declaration(
+    source_text: &str,
+    declaration_pos: u32,
+    declaration_end: u32,
+    expected_count: usize,
+) -> Vec<(String, u32, u32)> {
+    let mut fallback = Vec::new();
+    for (start, end) in
+        signature_declaration_byte_ranges(source_text, declaration_pos, declaration_end)
+    {
+        let Some(declaration_text) = source_text.get(start..end) else {
+            continue;
+        };
+        let parameters = parameter_ranges_in_signature_declaration(declaration_text, start)
+            .into_iter()
+            .filter_map(|parameter| {
+                let pos = utf16_index_from_byte(source_text, parameter.start)?;
+                let end = utf16_index_from_byte(source_text, parameter.end)?;
+                Some((parameter.name, pos, end))
+            })
+            .collect::<Vec<_>>();
+        if parameters.len() == expected_count {
+            return parameters;
+        }
+        if fallback.is_empty() && !parameters.is_empty() {
+            fallback = parameters;
+        }
+    }
+    fallback
+}
+
+fn type_parameter_default_texts_for_declaration_range(
+    source_text: &str,
+    declaration_pos: u32,
+    declaration_end: u32,
+    expected_count: usize,
+) -> Vec<String> {
+    let mut fallback = Vec::new();
+    for (start, end) in
+        signature_declaration_byte_ranges(source_text, declaration_pos, declaration_end)
+    {
+        let Some(declaration_text) = source_text.get(start..end) else {
+            continue;
+        };
+        let defaults = type_parameter_default_texts_in_signature_declaration(declaration_text);
+        if defaults.len() == expected_count {
+            return defaults;
+        }
+        if fallback.is_empty() && !defaults.is_empty() {
+            fallback = defaults;
+        }
+    }
+    fallback
+}
+
+fn signature_declaration_byte_ranges(
+    source_text: &str,
+    declaration_pos: u32,
+    declaration_end: u32,
+) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    if let Some(range) = utf16_byte_range(source_text, declaration_pos, declaration_end) {
+        ranges.push(range);
+    }
+    if let Some(range) = raw_byte_range(source_text, declaration_pos, declaration_end)
+        && !ranges.contains(&range)
+    {
+        ranges.push(range);
+    }
+    ranges
+}
+
+fn raw_byte_range(text: &str, start: u32, end: u32) -> Option<(usize, usize)> {
+    if start > end {
+        return None;
+    }
+    let start = usize::try_from(start).ok()?;
+    let end = usize::try_from(end).ok()?;
+    if end > text.len() || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+        return None;
+    }
+    Some((start, end))
 }
 
 fn parameter_name(text: &str) -> Option<String> {
@@ -2562,4 +2637,88 @@ fn call_json_blocking(client: &ApiClient, method: &str, params: Option<Value>) -
     let response = block_on(client.raw_json_request(method, optional_value(params)))
         .map_err(into_napi_error)?;
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        parameter_ranges_for_signature_declaration, raw_byte_range,
+        signature_declaration_byte_ranges,
+    };
+
+    #[test]
+    fn falls_back_to_raw_byte_ranges_for_non_ascii_signature_handles() {
+        let declaration = "constructor(scope: unknown, id: string, props?: ThingProps) {}";
+        let source_text =
+            format!("export class Thing {{\n  /** doesn’t “one” – */\n  {declaration}\n}}");
+        let declaration_start = source_text.find(declaration).unwrap();
+        let declaration_end = declaration_start + declaration.len();
+
+        let ranges = signature_declaration_byte_ranges(
+            &source_text,
+            declaration_start as u32,
+            declaration_end as u32,
+        );
+
+        assert_eq!(
+            ranges.last().copied(),
+            Some((declaration_start, declaration_end))
+        );
+        assert_eq!(
+            raw_byte_range(
+                &source_text,
+                declaration_start as u32,
+                declaration_end as u32
+            ),
+            Some((declaration_start, declaration_end))
+        );
+    }
+
+    #[test]
+    fn resolves_parameter_names_from_raw_byte_declaration_ranges() {
+        let declaration = "constructor(scope: unknown, id: string, props?: ThingProps) {}";
+        let source_text =
+            format!("export class Thing {{\n  /** doesn’t “one” – */\n  {declaration}\n}}");
+        let declaration_start = source_text.find(declaration).unwrap();
+        let declaration_end = declaration_start + declaration.len();
+
+        let parameters = parameter_ranges_for_signature_declaration(
+            &source_text,
+            declaration_start as u32,
+            declaration_end as u32,
+            3,
+        );
+
+        assert_eq!(
+            parameters
+                .into_iter()
+                .map(|(name, _, _)| name)
+                .collect::<Vec<_>>(),
+            vec!["scope", "id", "props"]
+        );
+    }
+
+    #[test]
+    fn resolves_non_ascii_parameter_names_from_declaration_ranges() {
+        let declaration =
+            "constructor(public name: string, public 識別子: number, public other: boolean) {}";
+        let source_text = format!("class C {{\n  {declaration}\n}}");
+        let declaration_start = source_text.find(declaration).unwrap();
+        let declaration_end = declaration_start + declaration.len();
+
+        let parameters = parameter_ranges_for_signature_declaration(
+            &source_text,
+            declaration_start as u32,
+            declaration_end as u32,
+            3,
+        );
+
+        assert_eq!(
+            parameters
+                .into_iter()
+                .map(|(name, _, _)| name)
+                .collect::<Vec<_>>(),
+            vec!["name", "識別子", "other"]
+        );
+    }
 }

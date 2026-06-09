@@ -22,9 +22,19 @@ const DEFAULT_TS_CONFIG = {
 };
 
 export function defaultCorsaExecutable(rootDir: string, platform = process.platform): string {
-  return (
-    resolveNativePreviewExecutable(rootDir) ??
-    resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa")
+  const nativePreview = resolveNativePreviewExecutable(rootDir);
+  if (nativePreview) {
+    return nativePreview;
+  }
+  const fallback = resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa");
+  if (existsSync(fallback)) {
+    return fallback;
+  }
+  throw new Error(
+    [
+      "corsa-oxlint could not locate a Corsa runtime executable.",
+      "Install `@typescript/native-preview`, set `CORSA_EXECUTABLE`, or configure `parserOptions.corsa.executable`.",
+    ].join(" "),
   );
 }
 
@@ -59,14 +69,20 @@ export function resolveProjectConfig(context: ContextWithParserOptions): Resolve
  */
 export function resolveTypeAwareParserOptions(
   context: ContextWithParserOptions,
-  defaults: { readonly projectService?: boolean } = {},
+  defaults: TypeAwareParserOptionDefaults = {},
 ): TypeAwareParserOptions {
   const parserOptions = mergeTypeAwareParserOptions(
     resolveSettingsParserOptions(context.settings?.corsaOxlint),
     mergeTypeAwareParserOptions(context.parserOptions, context.languageOptions?.parserOptions),
   );
-  return applyTypeAwareParserOptionDefaults(parserOptions, defaults);
+  const rootDir = resolve(parserOptions.tsconfigRootDir ?? context.cwd);
+  return applyTypeAwareParserOptionDefaults(parserOptions, defaults, rootDir);
 }
+
+type TypeAwareParserOptionDefaults = {
+  readonly corsa?: boolean;
+  readonly projectService?: boolean;
+};
 
 function resolveRuntimeOptions(
   rootDir: string,
@@ -214,19 +230,28 @@ function resolveSettingsParserOptions(
 
 function applyTypeAwareParserOptionDefaults(
   parserOptions: TypeAwareParserOptions,
-  defaults: { readonly projectService?: boolean },
+  defaults: TypeAwareParserOptionDefaults,
+  rootDir: string,
 ): TypeAwareParserOptions {
+  let resolved = parserOptions;
   if (
-    defaults.projectService !== true ||
-    parserOptions.projectService !== undefined ||
-    parserOptions.project !== undefined
+    defaults.projectService === true &&
+    parserOptions.projectService === undefined &&
+    parserOptions.project === undefined
   ) {
-    return parserOptions;
+    resolved = {
+      ...resolved,
+      projectService: true,
+    };
   }
-  return {
-    ...parserOptions,
-    projectService: true,
-  };
+  if (defaults.corsa === true && resolved.corsa?.executable === undefined) {
+    resolved = mergeTypeAwareParserOptions(resolved, {
+      corsa: {
+        executable: process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir),
+      },
+    });
+  }
+  return resolved;
 }
 
 export function mergeTypeAwareParserOptions(

@@ -11,15 +11,25 @@ import {
   corsaOxlintPlugin,
   corsaOxlintRules,
 } from "./rules";
+import defaultCorsaOxlintPlugin from "./rules";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const upstreamRulesDir = resolve(workspaceRoot, ".cache/tsgolint_upstream/internal/rules");
-const realCorsaBinary = defaultCorsaExecutable(workspaceRoot);
+const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
 const upstreamCase = existsSync(upstreamRulesDir) ? it : it.skip;
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
 
+function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
+  try {
+    return defaultCorsaExecutable(rootDir);
+  } catch {
+    return undefined;
+  }
+}
+
 describe("corsa oxlint native rules", () => {
   it("exports the native plugin surface", () => {
+    expect(defaultCorsaOxlintPlugin).toBe(corsaOxlintPlugin);
     expect(Object.keys(corsaOxlintPlugin.rules ?? {}).sort()).toEqual(
       [...implementedNativeRuleNames].sort(),
     );

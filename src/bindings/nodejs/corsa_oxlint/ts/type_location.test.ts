@@ -10,10 +10,18 @@ import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = defaultCorsaExecutable(workspaceRoot);
+const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+
+function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
+  try {
+    return defaultCorsaExecutable(rootDir);
+  } catch {
+    return undefined;
+  }
+}
 
 describe("corsa oxlint type locations", () => {
   integrationCase("resolves types from declaration wrapper nodes", () => {
@@ -921,6 +929,235 @@ describe("corsa oxlint type locations", () => {
     ]);
   });
 
+  integrationCase("resolves imported constructor parameter symbols after non-ASCII JSDoc", () => {
+    const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-constructor-params-"));
+    const depDir = resolve(workspace, "src");
+    mkdirSync(depDir, { recursive: true });
+    writeFileSync(
+      resolve(workspace, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: "esnext",
+            moduleResolution: "node",
+            target: "es2022",
+            strict: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(
+      resolve(depDir, "dep.ts"),
+      [
+        "export interface ThingProps {",
+        "  readonly name?: string;",
+        "}",
+        "export abstract class Base {",
+        "  /** doesn’t “one” – */",
+        "  constructor(scope: unknown, id: string) {}",
+        "}",
+        "export class Thing extends Base {",
+        "  /** doesn’t “one” – */",
+        "  constructor(scope: unknown, id: string, props?: ThingProps) {",
+        "    void props;",
+        "    super(scope, id);",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
+    const filename = resolve(depDir, "index.ts");
+    const sourceText = [
+      'import { Thing } from "./dep";',
+      "declare const scope: unknown;",
+      'new Thing(scope, "id");',
+    ].join("\n");
+    writeFileSync(filename, sourceText);
+    const checker = createTypeChecker({
+      cwd: workspace,
+      filename,
+      sourceCode: { text: sourceText },
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            project: "tsconfig.json",
+            corsa: {
+              executable: realCorsaBinary,
+              cwd: workspace,
+              mode: "jsonrpc",
+            },
+          },
+        },
+      },
+    } as any);
+    const calleeStart = sourceText.indexOf("Thing(");
+    const callee = {
+      fileName: filename,
+      pos: calleeStart,
+      end: calleeStart + "Thing".length,
+      range: [calleeStart, calleeStart + "Thing".length] as const,
+    };
+    const constructType = checker.getTypeAtLocation(callee);
+    const signature = constructType ? checker.getSignaturesOfType(constructType, 1)[0] : undefined;
+
+    expect(signature?.parameterSymbols?.map((symbol) => symbol.name)).toEqual([
+      "scope",
+      "id",
+      "props",
+    ]);
+    expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual([
+      "scope",
+      "id",
+      "props",
+    ]);
+  });
+
+  integrationCase(
+    "resolves imported inherited constructor parameter symbols with non-ASCII JSDoc",
+    () => {
+      const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-inherited-constructor-"));
+      const depDir = resolve(workspace, "src");
+      mkdirSync(depDir, { recursive: true });
+      writeFileSync(
+        resolve(workspace, "tsconfig.json"),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              module: "esnext",
+              moduleResolution: "node",
+              target: "es2022",
+              strict: true,
+            },
+            include: ["src/**/*.ts"],
+          },
+          null,
+          2,
+        ),
+      );
+      writeFileSync(
+        resolve(depDir, "dep.ts"),
+        [
+          "abstract class Base {",
+          "  /** doesn't 'one' \"two\" – */",
+          "  constructor() {}",
+          "}",
+          "export class Leaf extends Base {",
+          "  /** doesn't 'one' \"two\" – */",
+          "  constructor(public id: string) {",
+          "    super();",
+          "  }",
+          "}",
+        ].join("\n"),
+      );
+      const filename = resolve(depDir, "index.ts");
+      const sourceText = ['import { Leaf } from "./dep";', 'new Leaf("x");'].join("\n");
+      writeFileSync(filename, sourceText);
+      const checker = createTypeChecker({
+        cwd: workspace,
+        filename,
+        sourceCode: { text: sourceText },
+        settings: {
+          corsaOxlint: {
+            parserOptions: {
+              project: "tsconfig.json",
+              corsa: {
+                executable: realCorsaBinary,
+                cwd: workspace,
+                mode: "jsonrpc",
+              },
+            },
+          },
+        },
+      } as any);
+      const calleeStart = sourceText.indexOf("Leaf(");
+      const callee = {
+        fileName: filename,
+        pos: calleeStart,
+        end: calleeStart + "Leaf".length,
+        range: [calleeStart, calleeStart + "Leaf".length] as const,
+      };
+      const constructType = checker.getTypeAtLocation(callee);
+      const signature = constructType
+        ? checker.getSignaturesOfType(constructType, 1)[0]
+        : undefined;
+
+      expect(signature?.parameterSymbols?.map((symbol) => symbol.name)).toEqual(["id"]);
+      expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual(["id"]);
+    },
+  );
+
+  integrationCase("resolves non-ASCII constructor parameter symbols", () => {
+    const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-non-ascii-params-"));
+    const srcDir = resolve(workspace, "src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(
+      resolve(workspace, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: "esnext",
+            target: "es2022",
+            strict: true,
+          },
+          include: ["src/**/*.ts"],
+        },
+        null,
+        2,
+      ),
+    );
+    const filename = resolve(srcDir, "fixture.ts");
+    const sourceText = [
+      "class C {",
+      "  constructor(",
+      "    public name: string,",
+      "    public 識別子: number,",
+      "    public other: boolean,",
+      "  ) {}",
+      "}",
+      'new C("a", 1, true);',
+    ].join("\n");
+    writeFileSync(filename, sourceText);
+    const checker = createTypeChecker({
+      cwd: workspace,
+      filename,
+      sourceCode: { text: sourceText },
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            project: "tsconfig.json",
+            corsa: {
+              executable: realCorsaBinary,
+              cwd: workspace,
+              mode: "jsonrpc",
+            },
+          },
+        },
+      },
+    } as any);
+    const calleeStart = sourceText.indexOf("C(", sourceText.indexOf("new C"));
+    const callee = {
+      fileName: filename,
+      pos: calleeStart,
+      end: calleeStart + "C".length,
+      range: [calleeStart, calleeStart + "C".length] as const,
+    };
+    const constructType = checker.getTypeAtLocation(callee);
+    const signature = constructType ? checker.getSignaturesOfType(constructType, 1)[0] : undefined;
+
+    expect(signature?.parameterSymbols?.map((symbol) => symbol.name)).toEqual([
+      "name",
+      "識別子",
+      "other",
+    ]);
+    expect(signature?.parameters.map((id) => checker.getSymbolById(id)?.name)).toEqual([
+      "name",
+      "識別子",
+      "other",
+    ]);
+  });
+
   integrationCase("resolves the symbol type at a location instead of the node type", () => {
     const seen: Record<string, string | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
@@ -1150,6 +1387,65 @@ describe("corsa oxlint type locations", () => {
     });
 
     expect(seen.animal).toBe("Animal");
+  });
+
+  integrationCase("exposes symbols for type references with the default corsa executable", () => {
+    const seen: Record<string, string | null> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "type-reference-symbol-accessor",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise type reference symbol lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSTypeReference(node: any) {
+            const name = node.typeName?.name;
+            if (!name) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen[name] = type ? (checker.getSymbolOfType(type)?.name ?? null) : null;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("type-reference-symbol-accessor", rule as any, {
+      valid: [
+        {
+          code: [
+            "interface IThing {",
+            "  readonly id: string;",
+            "}",
+            "class Animal {}",
+            "class Dog extends Animal implements IThing {",
+            '  readonly id: string = "rex";',
+            "}",
+            "const animal: Animal = new Dog();",
+            "const thing: IThing = new Dog();",
+          ].join("\n"),
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen).toEqual({
+      Animal: "Animal",
+      IThing: "IThing",
+    });
   });
 
   integrationCase("does not expose corrupted mapped utility type symbols", () => {
