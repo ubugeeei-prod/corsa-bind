@@ -1,75 +1,82 @@
-# AI Agent Issue Workflow
+# Local Issue Agent
 
-The AI Agent workflow turns selected GitHub Issues into implementation pull
-requests.
+The local issue agent turns GitHub Issues into implementation pull requests from
+your machine instead of GitHub Actions.
 
-It lives in
-[`../.github/workflows/ai-agent-issue.yml`](../.github/workflows/ai-agent-issue.yml).
+It lives in [`../scripts/issue_agent.ts`](../scripts/issue_agent.ts).
 
 ## What It Does
 
-The workflow runs on:
+The script uses the local `gh` and `codex` CLIs to:
 
-- newly opened issues
-- manual `workflow_dispatch` runs with an issue number
+- poll open GitHub Issues, or run against one issue number
+- update the local default branch
+- create a local `codex/issue-<number>-...` branch
+- run `codex exec` with the issue context
+- commit generated changes with a Conventional Commits title
+- push the branch and open a draft pull request
+- wait for pull request checks unless disabled
 
-For each eligible issue, it:
+Processed issues are recorded in `.cache/issue-agent/state.json`, which is
+ignored by git.
 
-- checks out the default branch
-- installs the Rust and Vite+ toolchains used by this repository
-- runs `openai/codex-action` against the issue context
-- commits any generated changes to a `codex/issue-<number>-<run-id>` branch
-- opens a pull request with a Conventional Commits title
-- waits for the pull request checks and fails the workflow if CI fails or never
-  appears
+## Requirements
 
-The workflow intentionally treats every newly opened issue as eligible for AI
-Agent implementation.
+Authenticate locally before running the agent:
 
-## Required Secrets
+```bash
+gh auth login
+codex login
+```
 
-Configure these repository secrets before enabling the workflow:
+The script assumes:
 
-- `OPENAI_API_KEY`: API key used by `openai/codex-action`
-- `AI_AGENT_GITHUB_TOKEN`: a fine-grained PAT or GitHub App installation token
-  used to push the branch and create the pull request
+- the worktree is clean before each issue starts
+- `origin` points at the target GitHub repository
+- local credentials can push branches and create pull requests
+- repository CI runs for PR branches
 
-`AI_AGENT_GITHUB_TOKEN` is required instead of relying on the workflow
-`GITHUB_TOKEN`. Pull requests created by `GITHUB_TOKEN` do not reliably trigger
-the repository's normal CI workflows, which would make the required CI
-verification step meaningless.
+## Run One Issue
 
-The token should be scoped to this repository with:
+```bash
+vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328
+```
 
-- Contents: read and write
-- Pull requests: read and write
-- Issues: read and write
+Useful options:
 
-## Optional Variables
+```bash
+vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --model gpt-5
+vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --no-wait-ci
+vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --no-draft
+```
 
-Set the repository variable `AI_AGENT_MODEL` to choose the Codex model used by
-the action. If the variable is unset, the Codex action uses its default model.
+## Watch Issues
+
+```bash
+vp exec node --strip-types ./scripts/issue_agent.ts watch --poll-seconds 60
+```
+
+For a one-shot pass over currently open issues:
+
+```bash
+vp exec node --strip-types ./scripts/issue_agent.ts watch --once
+```
+
+By default, watch mode considers every open issue that is not already recorded
+as processed in `.cache/issue-agent/state.json`.
+To retry an issue that was already processed, either run it directly with
+`run --issue <number>` or remove that issue from the state file.
 
 ## PR Conventions
 
-The workflow enforces these local conventions:
+The script enforces these local conventions:
 
-- PR titles must use Conventional Commits format.
-- PR titles must not include `[codex]`.
+- PR titles use Conventional Commits format.
+- PR titles do not include `[codex]`.
 - PR bodies include `Closes #<issue-number>`.
-- The workflow waits for CI after creating the pull request and reports the
-  result back to the issue.
+- PRs are draft by default.
+- PR checks are watched by default after creation.
 
-If Codex writes an invalid title, the workflow falls back to:
-
-```text
-chore: address issue #<issue-number>
-```
-
-## Manual Run
-
-Use the workflow dispatch input when an issue should be retried:
-
-```text
-Actions -> AI Agent Issue Implementation -> Run workflow -> issue_number
-```
+Codex is asked to write proposed PR metadata under
+`.cache/issue-agent/issues/<issue-number>/`. If it does not, the script falls
+back to a safe `chore: address issue #<issue-number>` title and a template body.
