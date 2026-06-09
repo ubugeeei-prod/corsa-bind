@@ -41,31 +41,31 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount corsa_ref target sticky disk
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
           path: .cache/corsa-ref-target
 
       - name: Mount Go build sticky disk
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
           path: .cache/go-build
 
       - name: Mount pnpm store sticky disk
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -90,7 +90,7 @@ jobs:
           cache: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
+        uses: voidzero-dev/setup-vp@2dec1e33f4ab2c6d5bce1b0c4607961bb1a3f7a1 # v1
         with:
           node-version: "24"
           cache: ${{ runner.os != 'Linux' }}
@@ -117,7 +117,7 @@ jobs:
         run: vp run -w bench_verify
 
       - name: Cargo deny
-        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1 # v2
+        uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2
         with:
           command: check advisories bans licenses sources
 
@@ -135,7 +135,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
@@ -164,21 +164,21 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-native-targets.outputs.matrix) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
         if: ${{ runner.os == 'Linux' }}
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
         with:
           key: ${{ github.repository }}-publish-npm-native-${{ matrix.target }}-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount pnpm store sticky disk
         if: ${{ runner.os == 'Linux' }}
-        uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
         with:
           key: ${{ github.repository }}-publish-npm-native-${{ matrix.target }}-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -194,7 +194,7 @@ jobs:
           cache-targets: ${{ runner.os != 'Linux' }}
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
+        uses: voidzero-dev/setup-vp@2dec1e33f4ab2c6d5bce1b0c4607961bb1a3f7a1 # v1
         with:
           node-version: "24"
           cache: ${{ runner.os != 'Linux' }}
@@ -256,7 +256,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
@@ -274,7 +274,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1
+        uses: voidzero-dev/setup-vp@2dec1e33f4ab2c6d5bce1b0c4607961bb1a3f7a1 # v1
         with:
           node-version: "24"
           cache: true
