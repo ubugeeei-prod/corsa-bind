@@ -94,7 +94,7 @@ points.
 ## Run and ship
 
 - [CI and local checks](./ci_guide.md) — reproduce the GitHub checks locally.
-- [AI Agent issue workflow](./ai_agent_issue_workflow.md) — turn selected issues into implementation PRs and wait for CI.
+- [Local issue agent](./ai_agent_issue_workflow.md) — turn GitHub Issues into implementation PRs from a local machine.
 - [Performance commands](./performance.md) — benchmark entrypoints and the artifacts they write.
 - [Stylistic benchmark](./stylistic_benchmark.md) — native stylistic throughput vs the upstream `@stylistic` plugin.
 - [Release process](./release_guide.md) — package publishing and release verification.
