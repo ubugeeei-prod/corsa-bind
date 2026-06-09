@@ -222,6 +222,74 @@ describe("api surface", () => {
     declarationEmitTimeoutMs,
   );
 
+  it(
+    "keeps @corsa-bind/napi consumer types free from ambient Buffer requirements",
+    () => {
+      const declarationsRoot = resolve(workspaceRoot, ".cache");
+      mkdirSync(declarationsRoot, { recursive: true });
+      const workspace = mkdtempSync(resolve(declarationsRoot, "corsa-napi-consumer-"));
+      const importPath = moduleSpecifierFor(
+        workspace,
+        resolve(workspaceRoot, "src/bindings/nodejs/corsa_node/ts/index.ts"),
+      );
+      writeFileSync(
+        resolve(workspace, "consumer.ts"),
+        [
+          `import type { CorsaApiClient } from "${importPath}";`,
+          "",
+          "declare const client: CorsaApiClient;",
+          'void client.getSourceFile("snapshot", "project", "file.ts");',
+        ].join("\n"),
+      );
+      writeFileSync(
+        resolve(workspace, "tsconfig.json"),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              noEmit: true,
+              moduleResolution: "bundler",
+              module: "esnext",
+              target: "esnext",
+              strict: true,
+              skipLibCheck: false,
+              types: [],
+              baseUrl: workspaceRoot,
+              paths: {
+                "@corsa-bind/napi": ["src/bindings/nodejs/corsa_node/ts/index.ts"],
+              },
+              ignoreDeprecations: "6.0",
+            },
+            files: [resolve(workspace, "consumer.ts")],
+          },
+          null,
+          2,
+        ),
+      );
+
+      try {
+        try {
+          execFileSync(
+            process.execPath,
+            [typescriptCompilerBin, "-p", resolve(workspace, "tsconfig.json")],
+            {
+              cwd: workspaceRoot,
+              stdio: "pipe",
+            },
+          );
+        } catch (error) {
+          throw new Error(`tsc consumer compile failed:\n${commandOutput(error)}`);
+        }
+
+        expect(readFileSync(resolve(workspaceRoot, "src/bindings/nodejs/corsa_node/index.d.ts"), "utf8")).toContain(
+          'import type { Buffer } from "node:buffer"',
+        );
+      } finally {
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+    declarationEmitTimeoutMs,
+  );
+
   it("re-exports typescript-eslint-style utility namespaces", () => {
     expect(main.ESLintUtils.RuleCreator).toBe(main.RuleCreator);
     expect(main.ESLintUtils.nullThrows("value", "present")).toBe("value");

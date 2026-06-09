@@ -1,4 +1,5 @@
 import * as nativeModule from "../index.js";
+import type { Buffer } from "node:buffer";
 
 import type {
   ApiClientOptions,
