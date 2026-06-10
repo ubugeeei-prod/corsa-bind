@@ -28,7 +28,18 @@ export type RuleContext<
   readonly options: Readonly<Options>;
   report(this: void, diagnostic: RuleDiagnostic<MessageId>): void;
 };
-export type RuleDocs = OxlintRuleDocs & {
+
+type RemoveIndexSignature<T> = {
+  [Key in keyof T as string extends Key
+    ? never
+    : number extends Key
+      ? never
+      : symbol extends Key
+        ? never
+        : Key]: T[Key];
+};
+
+export type RuleDocs = RemoveIndexSignature<OxlintRuleDocs> & {
   /**
    * Enables type-aware parser defaults for rules that require type checking.
    */
