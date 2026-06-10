@@ -1,5 +1,4 @@
 import * as nativeModule from "../index.js";
-import type { Buffer } from "node:buffer";
 
 import type {
   ApiClientOptions,
@@ -35,8 +34,8 @@ export interface CorsaApiClient {
   parseConfigFileAsync(file: string): Promise<ConfigResponse>;
   updateSnapshot(params?: UpdateSnapshotParams): UpdateSnapshotResponse;
   updateSnapshotAsync(params?: UpdateSnapshotParams): Promise<UpdateSnapshotResponse>;
-  getSourceFile(snapshot: string, project: string, file: string): Buffer | null;
-  getSourceFileAsync(snapshot: string, project: string, file: string): Promise<Buffer | null>;
+  getSourceFile(snapshot: string, project: string, file: string): Uint8Array | null;
+  getSourceFileAsync(snapshot: string, project: string, file: string): Promise<Uint8Array | null>;
   getStringType(snapshot: string, project: string): TypeResponse;
   getStringTypeAsync(snapshot: string, project: string): Promise<TypeResponse>;
   getTypeAtPosition(
@@ -149,8 +148,8 @@ export interface CorsaApiClient {
   ): Promise<string>;
   callJson<T>(method: string, params?: unknown): T;
   callJsonAsync<T>(method: string, params?: unknown): Promise<T>;
-  callBinary(method: string, params?: unknown): Buffer | null;
-  callBinaryAsync(method: string, params?: unknown): Promise<Buffer | null>;
+  callBinary(method: string, params?: unknown): Uint8Array | null;
+  callBinaryAsync(method: string, params?: unknown): Promise<Uint8Array | null>;
   releaseHandle(handle: string): void;
   releaseHandleAsync(handle: string): Promise<void>;
   close(): void;

@@ -14,8 +14,10 @@ export type {
   Plugin,
   Rule,
   RuleContext,
+  RuleDocs,
   RuleDefinition,
   RuleDiagnostic,
+  RuleMeta,
   RuleMetaWithMessages,
 } from "./plugin";
 export { getParserServices } from "./parser_services";

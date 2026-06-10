@@ -14,7 +14,7 @@ use corsa::{
 };
 use napi::{
     Env, Result, ScopedTask, Task,
-    bindgen_prelude::{AsyncTask, Buffer, Unknown},
+    bindgen_prelude::{AsyncTask, Uint8Array, Unknown},
 };
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
@@ -497,7 +497,7 @@ pub struct BinaryApiTask {
 #[napi]
 impl Task for BinaryApiTask {
     type Output = Option<Vec<u8>>;
-    type JsValue = Option<Buffer>;
+    type JsValue = Option<Uint8Array>;
 
     fn compute(&mut self) -> Result<Self::Output> {
         match &mut self.kind {
@@ -524,7 +524,7 @@ impl Task for BinaryApiTask {
     }
 
     fn resolve(&mut self, _: napi::Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(output.map(Buffer::from))
+        Ok(output.map(Uint8Array::from))
     }
 }
 
@@ -682,14 +682,14 @@ impl CorsaApiClient {
         snapshot: String,
         project: String,
         file: String,
-    ) -> Result<Option<Buffer>> {
+    ) -> Result<Option<Uint8Array>> {
         let payload = block_on(self.inner.get_source_file(
             SnapshotHandle::from(snapshot.as_str()),
             ProjectHandle::from(project.as_str()),
             file,
         ))
         .map_err(into_napi_error)?;
-        Ok(payload.map(|payload| Buffer::from(payload.into_bytes())))
+        Ok(payload.map(|payload| Uint8Array::from(payload.into_bytes())))
     }
 
     /// Fetches a source file on a libuv worker thread.
@@ -1149,11 +1149,11 @@ impl CorsaApiClient {
 
     /// Sends an arbitrary binary endpoint request.
     #[napi]
-    pub fn call_binary(&self, method: String, params: Option<Value>) -> Result<Option<Buffer>> {
+    pub fn call_binary(&self, method: String, params: Option<Value>) -> Result<Option<Uint8Array>> {
         let params = optional_value(params);
         let payload = block_on(self.inner.raw_binary_request(method.as_str(), params))
             .map_err(into_napi_error)?;
-        Ok(payload.map(|payload| Buffer::from(payload.into_bytes())))
+        Ok(payload.map(|payload| Uint8Array::from(payload.into_bytes())))
     }
 
     /// Sends an arbitrary binary endpoint request on a libuv worker thread.

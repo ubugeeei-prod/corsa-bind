@@ -4,7 +4,8 @@ import type {
   Diagnostic,
   Plugin as OxlintPlugin,
   Rule as OxlintRule,
-  RuleMeta,
+  RuleDocs as OxlintRuleDocs,
+  RuleMeta as OxlintRuleMeta,
   Visitor,
   VisitorWithHooks,
 } from "@oxlint/plugins";
@@ -26,6 +27,15 @@ export type RuleContext<
 > = Omit<ContextWithParserOptions, "options" | "report"> & {
   readonly options: Readonly<Options>;
   report(this: void, diagnostic: RuleDiagnostic<MessageId>): void;
+};
+export type RuleDocs = OxlintRuleDocs & {
+  /**
+   * Enables type-aware parser defaults for rules that require type checking.
+   */
+  readonly requiresTypeChecking?: boolean;
+};
+export type RuleMeta = Omit<OxlintRuleMeta, "docs"> & {
+  readonly docs?: RuleDocs;
 };
 export type RuleMetaWithMessages<MessageId extends string = string> = RuleMeta & {
   readonly messages?: Record<MessageId, string>;

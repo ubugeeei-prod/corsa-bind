@@ -280,9 +280,9 @@ describe("api surface", () => {
           throw new Error(`tsc consumer compile failed:\n${commandOutput(error)}`);
         }
 
-        expect(readFileSync(resolve(workspaceRoot, "src/bindings/nodejs/corsa_node/index.d.ts"), "utf8")).toContain(
-          'import type { Buffer } from "node:buffer"',
-        );
+        expect(
+          readFileSync(resolve(workspaceRoot, "src/bindings/nodejs/corsa_node/index.d.ts"), "utf8"),
+        ).not.toContain("Buffer");
       } finally {
         rmSync(workspace, { recursive: true, force: true });
       }
