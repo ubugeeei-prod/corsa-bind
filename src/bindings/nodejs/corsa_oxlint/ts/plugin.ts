@@ -4,7 +4,7 @@ import type {
   Diagnostic,
   Plugin as OxlintPlugin,
   Rule as OxlintRule,
-  RuleMeta,
+  RuleMeta as OxlintRuleMeta,
   Visitor,
   VisitorWithHooks,
 } from "@oxlint/plugins";
@@ -27,7 +27,22 @@ export type RuleContext<
   readonly options: Readonly<Options>;
   report(this: void, diagnostic: RuleDiagnostic<MessageId>): void;
 };
-export type RuleMetaWithMessages<MessageId extends string = string> = RuleMeta & {
+export type RuleDocs = {
+  readonly description?: string;
+  readonly recommended?: unknown;
+  readonly url?: string;
+  /**
+   * Enables corsa-oxlint's type-aware parser service defaults for this rule.
+   *
+   * @default false
+   */
+  readonly requiresTypeChecking?: boolean;
+};
+export type RuleMetaWithMessages<MessageId extends string = string> = Omit<
+  OxlintRuleMeta,
+  "docs" | "messages"
+> & {
+  readonly docs?: RuleDocs;
   readonly messages?: Record<MessageId, string>;
 };
 export type RuleDefinition<

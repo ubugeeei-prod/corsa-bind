@@ -1,5 +1,7 @@
 use super::super::{LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule};
-use crate::lint::helpers::strip_chain_expression;
+use crate::lint::helpers::{
+    is_obviously_promise_like, is_promise_like_node, strip_chain_expression,
+};
 
 /// Type-aware rule that enforces consistent use of `return await` based on the
 /// configured option and whether the awaited value affects error handling.
@@ -146,7 +148,13 @@ impl RustLintRule for ReturnAwaitRule {
                 let Some(argument) = node.child("argument") else {
                     return;
                 };
-                test_each_possibly_returned_node(ctx, argument, option);
+                test_each_possibly_returned_node(
+                    ctx,
+                    argument,
+                    option,
+                    node.field_bool("__returnAwaitRequiresAwait")
+                        .unwrap_or(false),
+                );
             }
             "ArrowFunctionExpression" => {
                 // Only concise-body (non-block) async arrow functions return a
@@ -160,7 +168,7 @@ impl RustLintRule for ReturnAwaitRule {
                 if body.kind == "BlockStatement" {
                     return;
                 }
-                test_each_possibly_returned_node(ctx, body, option);
+                test_each_possibly_returned_node(ctx, body, option, false);
             }
             _ => {}
         }
@@ -183,22 +191,28 @@ fn test_each_possibly_returned_node(
     ctx: &mut RuleContext<'_>,
     node: &LintNode,
     option: ReturnAwaitOption,
+    affects_error_handling: bool,
 ) {
     let node = strip_chain_expression(node);
     if node.kind == "ConditionalExpression" {
         if let Some(when_false) = node.child("alternate") {
-            test_each_possibly_returned_node(ctx, when_false, option);
+            test_each_possibly_returned_node(ctx, when_false, option, affects_error_handling);
         }
         if let Some(when_true) = node.child("consequent") {
-            test_each_possibly_returned_node(ctx, when_true, option);
+            test_each_possibly_returned_node(ctx, when_true, option, affects_error_handling);
         }
     } else {
-        test(ctx, node, option);
+        test(ctx, node, option, affects_error_handling);
     }
 }
 
 /// Mirror of the Go `test` closure.
-fn test(ctx: &mut RuleContext<'_>, node: &LintNode, option: ReturnAwaitOption) {
+fn test(
+    ctx: &mut RuleContext<'_>,
+    node: &LintNode,
+    option: ReturnAwaitOption,
+    affects_error_handling: bool,
+) {
     let is_await = node.kind == "AwaitExpression";
 
     // `child` is the value whose type matters: the awaited operand for an await
@@ -209,7 +223,7 @@ fn test(ctx: &mut RuleContext<'_>, node: &LintNode, option: ReturnAwaitOption) {
         node
     };
 
-    let certainty = AwaitableCertainty::parse(value_node.field_str("__awaitableCertainty"));
+    let certainty = awaitable_certainty(value_node);
 
     if certainty != AwaitableCertainty::Always {
         if is_await {
@@ -227,7 +241,9 @@ fn test(ctx: &mut RuleContext<'_>, node: &LintNode, option: ReturnAwaitOption) {
     }
 
     // At this point the value is definitely a thenable.
-    let affects_error_handling = node.field_bool("__affectsErrorHandling").unwrap_or(false);
+    let affects_error_handling = node
+        .field_bool("__affectsErrorHandling")
+        .unwrap_or(affects_error_handling);
     let use_auto_fix = !affects_error_handling;
 
     match get_whether_to_await(affects_error_handling, option) {
@@ -245,6 +261,19 @@ fn test(ctx: &mut RuleContext<'_>, node: &LintNode, option: ReturnAwaitOption) {
             report_disallowed(ctx, node, use_auto_fix);
         }
     }
+}
+
+fn awaitable_certainty(node: &LintNode) -> AwaitableCertainty {
+    if let Some(certainty) = node.field_str("__awaitableCertainty") {
+        return AwaitableCertainty::parse(Some(certainty));
+    }
+    if is_obviously_promise_like(node) || is_promise_like_node(node) {
+        return AwaitableCertainty::Always;
+    }
+    if node.type_texts.is_empty() && node.property_names.is_empty() {
+        return AwaitableCertainty::May;
+    }
+    AwaitableCertainty::Never
 }
 
 /// Emits the `requiredPromiseAwait` diagnostic, inserting `await` before `node`.
@@ -371,6 +400,32 @@ mod tests {
         })
     }
 
+    fn promise_resolve_value(start: u32, end: u32) -> serde_json::Value {
+        json!({
+            "kind": "CallExpression",
+            "range": { "start": start, "end": end },
+            "fields": { "__isHigherPrecedenceThanAwait": true },
+            "children": {
+                "callee": {
+                    "kind": "MemberExpression",
+                    "range": { "start": start, "end": start + 15 },
+                    "children": {
+                        "object": {
+                            "kind": "Identifier",
+                            "range": { "start": start, "end": start + 7 },
+                            "fields": { "name": "Promise" }
+                        },
+                        "property": {
+                            "kind": "Identifier",
+                            "range": { "start": start + 8, "end": start + 15 },
+                            "fields": { "name": "resolve" }
+                        }
+                    }
+                }
+            }
+        })
+    }
+
     fn await_promise(start: u32, end: u32, affects_error_handling: bool) -> serde_json::Value {
         json!({
             "kind": "AwaitExpression",
@@ -448,12 +503,39 @@ mod tests {
     }
 
     #[test]
+    fn uses_return_statement_error_handling_context() {
+        // Host facts attach try/catch context to the return statement; the Rust
+        // rule carries that context to the returned promise expression.
+        let mut node = return_stmt(promise_value(7, 33), None);
+        node.fields
+            .insert("__returnAwaitRequiresAwait".to_owned(), json!(true));
+        let diagnostics = run(&node);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].message_id, "requiredPromiseAwait");
+    }
+
+    #[test]
     fn allows_bare_promise_in_default_outside_try() {
         // `return Promise.resolve(1)` at top level of async fn, default option,
         // not in try/catch => NoAwait but it isn't an await, so no report.
         let node = return_stmt(promise_value(7, 33), None);
         let diagnostics = run(&node);
         assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn treats_obvious_promise_call_as_awaitable_without_checker_fact() {
+        let await_node = json!({
+            "kind": "AwaitExpression",
+            "range": { "start": 7, "end": 33 },
+            "children": {
+                "argument": promise_resolve_value(13, 33),
+            },
+        });
+        let node = return_stmt(await_node, None);
+        let diagnostics = run(&node);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].message_id, "disallowedPromiseAwait");
     }
 
     #[test]

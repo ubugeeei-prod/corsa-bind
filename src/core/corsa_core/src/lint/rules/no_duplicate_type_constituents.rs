@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use serde_json::Value;
+
 use super::super::{LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule};
 use crate::lint::helpers::{child_list, rule_option_bool};
 
@@ -201,6 +203,7 @@ fn resolved_type_id(node: &LintNode) -> Option<String> {
     node.field_str("__resolvedTypeId")
         .filter(|id| !id.is_empty())
         .map(str::to_owned)
+        .or_else(|| syntax_type_id(node))
 }
 
 /// Reads whether the constituent's resolved type has the `undefined` type flag.
@@ -209,7 +212,77 @@ fn resolved_type_id(node: &LintNode) -> Option<String> {
 /// `utils.isTypeFlagSet(checker.getTypeAtLocation(constituentNode),
 /// ts.TypeFlags.Undefined)`.
 fn is_undefined_type(node: &LintNode) -> bool {
-    node.field_bool("__isUndefinedType").unwrap_or(false)
+    node.field_bool("__isUndefinedType").unwrap_or(false) || node.kind == "TSUndefinedKeyword"
+}
+
+fn syntax_type_id(node: &LintNode) -> Option<String> {
+    let node = skip_type_parentheses(node);
+    if let Some(keyword) = keyword_type_id(node.kind.as_str()) {
+        return Some(keyword.to_owned());
+    }
+    if node.kind == "TSLiteralType" {
+        return literal_type_id(node);
+    }
+    if node.kind == "TSTemplateLiteralType" {
+        return node
+            .text
+            .as_deref()
+            .filter(|text| !text.is_empty())
+            .map(|text| format!("template:{text}"));
+    }
+    None
+}
+
+fn keyword_type_id(kind: &str) -> Option<&'static str> {
+    match kind {
+        "TSAnyKeyword" => Some("keyword:any"),
+        "TSBigIntKeyword" => Some("keyword:bigint"),
+        "TSBooleanKeyword" => Some("keyword:boolean"),
+        "TSNeverKeyword" => Some("keyword:never"),
+        "TSNullKeyword" => Some("keyword:null"),
+        "TSNumberKeyword" => Some("keyword:number"),
+        "TSObjectKeyword" => Some("keyword:object"),
+        "TSStringKeyword" => Some("keyword:string"),
+        "TSSymbolKeyword" => Some("keyword:symbol"),
+        "TSUndefinedKeyword" => Some("keyword:undefined"),
+        "TSUnknownKeyword" => Some("keyword:unknown"),
+        "TSVoidKeyword" => Some("keyword:void"),
+        _ => None,
+    }
+}
+
+fn literal_type_id(node: &LintNode) -> Option<String> {
+    let Some(literal) = node.child("literal") else {
+        return node
+            .text
+            .as_deref()
+            .filter(|text| !text.is_empty())
+            .map(|text| format!("literal:{text}"));
+    };
+    if literal.kind == "TemplateLiteral" || literal.kind == "TSTemplateLiteralType" {
+        return literal
+            .text
+            .as_deref()
+            .filter(|text| !text.is_empty())
+            .map(|text| format!("template:{text}"));
+    }
+    match literal.kind.as_str() {
+        "Literal" => match literal.fields.get("value") {
+            Some(Value::Bool(value)) => Some(format!("literal:bool:{value}")),
+            Some(Value::Number(value)) => Some(format!("literal:number:{value}")),
+            Some(Value::String(value)) => Some(format!("literal:string:{value}")),
+            _ => literal
+                .field_str("bigint")
+                .map(|bigint| format!("literal:bigint:{bigint}")),
+        },
+        "TSTrueKeyword" => Some("literal:bool:true".to_owned()),
+        "TSFalseKeyword" => Some("literal:bool:false".to_owned()),
+        _ => node
+            .text
+            .as_deref()
+            .filter(|text| !text.is_empty())
+            .map(|text| format!("literal:{text}")),
+    }
 }
 
 fn report(ctx: &mut RuleContext<'_>, constituent: &LintNode) {
@@ -280,6 +353,29 @@ mod tests {
         assert_eq!(diagnostics[0].message_id, "duplicate");
         assert_eq!(diagnostics[0].range.start, 13);
         assert_eq!(diagnostics[0].range.end, 14);
+    }
+
+    // `type T = string | string;` -> reports duplicate even when the host does
+    // not provide checker-backed type ids for syntax-only keyword nodes.
+    #[test]
+    fn reports_duplicate_primitive_keyword_without_checker_fact() {
+        let node: LintNode = serde_json::from_value(json!({
+            "kind": "TSUnionType",
+            "range": { "start": 9, "end": 24 },
+            "childLists": {
+                "types": [
+                    { "kind": "TSStringKeyword", "range": { "start": 9, "end": 15 } },
+                    { "kind": "TSStringKeyword", "range": { "start": 18, "end": 24 } }
+                ]
+            }
+        }))
+        .unwrap();
+
+        let diagnostics = run(&node);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].message_id, "duplicate");
+        assert_eq!(diagnostics[0].range.start, 18);
+        assert_eq!(diagnostics[0].range.end, 24);
     }
 
     // `type T = true & true;` -> reports duplicate on intersection.

@@ -1,6 +1,6 @@
 use crate::{CorsaError, Result};
 use corsa_core::fast::compact_format;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 
 pub(crate) const MSG_REQUEST: u8 = 1;
 pub(crate) const MSG_CALL_RESPONSE: u8 = 2;
@@ -19,7 +19,7 @@ pub(crate) struct MsgpackTuple {
 
 pub(crate) fn read_tuple<R: Read>(reader: &mut R) -> Result<MsgpackTuple> {
     let mut tag = [0_u8; 1];
-    reader.read_exact(&mut tag)?;
+    read_exact(reader, &mut tag)?;
     if tag[0] != 0x93 {
         return Err(CorsaError::Protocol(compact_format(format_args!(
             "expected tuple marker, got {:x}",
@@ -42,16 +42,16 @@ pub(crate) fn write_tuple<W: Write>(
     method: &[u8],
     payload: &[u8],
 ) -> Result<()> {
-    writer.write_all(&[0x93, kind])?;
+    write_all(writer, &[0x93, kind])?;
     write_bin(writer, method)?;
     write_bin(writer, payload)?;
-    writer.flush()?;
+    flush(writer)?;
     Ok(())
 }
 
 fn read_int<R: Read>(reader: &mut R) -> Result<u8> {
     let mut buf = [0_u8; 1];
-    reader.read_exact(&mut buf)?;
+    read_exact(reader, &mut buf)?;
     if buf[0] <= 0x7f {
         return Ok(buf[0]);
     }
@@ -61,13 +61,13 @@ fn read_int<R: Read>(reader: &mut R) -> Result<u8> {
             buf[0]
         ))));
     }
-    reader.read_exact(&mut buf)?;
+    read_exact(reader, &mut buf)?;
     Ok(buf[0])
 }
 
 fn read_bin<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
     let mut tag = [0_u8; 1];
-    reader.read_exact(&mut tag)?;
+    read_exact(reader, &mut tag)?;
     let len = match tag[0] {
         0xc4 => read_len::<1, _>(reader)?,
         0xc5 => read_len::<2, _>(reader)?,
@@ -91,7 +91,7 @@ fn read_bin<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
         )))
     })?;
     buf.resize(len, 0);
-    reader.read_exact(&mut buf)?;
+    read_exact(reader, &mut buf)?;
     Ok(buf)
 }
 
@@ -99,17 +99,17 @@ fn read_len<const N: usize, R: Read>(reader: &mut R) -> Result<usize> {
     match N {
         1 => {
             let mut buf = [0_u8; 1];
-            reader.read_exact(&mut buf)?;
+            read_exact(reader, &mut buf)?;
             Ok(buf[0] as usize)
         }
         2 => {
             let mut buf = [0_u8; 2];
-            reader.read_exact(&mut buf)?;
+            read_exact(reader, &mut buf)?;
             Ok(u16::from_be_bytes(buf) as usize)
         }
         4 => {
             let mut buf = [0_u8; 4];
-            reader.read_exact(&mut buf)?;
+            read_exact(reader, &mut buf)?;
             Ok(u32::from_be_bytes(buf) as usize)
         }
         _ => Err(CorsaError::Protocol(compact_format(format_args!(
@@ -126,18 +126,40 @@ fn write_bin<W: Write>(writer: &mut W, bytes: &[u8]) -> Result<()> {
         ))));
     }
     match bytes.len() {
-        0..=255 => writer.write_all(&[0xc4, bytes.len() as u8])?,
+        0..=255 => write_all(writer, &[0xc4, bytes.len() as u8])?,
         256..=65535 => {
-            writer.write_all(&[0xc5])?;
-            writer.write_all(&(bytes.len() as u16).to_be_bytes())?;
+            write_all(writer, &[0xc5])?;
+            write_all(writer, &(bytes.len() as u16).to_be_bytes())?;
         }
         _ => {
-            writer.write_all(&[0xc6])?;
-            writer.write_all(&(bytes.len() as u32).to_be_bytes())?;
+            write_all(writer, &[0xc6])?;
+            write_all(writer, &(bytes.len() as u32).to_be_bytes())?;
         }
     }
-    writer.write_all(bytes)?;
+    write_all(writer, bytes)?;
     Ok(())
+}
+
+fn read_exact<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<()> {
+    reader.read_exact(buf).map_err(|error| match error.kind() {
+        ErrorKind::UnexpectedEof => CorsaError::Closed("msgpack stdout"),
+        _ => CorsaError::Io(error),
+    })
+}
+
+fn write_all<W: Write>(writer: &mut W, buf: &[u8]) -> Result<()> {
+    writer.write_all(buf).map_err(map_write_error)
+}
+
+fn flush<W: Write>(writer: &mut W) -> Result<()> {
+    writer.flush().map_err(map_write_error)
+}
+
+fn map_write_error(error: std::io::Error) -> CorsaError {
+    match error.kind() {
+        ErrorKind::BrokenPipe | ErrorKind::ConnectionReset => CorsaError::Closed("msgpack stdin"),
+        _ => CorsaError::Io(error),
+    }
 }
 
 #[cfg(test)]

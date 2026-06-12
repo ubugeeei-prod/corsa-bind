@@ -19,9 +19,9 @@ export declare class CorsaApiClient {
   /** Applies file changes on a libuv worker thread. */
   updateSnapshotAsync(params?: any | undefined | null): Promise<unknown>
   /** Fetches a source file through the binary endpoint. */
-  getSourceFile(snapshot: string, project: string, file: string): Buffer | null
+  getSourceFile(snapshot: string, project: string, file: string): Uint8Array | null
   /** Fetches a source file on a libuv worker thread. */
-  getSourceFileAsync(snapshot: string, project: string, file: string): Promise<Buffer | null>
+  getSourceFileAsync(snapshot: string, project: string, file: string): Promise<Uint8Array | null>
   /** Resolves the intrinsic string type for a project. */
   getStringType(snapshot: string, project: string): any
   getStringTypeAsync(snapshot: string, project: string): Promise<unknown>
@@ -60,9 +60,9 @@ export declare class CorsaApiClient {
   /** Sends an arbitrary JSON endpoint request on a libuv worker thread. */
   callJsonAsync(method: string, params?: any | undefined | null): Promise<unknown>
   /** Sends an arbitrary binary endpoint request. */
-  callBinary(method: string, params?: any | undefined | null): Buffer | null
+  callBinary(method: string, params?: any | undefined | null): Uint8Array | null
   /** Sends an arbitrary binary endpoint request on a libuv worker thread. */
-  callBinaryAsync(method: string, params?: any | undefined | null): Promise<Buffer | null>
+  callBinaryAsync(method: string, params?: any | undefined | null): Promise<Uint8Array | null>
   /** Releases a corsa handle explicitly. */
   releaseHandle(handle: string): void
   /** Releases a corsa handle on a libuv worker thread. */

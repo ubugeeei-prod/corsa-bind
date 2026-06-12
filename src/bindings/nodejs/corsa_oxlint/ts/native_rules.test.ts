@@ -286,64 +286,71 @@ describe("corsa oxlint native rules", () => {
     );
   });
 
-  integrationCase("runs pending parity slice rules through RuleTester", () => {
-    createTester().run("dot-notation", corsaOxlintRules["dot-notation"] as never, {
-      valid: [{ code: "const record = { value: 1 }; record.value;" }],
-      invalid: [{ code: "const record = { value: 1 }; record['value'];", errors: 1 }],
-    });
-
-    createTester().run(
-      "no-duplicate-type-constituents",
-      corsaOxlintRules["no-duplicate-type-constituents"] as never,
-      {
+  const pendingParityRuleCases = [
+    {
+      ruleName: "dot-notation",
+      tests: {
+        valid: [{ code: "const record = { value: 1 }; record.value;" }],
+        invalid: [{ code: "const record = { value: 1 }; record['value'];", errors: 1 }],
+      },
+    },
+    {
+      ruleName: "no-duplicate-type-constituents",
+      tests: {
         valid: [{ code: "type Value = string | number;" }],
         invalid: [{ code: "type Value = string | string;", errors: 1 }],
       },
-    );
-
-    createTester().run("no-unsafe-argument", corsaOxlintRules["no-unsafe-argument"] as never, {
-      valid: [{ code: "function take(value: unknown) {} declare const value: any; take(value);" }],
-      invalid: [
-        {
-          code: "function take(value: string) {} declare const value: any; take(value);",
-          errors: 1,
-        },
-      ],
-    });
-
-    createTester().run("require-await", corsaOxlintRules["require-await"] as never, {
-      valid: [
-        { code: "async function ok() { await Promise.resolve(1); }" },
-        { code: "async function ok() { return Promise.resolve(1); }" },
-      ],
-      invalid: [
-        { code: "async function nope() { return 1; }", errors: 1 },
-        {
-          code: "async function outer() { async function inner() { await Promise.resolve(1); } return 1; }",
-          errors: 1,
-        },
-      ],
-    });
-
-    createTester().run("return-await", corsaOxlintRules["return-await"] as never, {
-      valid: [
-        {
-          code: "async function ok() { try { return await Promise.resolve(1); } catch { return 0; } }",
-        },
-      ],
-      invalid: [
-        { code: "async function nope() { return await Promise.resolve(1); }", errors: 1 },
-        {
-          code: "async function nope() { try { return Promise.resolve(1); } catch { return 0; } }",
-          errors: 1,
-        },
-      ],
-    });
-
-    createTester().run(
-      "no-unnecessary-type-arguments",
-      corsaOxlintRules["no-unnecessary-type-arguments"] as never,
-      {
+    },
+    {
+      ruleName: "no-unsafe-argument",
+      tests: {
+        valid: [
+          { code: "function take(value: unknown) {} declare const value: any; take(value);" },
+        ],
+        invalid: [
+          {
+            code: "function take(value: string) {} declare const value: any; take(value);",
+            errors: 1,
+          },
+        ],
+      },
+    },
+    {
+      ruleName: "require-await",
+      tests: {
+        valid: [
+          { code: "async function ok() { await Promise.resolve(1); }" },
+          { code: "async function ok() { return Promise.resolve(1); }" },
+        ],
+        invalid: [
+          { code: "async function nope() { return 1; }", errors: 1 },
+          {
+            code: "async function outer() { async function inner() { await Promise.resolve(1); } return 1; }",
+            errors: 1,
+          },
+        ],
+      },
+    },
+    {
+      ruleName: "return-await",
+      tests: {
+        valid: [
+          {
+            code: "async function ok() { try { return await Promise.resolve(1); } catch { return 0; } }",
+          },
+        ],
+        invalid: [
+          { code: "async function nope() { return await Promise.resolve(1); }", errors: 1 },
+          {
+            code: "async function nope() { try { return Promise.resolve(1); } catch { return 0; } }",
+            errors: 1,
+          },
+        ],
+      },
+    },
+    {
+      ruleName: "no-unnecessary-type-arguments",
+      tests: {
         valid: [{ code: "function value<T>(input: T): T { return input; } value<string>('x');" }],
         invalid: [
           {
@@ -352,17 +359,21 @@ describe("corsa oxlint native rules", () => {
           },
         ],
       },
-    );
-
-    createTester().run(
-      "no-unnecessary-type-conversion",
-      corsaOxlintRules["no-unnecessary-type-conversion"] as never,
-      {
+    },
+    {
+      ruleName: "no-unnecessary-type-conversion",
+      tests: {
         valid: [{ code: "const value = String(1);" }],
         invalid: [{ code: "const value = String('value');", errors: 1 }],
       },
-    );
-  });
+    },
+  ] as const;
+
+  for (const { ruleName, tests } of pendingParityRuleCases) {
+    integrationCase(`runs ${ruleName} pending parity rule through RuleTester`, () => {
+      createTester().run(ruleName, corsaOxlintRules[ruleName] as never, tests as never);
+    });
+  }
 
   integrationCase("runs restrict-plus-operands through RuleTester", () => {
     createTester().run(

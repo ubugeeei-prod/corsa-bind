@@ -676,7 +676,7 @@ impl CorsaApiClient {
     }
 
     /// Fetches a source file through the binary endpoint.
-    #[napi]
+    #[napi(ts_return_type = "Uint8Array | null")]
     pub fn get_source_file(
         &self,
         snapshot: String,
@@ -693,7 +693,7 @@ impl CorsaApiClient {
     }
 
     /// Fetches a source file on a libuv worker thread.
-    #[napi]
+    #[napi(ts_return_type = "Promise<Uint8Array | null>")]
     pub fn get_source_file_async(
         &self,
         snapshot: String,
@@ -1148,7 +1148,7 @@ impl CorsaApiClient {
     }
 
     /// Sends an arbitrary binary endpoint request.
-    #[napi]
+    #[napi(ts_return_type = "Uint8Array | null")]
     pub fn call_binary(&self, method: String, params: Option<Value>) -> Result<Option<Buffer>> {
         let params = optional_value(params);
         let payload = block_on(self.inner.raw_binary_request(method.as_str(), params))
@@ -1157,7 +1157,7 @@ impl CorsaApiClient {
     }
 
     /// Sends an arbitrary binary endpoint request on a libuv worker thread.
-    #[napi]
+    #[napi(ts_return_type = "Promise<Uint8Array | null>")]
     pub fn call_binary_async(
         &self,
         method: String,

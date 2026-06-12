@@ -67,6 +67,12 @@ fn rejects_oversized_bin_length_before_allocation() {
 }
 
 #[test]
+fn treats_truncated_tuple_as_closed_stdout() {
+    let err = read_tuple(&mut Cursor::new([])).unwrap_err();
+    assert!(matches!(err, CorsaError::Closed("msgpack stdout")));
+}
+
+#[test]
 fn write_tuple_selects_bin_threshold_markers() {
     let mut bin8 = Vec::new();
     write_tuple(&mut bin8, MSG_CALL, &[b'a'; 255], b"").unwrap();

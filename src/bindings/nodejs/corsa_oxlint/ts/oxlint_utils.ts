@@ -1,8 +1,8 @@
-import type { RuleMeta, Visitor } from "@oxlint/plugins";
+import type { Visitor } from "@oxlint/plugins";
 
 import { getParserServices } from "./parser_services";
 import { decorateRule } from "./plugin";
-import type { Rule } from "./plugin";
+import type { Rule, RuleMetaWithMessages } from "./plugin";
 import type { ContextWithParserOptions } from "./types";
 
 export type RuleCreatorRule<
@@ -15,13 +15,12 @@ export type RuleCreatorRule<
   readonly create: (context: ContextWithParserOptions) => Visitor;
 };
 
-export type RuleCreatorMeta<TMessageIds extends string = string> = RuleMeta & {
-  readonly messages?: Record<TMessageIds, string>;
-};
+export type RuleCreatorMeta<TMessageIds extends string = string> =
+  RuleMetaWithMessages<TMessageIds>;
 
 export type RuleCreatorCreatedRule<
   TOptions extends readonly unknown[] = readonly [],
-  TMeta extends RuleMeta = RuleMeta,
+  TMeta extends RuleMetaWithMessages = RuleMetaWithMessages,
 > = Rule & {
   readonly defaultOptions: TOptions;
   readonly meta: TMeta & {

@@ -72,6 +72,7 @@ export class CorsaProjectSession {
   #lastRefreshMs = 0;
   #snapshotHasIssuedHandles = false;
   #supportsOverlayChanges?: boolean;
+  #fatalTransportError?: Error;
 
   constructor(
     readonly project: ResolvedProjectConfig,
@@ -80,10 +81,10 @@ export class CorsaProjectSession {
 
   close(): void {
     if (this.#snapshot) {
-      this.#client?.releaseHandle(this.#snapshot);
+      this.tryReleaseHandle(this.#snapshot);
       this.#snapshot = undefined;
     }
-    this.#client?.close();
+    this.tryCloseClient();
     this.#client = undefined;
     this.#supportsOverlayChanges = undefined;
     this.#files.clear();
@@ -92,14 +93,25 @@ export class CorsaProjectSession {
   }
 
   getCompilerOptions(): unknown {
-    return this.config().options;
+    return this.withTransportRecovery(() => this.config().options, "reading compiler options");
   }
 
   getRootFileNames(): readonly string[] {
-    return this.config().fileNames;
+    return this.withTransportRecovery(() => this.config().fileNames, "reading root file names");
   }
 
   getTypeAtPosition(
+    fileName: string,
+    position: number,
+    sourceText?: string,
+  ): CorsaType | undefined {
+    return this.withTransportRecovery(
+      () => this.getTypeAtPositionUnchecked(fileName, position, sourceText),
+      "looking up a type",
+    );
+  }
+
+  private getTypeAtPositionUnchecked(
     fileName: string,
     position: number,
     sourceText?: string,
@@ -127,8 +139,21 @@ export class CorsaProjectSession {
     sourceText: string | undefined,
     kind: string | undefined,
   ): CorsaType | undefined {
+    return this.withTransportRecovery(
+      () => this.getTypeAtSourceRangeUnchecked(fileName, start, end, sourceText, kind),
+      "looking up a type",
+    );
+  }
+
+  private getTypeAtSourceRangeUnchecked(
+    fileName: string,
+    start: number,
+    end: number,
+    sourceText: string | undefined,
+    kind: string | undefined,
+  ): CorsaType | undefined {
     if (!sourceText || end <= start) {
-      return this.getTypeAtPosition(fileName, start, sourceText);
+      return this.getTypeAtPositionUnchecked(fileName, start, sourceText);
     }
     const state = this.fileState(fileName, sourceText);
     const key = `${start}:${end}:${kind ?? ""}`;
@@ -157,6 +182,17 @@ export class CorsaProjectSession {
   }
 
   getSymbolAtPosition(
+    fileName: string,
+    position: number,
+    sourceText?: string,
+  ): CorsaSymbol | undefined {
+    return this.withTransportRecovery(
+      () => this.getSymbolAtPositionUnchecked(fileName, position, sourceText),
+      "looking up a symbol",
+    );
+  }
+
+  private getSymbolAtPositionUnchecked(
     fileName: string,
     position: number,
     sourceText?: string,
@@ -697,6 +733,67 @@ export class CorsaProjectSession {
     return readFileOrUndefined(path) ?? readFileOrUndefined(`${this.runtime.cwd}/${path}`);
   }
 
+  private withTransportRecovery<T>(operation: () => T, action: string): T {
+    if (this.#fatalTransportError) {
+      throw this.#fatalTransportError;
+    }
+    try {
+      return operation();
+    } catch (error) {
+      if (!isRecoverableTransportError(error)) {
+        throw error;
+      }
+      this.resetClientAfterTransportFailure();
+      try {
+        return operation();
+      } catch (retryError) {
+        if (!isRecoverableTransportError(retryError)) {
+          throw retryError;
+        }
+        const fatal = new Error(
+          `corsa type-aware backend exited while ${action}; restarted the session, but the retry failed`,
+        );
+        (fatal as Error & { cause?: unknown }).cause = retryError;
+        this.#fatalTransportError = fatal;
+        throw fatal;
+      }
+    }
+  }
+
+  private resetClientAfterTransportFailure(): void {
+    this.tryCloseClient();
+    this.#client = undefined;
+    this.#config = undefined;
+    this.#snapshot = undefined;
+    this.#projects = [];
+    this.#files.clear();
+    this.clearHandleCaches();
+    this.#typeTextById.clear();
+    this.#lastRefreshMs = 0;
+    this.#supportsOverlayChanges = undefined;
+    this.#fatalTransportError = undefined;
+  }
+
+  private tryReleaseHandle(handle: string): void {
+    try {
+      this.#client?.releaseHandle(handle);
+    } catch (error) {
+      if (!isRecoverableTransportError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private tryCloseClient(): void {
+    try {
+      this.#client?.close();
+    } catch (error) {
+      if (!isRecoverableTransportError(error)) {
+        throw error;
+      }
+    }
+  }
+
   private client(): CorsaApiClient {
     if (!this.#client) {
       this.#client = CorsaApiClient.spawn({
@@ -778,7 +875,7 @@ export class CorsaProjectSession {
     this.#files.clear();
     this.clearHandleCaches();
     if (previous && previous !== this.#snapshot) {
-      this.client().releaseHandle(previous);
+      this.tryReleaseHandle(previous);
     }
     return prepared;
   }
@@ -910,6 +1007,26 @@ function parseNodeHandle(value: string): CorsaNode | undefined {
     return undefined;
   }
   return { id: value, fileName, pos, end, range: [pos, end] };
+}
+
+function isRecoverableTransportError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return (
+    message.includes("process is closed:") ||
+    message.includes("Broken pipe") ||
+    message.includes("EPIPE") ||
+    message.includes("failed to fill whole buffer") ||
+    message.includes("msgpack worker") ||
+    message.includes("msgpack stdin") ||
+    message.includes("msgpack stdout") ||
+    message.includes("jsonrpc reader") ||
+    message.includes("jsonrpc writer") ||
+    message.includes("jsonrpc connection")
+  );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function readFileOrUndefined(path: string): string | undefined {
