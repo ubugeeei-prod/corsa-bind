@@ -132,7 +132,11 @@ function prepareTestCase(
       normalized.languageOptions?.parserOptions as TypeAwareParserOptions | undefined,
     ),
   );
-  const parserOptionsWithRuntime = applyRuleTesterRuntimeDefaults(parserOptions, normalized, config);
+  const parserOptionsWithRuntime = applyRuleTesterRuntimeDefaults(
+    parserOptions,
+    normalized,
+    config,
+  );
   return {
     ...normalized,
     filename,
