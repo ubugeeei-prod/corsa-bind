@@ -745,6 +745,56 @@ describe("corsa oxlint", () => {
       ],
     });
   });
+
+  integrationCase("keeps type-aware RuleTester cases in the shared default project", () => {
+    const rule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`)({
+      name: "class-type-probe",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise getTypeAtLocation inside RuleTester",
+          recommended: "recommended",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          fired: "type-aware probe fired",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        return {
+          ClassDeclaration(node: any) {
+            services.getTypeAtLocation(node);
+            context.report({ node, messageId: "fired" });
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester({
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            corsa: {
+              executable: realCorsaBinary,
+            },
+          },
+        },
+      },
+    });
+
+    tester.run("class-type-probe", rule as any, {
+      valid: ["const x = 1;"],
+      invalid: [
+        {
+          code: "class C {}",
+          errors: [{ messageId: "fired" }],
+        },
+      ],
+    });
+  });
 });
 
 function createNativePreviewPackage(): string {
