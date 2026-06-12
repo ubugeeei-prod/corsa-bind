@@ -71,6 +71,7 @@ export class RuleTester {
 
   run(ruleName: string, rule: Record<string, unknown>, tests: TestCases): void {
     const workspace = createWorkspace();
+    writeWorkspaceConfig(workspace);
     const transformed = {
       valid: tests.valid.map((test, index) =>
         prepareTestCase(workspace, test, this.#config, "valid", index),
@@ -100,20 +101,16 @@ function prepareTestCase(
   config: RuleTesterConfig | undefined,
   group: "valid" | "invalid",
   index: number,
-): string | TestCase {
+): TestCase {
   const caseWorkspace = resolve(workspace, `${group}-${index}`);
-  if (typeof test === "string") {
-    const filename = resolve(caseWorkspace, "case.ts");
-    writeFixture(filename, test);
-    return test;
-  }
-  const filename = resolveCaseFilename(caseWorkspace, test.filename, "case.ts");
-  const projectRoot = isAbsolute(test.filename ?? "") ? dirname(filename) : caseWorkspace;
-  writeFixture(filename, test.code);
+  const normalized = typeof test === "string" ? ({ code: test } as TestCase) : test;
+  const filename = resolveCaseFilename(caseWorkspace, normalized.filename, "case.ts");
+  const projectRoot = isAbsolute(normalized.filename ?? "") ? dirname(filename) : workspace;
+  writeFixture(filename, normalized.code, projectRoot);
   const testerConfig = config;
   const baseSettings = testerConfig?.settings?.corsaOxlint;
   const caseSettings = (
-    test.settings as {
+    normalized.settings as {
       corsaOxlint?: CorsaOxlintSettings;
     }
   )?.corsaOxlint;
@@ -132,25 +129,29 @@ function prepareTestCase(
     ),
     mergeTypeAwareParserOptions(
       config?.languageOptions?.parserOptions as TypeAwareParserOptions | undefined,
-      test.languageOptions?.parserOptions as TypeAwareParserOptions | undefined,
+      normalized.languageOptions?.parserOptions as TypeAwareParserOptions | undefined,
     ),
   );
-  const parserOptionsWithRuntime = applyRuleTesterRuntimeDefaults(parserOptions, test, config);
+  const parserOptionsWithRuntime = applyRuleTesterRuntimeDefaults(
+    parserOptions,
+    normalized,
+    config,
+  );
   return {
-    ...test,
+    ...normalized,
     filename,
     settings: {
       ...testerConfig?.settings,
-      ...test.settings,
+      ...normalized.settings,
       corsaOxlint: {
         ...testerConfig?.settings?.corsaOxlint,
-        ...(test.settings as { corsaOxlint?: CorsaOxlintSettings })?.corsaOxlint,
+        ...(normalized.settings as { corsaOxlint?: CorsaOxlintSettings })?.corsaOxlint,
         parserOptions: parserOptionsWithRuntime,
       },
     } as never,
     languageOptions: {
       ...config?.languageOptions,
-      ...test.languageOptions,
+      ...normalized.languageOptions,
       parserOptions: {
         ...parserOptionsWithRuntime,
       } as never,
@@ -197,10 +198,18 @@ function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
   }
 }
 
-function writeFixture(filename: string, code: string): void {
+function writeWorkspaceConfig(workspace: string): void {
+  writeProjectConfig(resolve(workspace, "tsconfig.json"));
+}
+
+function writeFixture(filename: string, code: string, projectRoot: string): void {
   mkdirSync(dirname(filename), { recursive: true });
   writeFileSync(filename, code);
-  const configPath = resolve(dirname(filename), "tsconfig.json");
+  writeProjectConfig(resolve(projectRoot, "tsconfig.json"));
+}
+
+function writeProjectConfig(configPath: string): void {
+  mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(
     configPath,
     JSON.stringify(
