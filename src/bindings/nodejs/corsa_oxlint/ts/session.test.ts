@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const clients: FakeClient[] = [];
+const clientSetups: ((client: FakeClient) => void)[] = [];
 
 class FakeClient {
   readonly initialize = vi.fn();
@@ -27,6 +28,10 @@ class FakeClient {
     }
     return undefined;
   });
+
+  constructor() {
+    clientSetups.shift()?.(this);
+  }
 }
 
 vi.mock("@corsa-bind/napi", () => ({
@@ -42,6 +47,10 @@ vi.mock("@corsa-bind/napi", () => ({
 const { CorsaProjectSession } = await import("./session");
 
 describe("CorsaProjectSession", () => {
+  beforeEach(() => {
+    clientSetups.length = 0;
+  });
+
   it("reuses the current snapshot when visiting a new unchanged file", () => {
     clients.length = 0;
     const runtime = {
@@ -203,5 +212,69 @@ describe("CorsaProjectSession", () => {
     });
 
     expect(session.typeToString(type as never)).toBe("Serializable");
+  });
+
+  it("restarts the client once when a type lookup sees a closed transport", () => {
+    clients.length = 0;
+    clientSetups.push((client) => {
+      client.getTypeAtPosition.mockImplementationOnce(() => {
+        throw new Error("process is closed: msgpack stdout");
+      });
+    });
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    const type = session.getTypeAtPosition("/tmp/one.ts", 0);
+
+    expect(type?.id).toBe("type-1");
+    expect(clients).toHaveLength(2);
+    expect(clients[0]?.close).toHaveBeenCalled();
+    expect(clients[1]?.updateSnapshot).toHaveBeenCalledTimes(1);
+    expect(clients[1]?.getTypeAtPosition).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses transport-close errors while closing the session", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.releaseHandle.mockImplementationOnce(() => {
+      throw new Error("process is closed: msgpack stdin");
+    });
+    client.close.mockImplementationOnce(() => {
+      throw new Error("Broken pipe (os error 32)");
+    });
+
+    expect(() => session.close()).not.toThrow();
   });
 });

@@ -39,6 +39,9 @@ fn apply_ancestor_facts(node: &mut LintNode) {
                 "__nearestFunctionAsync",
                 json!(async_value),
             );
+            if node.kind == "ReturnStatement" && async_value {
+                insert_if_absent(&mut node.fields, "__inAsyncScope", json!(true));
+            }
         }
     }
 

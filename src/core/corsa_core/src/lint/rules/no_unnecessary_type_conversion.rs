@@ -370,9 +370,10 @@ fn report_builtin_conversion_call(ctx: &mut RuleContext<'_>, node: &LintNode) {
         _ => return,
     };
 
-    // The callee must resolve to the global builtin, not a shadowing local. The
-    // host computes this via `IsBuiltinSymbolLike` and reports `__calleeIsGlobalBuiltin`.
-    if node.field_bool("__calleeIsGlobalBuiltin") != Some(true) {
+    // The host may explicitly mark a shadowing local. When no symbol fact is
+    // available, keep linting the known global constructor names instead of
+    // silently dropping syntax-only cases like `String('value')`.
+    if node.field_bool("__calleeIsGlobalBuiltin") == Some(false) {
         return;
     }
 
@@ -709,6 +710,35 @@ mod tests {
             }
         }));
         assert!(run(&node).is_empty());
+    }
+
+    #[test]
+    fn reports_string_call_when_builtin_fact_is_absent() {
+        let node = from(json!({
+            "kind": "CallExpression",
+            "range": { "start": 0, "end": 14 },
+            "children": {
+                "callee": {
+                    "kind": "Identifier",
+                    "range": { "start": 0, "end": 6 },
+                    "fields": { "name": "String" },
+                    "text": "String"
+                }
+            },
+            "childLists": {
+                "arguments": [
+                    {
+                        "kind": "Literal",
+                        "range": { "start": 7, "end": 13 },
+                        "typeTexts": ["string"],
+                        "text": "'asdf'"
+                    }
+                ]
+            }
+        }));
+        let diags = run(&node);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].message_id, "unnecessaryTypeConversion");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { RuleTester as OxlintRuleTester } from "oxlint/plugins-dev";
 
@@ -17,6 +17,10 @@ export type RuleTesterConfig = TesterConfig & {
     readonly corsaOxlint?: CorsaOxlintSettings;
     readonly [key: string]: unknown;
   };
+};
+type TestLifecycleGlobal = typeof globalThis & {
+  after?: (callback: () => void) => unknown;
+  afterAll?: (callback: () => void) => unknown;
 };
 
 const cleanupDirs = new Set<string>();
@@ -66,20 +70,26 @@ export class RuleTester {
   }
 
   run(ruleName: string, rule: Record<string, unknown>, tests: TestCases): void {
+    const workspace = createWorkspace();
     const transformed = {
       valid: tests.valid.map((test, index) =>
-        prepareTestCase(createWorkspace(), test, this.#config, "valid", index),
+        prepareTestCase(workspace, test, this.#config, "valid", index),
       ),
       invalid: tests.invalid.map((test, index) =>
-        prepareTestCase(createWorkspace(), test, this.#config, "invalid", index),
+        prepareTestCase(workspace, test, this.#config, "invalid", index),
       ),
     };
-    this.#inner.run(ruleName, decorateRule(rule as never) as never, transformed as TestCases);
+    try {
+      this.#inner.run(ruleName, decorateRule(rule as never) as never, transformed as TestCases);
+    } finally {
+      cleanupWorkspace(workspace);
+    }
   }
 }
 
 function createWorkspace(): string {
-  const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-"));
+  const root = process.env.CORSA_OXLINT_RULE_TESTER_TMPDIR ?? tmpdir();
+  const workspace = mkdtempSync(join(root, "corsa-oxlint-"));
   registerCleanup(workspace);
   return workspace;
 }
@@ -91,12 +101,14 @@ function prepareTestCase(
   group: "valid" | "invalid",
   index: number,
 ): string | TestCase {
+  const caseWorkspace = resolve(workspace, `${group}-${index}`);
   if (typeof test === "string") {
-    const filename = resolve(workspace, `${group}-${index}.ts`);
+    const filename = resolve(caseWorkspace, "case.ts");
     writeFixture(filename, test);
     return test;
   }
-  const filename = resolve(workspace, test.filename ?? `${group}-${index}.ts`);
+  const filename = resolveCaseFilename(caseWorkspace, test.filename, "case.ts");
+  const projectRoot = isAbsolute(test.filename ?? "") ? dirname(filename) : caseWorkspace;
   writeFixture(filename, test.code);
   const testerConfig = config;
   const baseSettings = testerConfig?.settings?.corsaOxlint;
@@ -112,7 +124,7 @@ function prepareTestCase(
         mergeTypeAwareParserOptions(caseSettings, caseSettings?.parserOptions),
       ),
       {
-        tsconfigRootDir: workspace,
+        tsconfigRootDir: projectRoot,
         projectService: {
           allowDefaultProject: ["*.ts", "*.tsx", "*.js", "*.jsx"],
         },
@@ -144,6 +156,17 @@ function prepareTestCase(
       } as never,
     },
   };
+}
+
+function resolveCaseFilename(
+  caseWorkspace: string,
+  filename: string | undefined,
+  fallback: string,
+): string {
+  if (!filename) {
+    return resolve(caseWorkspace, fallback);
+  }
+  return isAbsolute(filename) ? filename : resolve(caseWorkspace, filename);
 }
 
 function applyRuleTesterRuntimeDefaults(
@@ -197,13 +220,36 @@ function writeFixture(filename: string, code: string): void {
 
 function registerCleanup(workspace: string): void {
   cleanupDirs.add(workspace);
+  const afterAll = lifecycleCleanup();
+  if (afterAll) {
+    afterAll(() => cleanupWorkspace(workspace));
+  }
   if (cleanupInstalled) {
     return;
   }
   cleanupInstalled = true;
-  process.on("exit", () => {
-    for (const dir of cleanupDirs) {
-      rmSync(dir, { force: true, recursive: true });
-    }
-  });
+  process.once("beforeExit", cleanupAllWorkspaces);
+  process.once("exit", cleanupAllWorkspaces);
+}
+
+function lifecycleCleanup(): ((callback: () => void) => unknown) | undefined {
+  const testGlobal = globalThis as TestLifecycleGlobal;
+  return typeof testGlobal.afterAll === "function"
+    ? testGlobal.afterAll
+    : typeof testGlobal.after === "function"
+      ? testGlobal.after
+      : undefined;
+}
+
+function cleanupWorkspace(workspace: string): void {
+  if (!cleanupDirs.delete(workspace)) {
+    return;
+  }
+  rmSync(workspace, { force: true, recursive: true });
+}
+
+function cleanupAllWorkspaces(): void {
+  for (const dir of cleanupDirs) {
+    cleanupWorkspace(dir);
+  }
 }

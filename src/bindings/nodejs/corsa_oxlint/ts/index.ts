@@ -15,6 +15,7 @@ export type {
   Rule,
   RuleContext,
   RuleDefinition,
+  RuleDocs,
   RuleDiagnostic,
   RuleMetaWithMessages,
 } from "./plugin";
@@ -30,7 +31,7 @@ type CorsaAstNodeType = keyof typeof CorsaAST_NODE_TYPES;
 
 export type ESTree = ESTree.NodeTypes;
 export namespace ESTree {
-  export type Node = OxlintESTree.Node;
+  type OxlintNode = OxlintESTree.Node;
   type NarrowNode<Candidate, Kind extends string> = Candidate extends {
     readonly type: infer CandidateKind;
   }
@@ -38,7 +39,14 @@ export namespace ESTree {
       ? Candidate & { readonly type: Kind }
       : never
     : never;
-  export type NodeByType<Kind extends string> = NarrowNode<Node, Kind>;
+  export type NodeByType<Kind extends string> = Kind extends string
+    ? NarrowNode<OxlintNode, Kind>
+    : never;
+  export type Node =
+    | {
+        [Kind in CorsaAstNodeType]: NodeByType<Kind>;
+      }[CorsaAstNodeType]
+    | BindingIdentifier;
 
   export type AccessorProperty = NodeByType<"AccessorProperty">;
   export type ArrayExpression = NodeByType<"ArrayExpression">;
@@ -213,6 +221,105 @@ export namespace ESTree {
   export type BindingIdentifier = Omit<OxlintESTree.BindingIdentifier, "typeAnnotation"> & {
     typeAnnotation?: TSTypeAnnotation | null;
   };
+  export type BindingPattern = BindingIdentifier | ObjectPattern | ArrayPattern | AssignmentPattern;
+  export type Class = ClassDeclaration | ClassExpression;
+  export type Function =
+    | FunctionDeclaration
+    | FunctionExpression
+    | TSDeclareFunction
+    | TSEmptyBodyFunctionExpression;
+  export type Declaration =
+    | VariableDeclaration
+    | Function
+    | Class
+    | TSTypeAliasDeclaration
+    | TSInterfaceDeclaration
+    | TSEnumDeclaration
+    | TSModuleDeclaration
+    | TSImportEqualsDeclaration;
+  export type ModuleDeclaration =
+    | ImportDeclaration
+    | ExportAllDeclaration
+    | ExportDefaultDeclaration
+    | ExportNamedDeclaration
+    | TSExportAssignment
+    | TSNamespaceExportDeclaration;
+  export type Statement =
+    | BlockStatement
+    | BreakStatement
+    | ContinueStatement
+    | DebuggerStatement
+    | DoWhileStatement
+    | EmptyStatement
+    | ExpressionStatement
+    | ForInStatement
+    | ForOfStatement
+    | ForStatement
+    | IfStatement
+    | LabeledStatement
+    | ReturnStatement
+    | SwitchStatement
+    | ThrowStatement
+    | TryStatement
+    | WhileStatement
+    | WithStatement
+    | Declaration
+    | ModuleDeclaration;
+  export type Expression =
+    | Literal
+    | TemplateLiteral
+    | Identifier
+    | MetaProperty
+    | Super
+    | ArrayExpression
+    | ArrowFunctionExpression
+    | AssignmentExpression
+    | AwaitExpression
+    | BinaryExpression
+    | CallExpression
+    | ChainExpression
+    | Class
+    | ConditionalExpression
+    | Function
+    | ImportExpression
+    | LogicalExpression
+    | NewExpression
+    | ObjectExpression
+    | SequenceExpression
+    | TaggedTemplateExpression
+    | ThisExpression
+    | UnaryExpression
+    | UpdateExpression
+    | YieldExpression
+    | JSXElement
+    | JSXFragment
+    | TSAsExpression
+    | TSSatisfiesExpression
+    | TSTypeAssertion
+    | TSNonNullExpression
+    | TSInstantiationExpression
+    | MemberExpression;
+  export type SimpleAssignmentTarget =
+    | Identifier
+    | TSAsExpression
+    | TSSatisfiesExpression
+    | TSNonNullExpression
+    | TSTypeAssertion
+    | MemberExpression;
+  export type AssignmentTarget = SimpleAssignmentTarget | ArrayPattern | ObjectPattern;
+  export type ChainElement = CallExpression | TSNonNullExpression | MemberExpression;
+  export type FormalParameter = BindingPattern;
+  export type FormalParameterRest = RestElement;
+  export type ParamPattern = FormalParameter | TSParameterProperty | FormalParameterRest;
+  export type ClassElement =
+    | StaticBlock
+    | MethodDefinition
+    | TSAbstractMethodDefinition
+    | PropertyDefinition
+    | TSAbstractPropertyDefinition
+    | AccessorProperty
+    | TSAbstractAccessorProperty
+    | TSIndexSignature;
   export type NodeTypes = {
     [Kind in CorsaAstNodeType]: NodeByType<Kind>;
   } & {
