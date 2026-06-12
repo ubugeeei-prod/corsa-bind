@@ -72,6 +72,34 @@ describe("corsa oxlint public types", () => {
     expect(narrow).toBeTypeOf("function");
   });
 
+  it("keeps tree-walking fields on public ESTree nodes", () => {
+    function acceptNode(node: ESTree.Node): void {
+      void node;
+    }
+
+    function acceptClassBody(node: ESTree.ClassBody): void {
+      void node;
+    }
+
+    function visit(node: ESTree.Node): void {
+      if (node.parent) {
+        acceptNode(node.parent);
+      }
+      if (node.type === AST_NODE_TYPES.ClassDeclaration) {
+        acceptNode(node.body);
+        acceptNode(node.body.parent);
+        acceptClassBody(node.body);
+        const member = node.body.body[0];
+        if (member) {
+          acceptNode(member);
+          acceptNode(member.parent);
+        }
+      }
+    }
+
+    expect(visit).toBeTypeOf("function");
+  });
+
   it("exports common ESTree union aliases", () => {
     function visitStatement<T extends ESTree.Statement>(statement: T): T {
       return statement;

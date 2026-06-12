@@ -39,8 +39,22 @@ export namespace ESTree {
       ? Candidate & { readonly type: Kind }
       : never
     : never;
+  type RemapNodeField<Value> = Value extends OxlintESTree.BindingIdentifier
+    ? BindingIdentifier
+    : Value extends OxlintNode
+      ? NodeByType<Extract<Value["type"], string>>
+      : Value extends readonly (infer Item)[]
+        ? readonly RemapNodeField<Item>[]
+        : Value extends (infer Item)[]
+          ? RemapNodeField<Item>[]
+          : Value;
+  type RemapNodeShape<Candidate> = Candidate extends object
+    ? {
+        [Key in keyof Candidate]: RemapNodeField<Candidate[Key]>;
+      }
+    : Candidate;
   export type NodeByType<Kind extends string> = Kind extends string
-    ? NarrowNode<OxlintNode, Kind>
+    ? RemapNodeShape<NarrowNode<OxlintNode, Kind>>
     : never;
   export type Node =
     | {
@@ -80,6 +94,7 @@ export namespace ESTree {
   export type ForStatement = NodeByType<"ForStatement">;
   export type FunctionDeclaration = NodeByType<"FunctionDeclaration">;
   export type FunctionExpression = NodeByType<"FunctionExpression">;
+  export type Hashbang = NodeByType<"Hashbang">;
   export type Identifier = NodeByType<"Identifier"> | BindingIdentifier;
   export type IfStatement = NodeByType<"IfStatement">;
   export type ImportAttribute = NodeByType<"ImportAttribute">;
@@ -112,6 +127,7 @@ export namespace ESTree {
   export type NewExpression = NodeByType<"NewExpression">;
   export type ObjectExpression = NodeByType<"ObjectExpression">;
   export type ObjectPattern = NodeByType<"ObjectPattern">;
+  export type ParenthesizedExpression = NodeByType<"ParenthesizedExpression">;
   export type PrivateIdentifier = NodeByType<"PrivateIdentifier">;
   export type Program = NodeByType<"Program">;
   export type Property = NodeByType<"Property">;
@@ -132,6 +148,7 @@ export namespace ESTree {
   export type TryStatement = NodeByType<"TryStatement">;
   export type UnaryExpression = NodeByType<"UnaryExpression">;
   export type UpdateExpression = NodeByType<"UpdateExpression">;
+  export type V8IntrinsicExpression = NodeByType<"V8IntrinsicExpression">;
   export type VariableDeclaration = NodeByType<"VariableDeclaration">;
   export type VariableDeclarator = NodeByType<"VariableDeclarator">;
   export type WhileStatement = NodeByType<"WhileStatement">;
@@ -182,12 +199,16 @@ export namespace ESTree {
   export type TSNamedTupleMember = NodeByType<"TSNamedTupleMember">;
   export type TSNamespaceExportDeclaration = NodeByType<"TSNamespaceExportDeclaration">;
   export type TSNeverKeyword = NodeByType<"TSNeverKeyword">;
+  export type TSJSDocNonNullableType = NodeByType<"TSJSDocNonNullableType">;
+  export type TSJSDocNullableType = NodeByType<"TSJSDocNullableType">;
+  export type TSJSDocUnknownType = NodeByType<"TSJSDocUnknownType">;
   export type TSNonNullExpression = NodeByType<"TSNonNullExpression">;
   export type TSNullKeyword = NodeByType<"TSNullKeyword">;
   export type TSNumberKeyword = NodeByType<"TSNumberKeyword">;
   export type TSObjectKeyword = NodeByType<"TSObjectKeyword">;
   export type TSOptionalType = NodeByType<"TSOptionalType">;
   export type TSParameterProperty = NodeByType<"TSParameterProperty">;
+  export type TSParenthesizedType = NodeByType<"TSParenthesizedType">;
   export type TSPrivateKeyword = NodeByType<"TSPrivateKeyword">;
   export type TSPropertySignature = NodeByType<"TSPropertySignature">;
   export type TSProtectedKeyword = NodeByType<"TSProtectedKeyword">;
@@ -218,7 +239,9 @@ export namespace ESTree {
   export type TSUnknownKeyword = NodeByType<"TSUnknownKeyword">;
   export type TSVoidKeyword = NodeByType<"TSVoidKeyword">;
 
-  export type BindingIdentifier = Omit<OxlintESTree.BindingIdentifier, "typeAnnotation"> & {
+  export type BindingIdentifier = RemapNodeShape<
+    Omit<OxlintESTree.BindingIdentifier, "typeAnnotation">
+  > & {
     typeAnnotation?: TSTypeAnnotation | null;
   };
   export type BindingPattern = BindingIdentifier | ObjectPattern | ArrayPattern | AssignmentPattern;
@@ -285,11 +308,13 @@ export namespace ESTree {
     | LogicalExpression
     | NewExpression
     | ObjectExpression
+    | ParenthesizedExpression
     | SequenceExpression
     | TaggedTemplateExpression
     | ThisExpression
     | UnaryExpression
     | UpdateExpression
+    | V8IntrinsicExpression
     | YieldExpression
     | JSXElement
     | JSXFragment
