@@ -81,9 +81,12 @@ impl RustLintRule for NoUnnecessaryTypeConversionRule {
     }
 }
 
-/// Mirrors Go `doesUnderlyingTypeMatchFlag`: every union part of the operand type
-/// must match the wanted coarse kind. We approximate the checker's type flags with
-/// the rendered type-text classifier used throughout the other type-aware rules.
+/// Mirrors Go `doesUnderlyingTypeMatchFlag`: every union part of the operand
+/// type must match the wanted coarse kind. The host bridge ships rendered
+/// type texts, sourced from the TSGO checker's `typeToString`, rather than
+/// the raw `Type.flags` bitmask; we classify each rendered atom via the
+/// shared `classify_type_text` helper so this rule and the other type-aware
+/// rules stay in lock-step with the upstream classifier.
 fn underlying_type_matches(type_texts: &[String], wanted: TypeTextKind) -> bool {
     if type_texts.is_empty() {
         return false;

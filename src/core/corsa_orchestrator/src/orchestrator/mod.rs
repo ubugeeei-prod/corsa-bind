@@ -18,9 +18,14 @@ pub use api::{ApiOrchestrator, ApiOrchestratorConfig, ApiOrchestratorStats};
 /// Distributed wrapper that replicates overlay and cache state.
 #[cfg(feature = "experimental-distributed")]
 pub use distributed::DistributedApiOrchestrator;
-/// Raft topology and leadership state used by the distributed orchestrator.
+/// Production-grade Raft topology and protocol exports used by the
+/// distributed orchestrator.
 #[cfg(feature = "experimental-distributed")]
-pub use raft::{RaftCluster, RaftRole};
+pub use raft::{
+    ChannelTransport, FileStorage, HardState, InMemoryStorage, InProcessTransport,
+    PersistedLogEntry, RaftCluster, RaftClusterBuilder, RaftConfig, RaftMessage, RaftRole,
+    RaftSnapshot, RaftStorage, RaftTransport,
+};
 /// Serializable state mirrored across the distributed orchestrator cluster.
 #[cfg(feature = "experimental-distributed")]
 pub use state::{ReplicatedCacheEntry, ReplicatedCommand, ReplicatedSnapshot, ReplicatedState};
