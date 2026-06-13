@@ -80,11 +80,7 @@ export class RuleTester {
         prepareTestCase(workspace, test, this.#config, "invalid", index),
       ),
     };
-    try {
-      this.#inner.run(ruleName, decorateRule(rule as never) as never, transformed as TestCases);
-    } finally {
-      cleanupWorkspace(workspace);
-    }
+    this.#inner.run(ruleName, decorateRule(rule as never) as never, transformed as TestCases);
   }
 }
 
