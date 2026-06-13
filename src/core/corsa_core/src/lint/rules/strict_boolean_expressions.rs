@@ -387,9 +387,12 @@ fn analyze_type_parts(parts: &[PartInfo]) -> TypeInfo {
     info
 }
 
-/// Fallback analysis derived from rendered type texts. This approximates the
-/// checker logic when the host has not provided `__conditionTypeParts` (e.g.
-/// in unit tests or hosts that only ship `type_texts`).
+/// Fallback analysis derived from rendered type texts. The primary path runs
+/// `analyze_from_condition_type_parts` against the host-supplied
+/// `__conditionTypeParts` fact, which is sourced directly from the TSGO
+/// checker. This text-based path stays as a stable secondary so unit tests
+/// (and any third-party host that has not been updated to ship the full fact
+/// payload) keep producing correct results for the common cases.
 fn analyze_from_type_texts(node: &LintNode) -> TypeInfo {
     let mut parts: Vec<PartInfo> = Vec::new();
 

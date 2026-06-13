@@ -74,8 +74,10 @@ pub mod orchestrator {
     pub use corsa_orchestrator::{ApiOrchestrator, ApiOrchestratorConfig, ApiOrchestratorStats};
     #[cfg(feature = "experimental-distributed")]
     pub use corsa_orchestrator::{
-        DistributedApiOrchestrator, RaftCluster, RaftRole, ReplicatedCacheEntry, ReplicatedCommand,
-        ReplicatedSnapshot, ReplicatedState,
+        ChannelTransport, DistributedApiOrchestrator, FileStorage, HardState, InMemoryStorage,
+        InProcessTransport, PersistedLogEntry, RaftCluster, RaftClusterBuilder, RaftConfig,
+        RaftMessage, RaftRole, RaftSnapshot, RaftStorage, RaftTransport, ReplicatedCacheEntry,
+        ReplicatedCommand, ReplicatedSnapshot, ReplicatedState,
     };
 }
 

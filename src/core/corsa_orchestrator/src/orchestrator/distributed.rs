@@ -13,12 +13,16 @@ use lsp_types::Uri;
 use serde::{Serialize, de::DeserializeOwned};
 use std::{future::Future, sync::Arc, time::Duration};
 
-/// Distributed orchestrator that mirrors state through an in-process Raft core.
+/// Distributed orchestrator that mirrors state through a Raft cluster.
 ///
 /// This type layers replication and leader-based mutation ordering on top of
-/// the local [`ApiOrchestrator`]. It is primarily intended for experiments,
-/// tests, and documentation of how `corsa` can coordinate stateful workflows
-/// across nodes.
+/// the local [`ApiOrchestrator`]. The underlying [`RaftCluster`] is the
+/// production-grade Raft implementation provided by this crate: pluggable
+/// storage, pluggable transport, randomized election timing, runtime
+/// membership changes, and snapshot-based log compaction are all
+/// available. The public `DistributedApiOrchestrator` surface itself
+/// remains gated by the `experimental-distributed` cargo feature while
+/// it stabilizes.
 ///
 /// # Examples
 ///

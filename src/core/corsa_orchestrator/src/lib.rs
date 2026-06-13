@@ -8,10 +8,15 @@
 //! # Entry Points
 //!
 //! - [`ApiOrchestrator`] manages a local pool of API workers plus caches.
-//! - distributed replication is available only with the
-//!   `experimental-distributed` cargo feature.
-//! - `DistributedApiOrchestrator` mirrors that state through an in-process
-//!   Raft implementation for multi-node experiments and tests.
+//! - Distributed replication is gated behind the `experimental-distributed`
+//!   cargo feature while the higher-level [`orchestrator::DistributedApiOrchestrator`]
+//!   public surface stabilizes. The underlying Raft implementation,
+//!   exposed as [`orchestrator::RaftCluster`], is itself production-grade:
+//!   it carries pluggable [`orchestrator::RaftStorage`] and
+//!   [`orchestrator::RaftTransport`] traits, implements log replication
+//!   with the conflict-index backfill optimisation, supports randomized
+//!   election timing, runtime membership changes, and snapshot-based log
+//!   compaction.
 
 /// Re-exports the typed stdio API client layer used by the orchestrators.
 pub mod api {
