@@ -558,7 +558,7 @@ impl Task for UnitApiTask {
                 {
                     return block_on(snapshot.release()).map_err(into_napi_error);
                 }
-                let params = serde_json::json!({ "handle": handle });
+                let params = release_handle_params(handle.as_str());
                 let _ = block_on(self.client.raw_json_request("release", params))
                     .map_err(into_napi_error)?;
                 Ok(())
@@ -1180,7 +1180,7 @@ impl CorsaApiClient {
         {
             return block_on(snapshot.release()).map_err(into_napi_error);
         }
-        let params = serde_json::json!({ "handle": handle });
+        let params = release_handle_params(handle.as_str());
         let _ =
             block_on(self.inner.raw_json_request("release", params)).map_err(into_napi_error)?;
         Ok(())
@@ -2637,6 +2637,23 @@ fn call_json_blocking(client: &ApiClient, method: &str, params: Option<Value>) -
     let response = block_on(client.raw_json_request(method, optional_value(params)))
         .map_err(into_napi_error)?;
     Ok(response)
+}
+
+fn release_handle_params(handle: &str) -> Value {
+    match parse_numeric_snapshot_handle(handle) {
+        Some(snapshot) => serde_json::json!({ "handle": handle, "snapshot": snapshot }),
+        None => serde_json::json!({ "handle": handle }),
+    }
+}
+
+fn parse_numeric_snapshot_handle(handle: &str) -> Option<u64> {
+    if handle.is_empty() || (handle.len() > 1 && handle.starts_with('0')) {
+        return None;
+    }
+    handle
+        .bytes()
+        .all(|byte| byte.is_ascii_digit())
+        .then(|| handle.parse().ok())?
 }
 
 #[cfg(test)]

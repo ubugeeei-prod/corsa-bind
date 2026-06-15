@@ -466,7 +466,7 @@ impl ApiClient {
         }
     }
 
-    pub(crate) async fn release_handle(&self, handle: &str) -> Result<()> {
+    pub(crate) async fn release_handle(&self, handle: &super::SnapshotHandle) -> Result<()> {
         self.driver
             .release_handle(handle, self.profiler.as_ref())
             .await?;
