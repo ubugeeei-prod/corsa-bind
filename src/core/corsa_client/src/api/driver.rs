@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::{sync::Arc, time::Instant};
 
 use super::{
+    SnapshotHandle,
     msgpack_worker::MsgpackWorker,
     profiling::{ApiProfileEvent, ApiProfilePhase, SharedProfiler, profile},
     requests_core::ReleaseRequest,
@@ -39,7 +40,7 @@ impl ClientDriver {
             Self::JsonRpc { rpc, .. } => {
                 if let Some(profiler) = profiler {
                     let started = Instant::now();
-                    let params = serde_json::to_value(params)?;
+                    let params = serialize_api_params(params)?;
                     record_profile(
                         profiler,
                         method,
@@ -67,13 +68,16 @@ impl ClientDriver {
                     );
                     Ok(response)
                 } else {
-                    rpc.request(method, params).await
+                    let params = serialize_api_params(params)?;
+                    let value = rpc.request_value(method, params).await?;
+                    Ok(serde_json::from_value(value)?)
                 }
             }
             Self::Msgpack { worker } => {
                 let payload = if let Some(profiler) = profiler {
                     let started = Instant::now();
-                    let payload = serde_json::to_vec(params)?;
+                    let params = serialize_api_params(params)?;
+                    let payload = serde_json::to_vec(&params)?;
                     record_profile(
                         profiler,
                         method,
@@ -83,7 +87,8 @@ impl ClientDriver {
                     );
                     payload
                 } else {
-                    serde_json::to_vec(params)?
+                    let params = serialize_api_params(params)?;
+                    serde_json::to_vec(&params)?
                 };
                 let started = profiler.map(|_| Instant::now());
                 let response = worker.request(method, payload).await?;
@@ -129,7 +134,7 @@ impl ClientDriver {
             Self::JsonRpc { rpc, .. } => {
                 let params = if let Some(profiler) = profiler {
                     let started = Instant::now();
-                    let params = serde_json::to_value(params)?;
+                    let params = serialize_api_params(params)?;
                     record_profile(
                         profiler,
                         method,
@@ -139,7 +144,7 @@ impl ClientDriver {
                     );
                     params
                 } else {
-                    serde_json::to_value(params)?
+                    serialize_api_params(params)?
                 };
                 let started = profiler.map(|_| Instant::now());
                 let value = rpc.request_value(method, params).await?;
@@ -176,7 +181,8 @@ impl ClientDriver {
             Self::Msgpack { worker } => {
                 let payload = if let Some(profiler) = profiler {
                     let started = Instant::now();
-                    let payload = serde_json::to_vec(params)?;
+                    let params = serialize_api_params(params)?;
+                    let payload = serde_json::to_vec(&params)?;
                     record_profile(
                         profiler,
                         method,
@@ -186,7 +192,8 @@ impl ClientDriver {
                     );
                     payload
                 } else {
-                    serde_json::to_vec(params)?
+                    let params = serialize_api_params(params)?;
+                    serde_json::to_vec(&params)?
                 };
                 let started = profiler.map(|_| Instant::now());
                 let response = worker.request(method, payload).await?;
@@ -247,10 +254,13 @@ impl ClientDriver {
 
     pub(crate) async fn release_handle(
         &self,
-        handle: &str,
+        handle: &SnapshotHandle,
         profiler: Option<&SharedProfiler>,
     ) -> Result<()> {
-        let request = ReleaseRequest { handle };
+        let request = ReleaseRequest {
+            handle: handle.as_str(),
+            snapshot: handle,
+        };
         let _: Value = self.request_typed("release", &request, profiler).await?;
         Ok(())
     }
@@ -283,6 +293,68 @@ impl ClientDriver {
     }
 }
 
+fn serialize_api_params<P>(params: &P) -> Result<Value>
+where
+    P: Serialize + ?Sized,
+{
+    let mut value = serde_json::to_value(params)?;
+    encode_numeric_api_handles(&mut value);
+    Ok(value)
+}
+
+fn encode_numeric_api_handles(value: &mut Value) {
+    match value {
+        Value::Object(fields) => {
+            for (key, value) in fields {
+                if is_numeric_api_handle_field(key) {
+                    encode_numeric_api_handle_value(value);
+                } else {
+                    encode_numeric_api_handles(value);
+                }
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                encode_numeric_api_handles(value);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+fn encode_numeric_api_handle_value(value: &mut Value) {
+    match value {
+        Value::String(raw) => {
+            if let Some(number) = parse_numeric_api_handle(raw) {
+                *value = Value::Number(number.into());
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                encode_numeric_api_handle_value(value);
+            }
+        }
+        Value::Object(_) => encode_numeric_api_handles(value),
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
+fn is_numeric_api_handle_field(key: &str) -> bool {
+    matches!(
+        key,
+        "snapshot" | "symbol" | "symbols" | "type" | "types" | "signature" | "signatures"
+    )
+}
+
+fn parse_numeric_api_handle(raw: &str) -> Option<u64> {
+    if raw.is_empty() || (raw.len() > 1 && raw.starts_with('0')) {
+        return None;
+    }
+    raw.bytes()
+        .all(|byte| byte.is_ascii_digit())
+        .then(|| raw.parse().ok())?
+}
+
 fn record_profile(
     profiler: &SharedProfiler,
     method: &str,
@@ -299,4 +371,68 @@ fn record_profile(
             duration,
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::serialize_api_params;
+    use crate::api::{
+        NodeHandle, ProjectHandle, SignatureHandle, SnapshotHandle, SymbolHandle, TypeHandle,
+    };
+    use serde::Serialize;
+    use serde_json::json;
+
+    #[derive(Serialize)]
+    struct Params {
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+        symbols: Vec<SymbolHandle>,
+        #[serde(rename = "type")]
+        type_handle: TypeHandle,
+        signature: SignatureHandle,
+        location: NodeHandle,
+    }
+
+    #[test]
+    fn serializes_numeric_api_handles_as_numbers_for_wire_requests() {
+        let params = serialize_api_params(&Params {
+            snapshot: SnapshotHandle::from("1"),
+            project: ProjectHandle::from("project-1"),
+            symbol: SymbolHandle::from("2"),
+            symbols: vec![SymbolHandle::from("3")],
+            type_handle: TypeHandle::from("4"),
+            signature: SignatureHandle::from("5"),
+            location: NodeHandle::from("1.2.3./workspace/main.ts"),
+        })
+        .unwrap();
+
+        assert_eq!(params["snapshot"], json!(1));
+        assert_eq!(params["project"], json!("project-1"));
+        assert_eq!(params["symbol"], json!(2));
+        assert_eq!(params["symbols"], json!([3]));
+        assert_eq!(params["type"], json!(4));
+        assert_eq!(params["signature"], json!(5));
+        assert_eq!(params["location"], json!("1.2.3./workspace/main.ts"));
+    }
+
+    #[test]
+    fn leaves_non_numeric_api_handles_as_strings_for_wire_requests() {
+        let params = serialize_api_params(&Params {
+            snapshot: SnapshotHandle::from("snapshot-1"),
+            project: ProjectHandle::from("project-1"),
+            symbol: SymbolHandle::from("s0000000000000001"),
+            symbols: vec![SymbolHandle::from("s0000000000000002")],
+            type_handle: TypeHandle::from("t0000000000000001"),
+            signature: SignatureHandle::from("sig-1"),
+            location: NodeHandle::from("1.2.3./workspace/main.ts"),
+        })
+        .unwrap();
+
+        assert_eq!(params["snapshot"], json!("snapshot-1"));
+        assert_eq!(params["symbol"], json!("s0000000000000001"));
+        assert_eq!(params["symbols"], json!(["s0000000000000002"]));
+        assert_eq!(params["type"], json!("t0000000000000001"));
+        assert_eq!(params["signature"], json!("sig-1"));
+    }
 }

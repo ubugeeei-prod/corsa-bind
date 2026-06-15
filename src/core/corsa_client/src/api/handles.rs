@@ -1,6 +1,10 @@
 use crate::{CorsaError, Result};
 use corsa_core::fast::CompactString;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize, Deserializer, Serialize,
+    de::{Unexpected, Visitor},
+};
+use std::fmt;
 
 macro_rules! handle_type {
     ($name:ident) => {
@@ -33,11 +37,100 @@ macro_rules! handle_type {
     };
 }
 
-handle_type!(SnapshotHandle);
+macro_rules! numeric_wire_handle_type {
+    ($name:ident) => {
+        /// Opaque handle returned by Corsa.
+        ///
+        /// Handles are lightweight string wrappers and can be passed back to
+        /// follow-up requests without parsing.
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+        #[serde(transparent)]
+        pub struct $name(pub CompactString);
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                deserialize_string_or_number_handle(deserializer).map(Self)
+            }
+        }
+
+        impl $name {
+            /// Returns the raw string representation of the handle.
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                Self(CompactString::from(value))
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                Self(CompactString::from(value))
+            }
+        }
+    };
+}
+
+fn deserialize_string_or_number_handle<'de, D>(
+    deserializer: D,
+) -> std::result::Result<CompactString, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct HandleVisitor;
+
+    impl Visitor<'_> for HandleVisitor {
+        type Value = CompactString;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a string or non-negative integer handle")
+        }
+
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(CompactString::from(value))
+        }
+
+        fn visit_string<E>(self, value: String) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(CompactString::from(value))
+        }
+
+        fn visit_u64<E>(self, value: u64) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(CompactString::from(value.to_string()))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            let value = u64::try_from(value)
+                .map_err(|_| E::invalid_value(Unexpected::Signed(value), &self))?;
+            self.visit_u64(value)
+        }
+    }
+
+    deserializer.deserialize_any(HandleVisitor)
+}
+
+numeric_wire_handle_type!(SnapshotHandle);
 handle_type!(ProjectHandle);
-handle_type!(SymbolHandle);
-handle_type!(TypeHandle);
-handle_type!(SignatureHandle);
+numeric_wire_handle_type!(SymbolHandle);
+numeric_wire_handle_type!(TypeHandle);
+numeric_wire_handle_type!(SignatureHandle);
 handle_type!(NodeHandle);
 
 /// Parsed representation of a [`NodeHandle`].

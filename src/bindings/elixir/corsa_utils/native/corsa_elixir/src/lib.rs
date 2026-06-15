@@ -610,11 +610,28 @@ fn api_client_release_handle(
         block_on(
             state
                 .inner
-                .raw_json_request("release", json!({ "handle": handle })),
+                .raw_json_request("release", release_handle_params(handle.as_str())),
         )
         .map_err(|error| Error::Term(Box::new(error.to_string())))?;
         Ok(atoms::ok())
     })
+}
+
+fn release_handle_params(handle: &str) -> serde_json::Value {
+    match parse_numeric_snapshot_handle(handle) {
+        Some(snapshot) => json!({ "handle": handle, "snapshot": snapshot }),
+        None => json!({ "handle": handle }),
+    }
+}
+
+fn parse_numeric_snapshot_handle(handle: &str) -> Option<u64> {
+    if handle.is_empty() || (handle.len() > 1 && handle.starts_with('0')) {
+        return None;
+    }
+    handle
+        .bytes()
+        .all(|byte| byte.is_ascii_digit())
+        .then(|| handle.parse().ok())?
 }
 
 #[rustler::nif(schedule = "DirtyIo")]

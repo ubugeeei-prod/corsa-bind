@@ -98,7 +98,7 @@ fn release_handle(
     profiler: Option<&SharedProfiler>,
     handle: SnapshotHandle,
 ) {
-    if let Err(error) = corsa_runtime::block_on(driver.release_handle(handle.as_str(), profiler)) {
+    if let Err(error) = corsa_runtime::block_on(driver.release_handle(&handle, profiler)) {
         warn!(
             "failed to release corsa snapshot `{}`: {error}",
             handle.as_str()
@@ -201,7 +201,7 @@ impl ManagedSnapshot {
         if self.released.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        match self.client.release_handle(self.handle.as_str()).await {
+        match self.client.release_handle(&self.handle).await {
             Ok(()) => Ok(()),
             Err(error) => {
                 self.released.store(false, Ordering::SeqCst);

@@ -26,6 +26,7 @@ pub(crate) struct ParseConfigFileRequest {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ReleaseRequest<'a> {
     pub handle: &'a str,
+    pub snapshot: &'a SnapshotHandle,
 }
 
 #[derive(Clone, Debug, Serialize)]
