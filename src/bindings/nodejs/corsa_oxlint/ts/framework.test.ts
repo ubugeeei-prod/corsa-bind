@@ -795,6 +795,87 @@ describe("corsa oxlint", () => {
       ],
     });
   });
+
+  integrationCase("isolates type-aware RuleTester cases from sibling declarations", () => {
+    const seen = new Map<string, string[]>();
+    const rule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`)({
+      name: "constructor-parameter-probe",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "record constructor parameter symbols per case",
+          recommended: "recommended",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          fired: "type-aware probe fired",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          NewExpression(node: any) {
+            const constructType = services.getTypeAtLocation(node.callee);
+            const signature = constructType
+              ? checker.getSignaturesOfType(constructType, 1)[0]
+              : undefined;
+            seen.set(
+              context.filename,
+              (signature?.parameterSymbols ?? []).map((symbol: any) => symbol.name),
+            );
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester({
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            corsa: {
+              executable: realCorsaBinary,
+            },
+          },
+        },
+      },
+    });
+
+    tester.run("constructor-parameter-probe", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Base {}",
+            "class Foo extends Base {",
+            "  constructor(first: any, siblingParam: string) {",
+            "    super();",
+            "  }",
+            "}",
+            'new Foo("a", "b");',
+          ].join("\n"),
+        },
+        {
+          code: [
+            "class Base {}",
+            "class Foo extends Base {",
+            "  constructor(first: any, actualParam: string) {",
+            "    super();",
+            "  }",
+            "}",
+            'new Foo("a", "b");',
+          ].join("\n"),
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(Array.from(seen.values())).toEqual([
+      ["first", "siblingParam"],
+      ["first", "actualParam"],
+    ]);
+  });
 });
 
 function createNativePreviewPackage(): string {
