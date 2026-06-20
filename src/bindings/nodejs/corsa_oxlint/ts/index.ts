@@ -39,8 +39,17 @@ export namespace ESTree {
       ? Candidate & { readonly type: Kind }
       : never
     : never;
+  type RemapTuple<Value extends readonly unknown[]> = Value extends []
+    ? []
+    : Value extends [infer Head, ...infer Tail]
+      ? [RemapNodeField<Head>, ...RemapTuple<Tail>]
+      : Value extends readonly [infer Head, ...infer Tail]
+        ? readonly [RemapNodeField<Head>, ...RemapTuple<Tail>]
+        : never;
   type RemapNodeField<Value> = Value extends OxlintESTree.BindingIdentifier
     ? BindingIdentifier
+    : Value extends readonly [unknown, ...unknown[]]
+      ? RemapTuple<Value>
     : Value extends OxlintNode
       ? NodeByType<Extract<Value["type"], string>>
       : Value extends readonly (infer Item)[]
