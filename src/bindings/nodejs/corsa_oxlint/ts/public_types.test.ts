@@ -152,10 +152,7 @@ describe("corsa oxlint public types", () => {
       }
     }
 
-    function reportLiteral(
-      context: RuleContext<"x", readonly []>,
-      node: ESTree.Literal,
-    ): void {
+    function reportLiteral(context: RuleContext<"x", readonly []>, node: ESTree.Literal): void {
       acceptNode(node);
       acceptRange(node.range);
       context.report({ node, messageId: "x" });
