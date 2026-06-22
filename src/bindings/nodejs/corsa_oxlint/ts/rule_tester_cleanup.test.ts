@@ -83,10 +83,12 @@ describe("RuleTester cleanup", () => {
       const filename = runCalls[0]?.tests.valid[0]?.filename;
       expect(filename).toBeDefined();
 
-      const workspace = resolve(dirname(filename ?? ""), "..");
+      const caseWorkspace = dirname(filename ?? "");
+      const workspace = resolve(caseWorkspace, "..");
       expect(tempWorkspaces(tempRoot)).toHaveLength(1);
       expect(existsSync(filename ?? "")).toBe(true);
-      expect(existsSync(join(workspace, "tsconfig.json"))).toBe(true);
+      expect(existsSync(join(caseWorkspace, "tsconfig.json"))).toBe(true);
+      expect(existsSync(join(workspace, "tsconfig.json"))).toBe(false);
 
       cleanupCallbacks[0]?.();
 

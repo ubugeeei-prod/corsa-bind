@@ -71,7 +71,6 @@ export class RuleTester {
 
   run(ruleName: string, rule: Record<string, unknown>, tests: TestCases): void {
     const workspace = createWorkspace();
-    writeWorkspaceConfig(workspace);
     const transformed = {
       valid: tests.valid.map((test, index) =>
         prepareTestCase(workspace, test, this.#config, "valid", index),
@@ -101,7 +100,7 @@ function prepareTestCase(
   const caseWorkspace = resolve(workspace, `${group}-${index}`);
   const normalized = typeof test === "string" ? ({ code: test } as TestCase) : test;
   const filename = resolveCaseFilename(caseWorkspace, normalized.filename, "case.ts");
-  const projectRoot = isAbsolute(normalized.filename ?? "") ? dirname(filename) : workspace;
+  const projectRoot = isAbsolute(normalized.filename ?? "") ? dirname(filename) : caseWorkspace;
   writeFixture(filename, normalized.code, projectRoot);
   const testerConfig = config;
   const baseSettings = testerConfig?.settings?.corsaOxlint;
@@ -192,10 +191,6 @@ function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function writeWorkspaceConfig(workspace: string): void {
-  writeProjectConfig(resolve(workspace, "tsconfig.json"));
 }
 
 function writeFixture(filename: string, code: string, projectRoot: string): void {
