@@ -1,6 +1,13 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { AST_NODE_TYPES, defineRule, OxlintUtils, type ESTree, type RuleDocs } from "./index";
+import {
+  AST_NODE_TYPES,
+  defineRule,
+  OxlintUtils,
+  type ESTree,
+  type RuleContext,
+  type RuleDocs,
+} from "./index";
 
 describe("corsa oxlint public types", () => {
   it("surfaces requiresTypeChecking on rule docs", () => {
@@ -124,5 +131,34 @@ describe("corsa oxlint public types", () => {
     expect(visitStatement).toBeTypeOf("function");
     expect(visitExpression).toBeTypeOf("function");
     expect(visitClassElement).toBeTypeOf("function");
+  });
+
+  it("keeps public ESTree nodes assignable to node and report helpers", () => {
+    function acceptNode(node: ESTree.Node): void {
+      void node;
+    }
+
+    function acceptRange(range: [number, number]): void {
+      void range;
+    }
+
+    function visitNestedNodes(
+      method: ESTree.MethodDefinition,
+      klass: ESTree.ClassDeclaration,
+    ): void {
+      acceptNode(method.value);
+      if (klass.superClass) {
+        acceptNode(klass.superClass);
+      }
+    }
+
+    function reportLiteral(context: RuleContext<"x", readonly []>, node: ESTree.Literal): void {
+      acceptNode(node);
+      acceptRange(node.range);
+      context.report({ node, messageId: "x" });
+    }
+
+    expect(visitNestedNodes).toBeTypeOf("function");
+    expect(reportLiteral).toBeTypeOf("function");
   });
 });
