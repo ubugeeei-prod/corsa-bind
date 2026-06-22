@@ -5,11 +5,11 @@ import type {
   Plugin as OxlintPlugin,
   Rule as OxlintRule,
   RuleMeta as OxlintRuleMeta,
-  Visitor,
-  VisitorWithHooks,
 } from "@oxlint/plugins";
 
+import { AST_NODE_TYPES } from "./compat";
 import { resolveTypeAwareParserOptions } from "./context";
+import type { ESTree as PublicESTree } from "./index";
 import { getParserServices } from "./parser_services";
 import type { ContextWithParserOptions, ParserServices } from "./types";
 
@@ -44,6 +44,24 @@ export type RuleMetaWithMessages<MessageId extends string = string> = Omit<
 > & {
   readonly docs?: RuleDocs;
   readonly messages?: Record<MessageId, string>;
+};
+type CorsaAstNodeType = keyof typeof AST_NODE_TYPES;
+type BivariantVisitorHandler<Handler extends (...args: any[]) => any> = {
+  bivarianceHack(...args: Parameters<Handler>): ReturnType<Handler>;
+}["bivarianceHack"];
+type VisitorNode<Kind extends CorsaAstNodeType> = PublicESTree[Kind];
+
+export type Visitor = {
+  [Kind in CorsaAstNodeType]?: BivariantVisitorHandler<(node: VisitorNode<Kind>) => void>;
+} & {
+  [Kind in CorsaAstNodeType as `${Kind}:exit`]?: BivariantVisitorHandler<
+    (node: VisitorNode<Kind>) => void
+  >;
+} & Record<string, BivariantVisitorHandler<(node: PublicESTree.Node) => void> | undefined>;
+
+export type VisitorWithHooks = Visitor & {
+  readonly before?: () => boolean | void;
+  readonly after?: () => void;
 };
 export type RuleDefinition<
   MessageId extends string = string,
@@ -94,8 +112,8 @@ export function defineRule<
   MessageId extends string = string,
   const Options extends readonly unknown[] = readonly unknown[],
 >(rule: RuleDefinition<MessageId, Options>): Rule;
-export function defineRule(rule: Rule): Rule {
-  return defineOxlintRule(decorateRule(rule) as OxlintRule) as Rule;
+export function defineRule(rule: RuleDefinition): Rule {
+  return defineOxlintRule(decorateRule(rule as unknown as Rule) as OxlintRule) as Rule;
 }
 
 export function compatPlugin(plugin: Plugin): Plugin {

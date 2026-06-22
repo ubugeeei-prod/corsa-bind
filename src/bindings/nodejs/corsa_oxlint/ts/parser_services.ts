@@ -9,6 +9,9 @@ import type {
 } from "./types";
 
 const parserServices = new WeakMap<object, ParserServices>();
+type ParserServicesContext = Omit<ContextWithParserOptions, "options"> & {
+  readonly options?: readonly unknown[];
+};
 
 /**
  * Returns type-aware parser services backed by Corsa.
@@ -20,32 +23,33 @@ const parserServices = new WeakMap<object, ParserServices>();
  * ```
  */
 export function getParserServices(
-  context: ContextWithParserOptions,
+  context: ParserServicesContext,
   allowWithoutFullTypeInformation = false,
 ): ParserServices {
   const current = parserServices.get(context);
   if (current) {
     return current;
   }
-  const parserOptions = resolveTypeAwareParserOptions(context);
-  const eslintParserServices = resolveEslintParserServices(context);
+  const typedContext = context as ContextWithParserOptions;
+  const parserOptions = resolveTypeAwareParserOptions(typedContext);
+  const eslintParserServices = resolveEslintParserServices(typedContext);
   if (!parserOptions.corsa && eslintParserServices) {
     const services = createEslintParserServices(eslintParserServices);
     parserServices.set(context, services);
     return services;
   }
   try {
-    const maps = createNodeMaps(context);
-    const program = createProgram(context);
+    const maps = createNodeMaps(typedContext);
+    const program = createProgram(typedContext);
     const services: ParserServicesWithTypeInformation = {
       program,
       ...maps,
       hasFullTypeInformation: true,
       getTypeAtLocation(node) {
-        return createTypeChecker(context).getTypeAtLocation(node);
+        return createTypeChecker(typedContext).getTypeAtLocation(node);
       },
       getSymbolAtLocation(node) {
-        return createTypeChecker(context).getSymbolAtLocation(node);
+        return createTypeChecker(typedContext).getSymbolAtLocation(node);
       },
     };
     parserServices.set(context, services);
@@ -55,8 +59,8 @@ export function getParserServices(
       throw error;
     }
     const fallback: ParserServices = {
-      program: createProgram(context),
-      ...createNodeMaps(context),
+      program: createProgram(typedContext),
+      ...createNodeMaps(typedContext),
       hasFullTypeInformation: false,
       getTypeAtLocation() {
         return undefined;

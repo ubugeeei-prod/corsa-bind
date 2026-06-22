@@ -1,8 +1,6 @@
-import type { Visitor } from "@oxlint/plugins";
-
 import { getParserServices } from "./parser_services";
 import { decorateRule } from "./plugin";
-import type { Rule, RuleMetaWithMessages } from "./plugin";
+import type { Rule, RuleMetaWithMessages, Visitor } from "./plugin";
 import type { ContextWithParserOptions } from "./types";
 
 export type RuleCreatorRule<

@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   AST_NODE_TYPES,
   defineRule,
+  getParserServices,
   OxlintUtils,
   type ESTree,
   type RuleContext,
@@ -160,5 +161,41 @@ describe("corsa oxlint public types", () => {
 
     expect(visitNestedNodes).toBeTypeOf("function");
     expect(reportLiteral).toBeTypeOf("function");
+  });
+
+  it("types visitor callback nodes with public ESTree aliases", () => {
+    type MyClass = ESTree.ClassDeclaration | ESTree.ClassExpression;
+
+    const acceptClass = (node: MyClass): void => {
+      void node;
+    };
+    const acceptNewExpression = (node: ESTree.NewExpression): void => {
+      void node;
+    };
+
+    defineRule({
+      meta: {
+        schema: [],
+        messages: { x: "x" },
+        docs: { requiresTypeChecking: true },
+      },
+      create(context) {
+        const services = getParserServices(context);
+        return {
+          ClassDeclaration(node) {
+            acceptClass(node);
+          },
+          MethodDefinition(node) {
+            services.getTypeAtLocation(node.value);
+          },
+          NewExpression(node) {
+            acceptNewExpression(node);
+          },
+        };
+      },
+    });
+
+    expect(acceptClass).toBeTypeOf("function");
+    expect(acceptNewExpression).toBeTypeOf("function");
   });
 });
