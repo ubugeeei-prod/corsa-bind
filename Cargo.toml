@@ -27,7 +27,7 @@ bumpalo = { version = "3", features = ["collections"] }
 compact_str = { version = "0.9", features = ["serde"] }
 log = "0.4"
 memchr = "2"
-phf = { version = "0.13", features = ["macros"] }
+phf = { version = "0.14", features = ["macros"] }
 rustc-hash = "2"
 smallvec = { version = "1", features = ["serde"] }
 unicode-ident = "1"
