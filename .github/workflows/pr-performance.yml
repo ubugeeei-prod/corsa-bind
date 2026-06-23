@@ -59,37 +59,37 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ steps.bench-ref.outputs.sha }}
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount corsa_ref target sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
           path: .cache/corsa-ref-target
 
       - name: Mount Go build sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
           path: .cache/go-build
 
       - name: Mount npm cache sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-npm-cache-${{ hashFiles('ref/corsa-upstream/package-lock.json', 'bench/cli_compare/package-lock.json') }}
           path: ~/.npm
 
       - name: Mount pnpm store sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-pr-performance-${{ matrix.ref-role }}-ts${{ matrix.typescript.channel }}-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -160,7 +160,7 @@ jobs:
         run: vp run -w bench_tooling_setup
 
       - name: Checkout PR helper scripts
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
@@ -222,7 +222,7 @@ jobs:
     needs: benchmark
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false

@@ -41,31 +41,31 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount corsa_ref target sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
           path: .cache/corsa-ref-target
 
       - name: Mount Go build sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
           path: .cache/go-build
 
       - name: Mount pnpm store sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -135,7 +135,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
@@ -164,21 +164,21 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-native-targets.outputs.matrix) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
         if: ${{ runner.os == 'Linux' }}
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-native-${{ matrix.target }}-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount pnpm store sticky disk
         if: ${{ runner.os == 'Linux' }}
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-native-${{ matrix.target }}-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -256,7 +256,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           persist-credentials: false
