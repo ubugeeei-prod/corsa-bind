@@ -210,6 +210,10 @@ export class CorsaProjectSession {
   }
 
   getSymbol(symbol: string | CorsaSymbol): CorsaSymbol | undefined {
+    return this.withTransportRecovery(() => this.getSymbolUnchecked(symbol), "looking up a symbol");
+  }
+
+  private getSymbolUnchecked(symbol: string | CorsaSymbol): CorsaSymbol | undefined {
     if (typeof symbol !== "string") {
       return this.rememberSymbol(symbol);
     }
@@ -221,23 +225,41 @@ export class CorsaProjectSession {
     if (!typeId || !this.#snapshot) {
       return undefined;
     }
-    const resolved = this.client().getSymbolOfType(this.#snapshot, typeId) as CorsaSymbol | null;
-    return resolved?.id === symbol ? this.rememberUsableSymbol(resolved) : undefined;
+    const resolved = this.getSymbolOfTypeById(typeId);
+    return resolved?.id === symbol ? resolved : undefined;
   }
 
   getSymbolOfType(type: CorsaType): CorsaSymbol | undefined {
+    return this.withTransportRecovery(
+      () => this.getSymbolOfTypeUnchecked(type),
+      "looking up a symbol",
+    );
+  }
+
+  private getSymbolOfTypeUnchecked(type: CorsaType): CorsaSymbol | undefined {
     if (type.symbol) {
       const symbol = this.getSymbol(type.symbol);
       if (isUsableSymbol(symbol)) {
         return symbol;
       }
     }
+    return this.getSymbolOfTypeById(type.id);
+  }
+
+  private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
     if (!this.#snapshot) {
       return undefined;
     }
-    return this.rememberUsableSymbol(
-      this.client().getSymbolOfType(this.#snapshot, type.id) as CorsaSymbol | null,
-    );
+    try {
+      return this.rememberUsableSymbol(
+        this.client().getSymbolOfType(this.#snapshot, typeId) as CorsaSymbol | null,
+      );
+    } catch (error) {
+      if (isStaleHandleError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   getNode(node: string | CorsaNode): CorsaNode | undefined {
@@ -1023,6 +1045,10 @@ function isRecoverableTransportError(error: unknown): boolean {
     message.includes("jsonrpc writer") ||
     message.includes("jsonrpc connection")
   );
+}
+
+function isStaleHandleError(error: unknown): boolean {
+  return errorMessage(error).includes("not found in snapshot registry");
 }
 
 function errorMessage(error: unknown): string {
