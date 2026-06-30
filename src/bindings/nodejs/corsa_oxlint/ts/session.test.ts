@@ -15,6 +15,10 @@ class FakeClient {
     flags: 0,
     texts: ["string"],
   }));
+  readonly getSymbolOfType = vi.fn(() => ({
+    id: "symbol-1",
+    name: "value",
+  }));
   readonly typeToString = vi.fn(() => "type:string");
   readonly releaseHandle = vi.fn();
   readonly close = vi.fn();
@@ -212,6 +216,45 @@ describe("CorsaProjectSession", () => {
     });
 
     expect(session.typeToString(type as never)).toBe("Serializable");
+  });
+
+  it("returns undefined when getSymbolOfType hits a stale handle", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+
+    client.getSymbolOfType.mockImplementationOnce(() => {
+      throw new Error(
+        'protocol error: api: client error: type handle "synthetic-type-argument:1:0:T" not found in snapshot registry',
+      );
+    });
+
+    expect(
+      session.getSymbolOfType({
+        id: "synthetic-type-argument:1:0:T",
+        flags: 0,
+        texts: ["T"],
+      } as never),
+    ).toBeUndefined();
   });
 
   it("restarts the client once when a type lookup sees a closed transport", () => {
