@@ -24,6 +24,30 @@ The design goal is simple: performance-critical pieces live in Rust, `napi-rs`
 bridges them into Node, and end users still get to author custom plugins and
 custom rules in plain JS/TS.
 
+## Plugin-Owned Runtime Resolution
+
+If a plugin ships its own `@typescript/native-preview` dependency, pass a
+module anchor to `definePlugin()` so `corsa-oxlint` can resolve that runtime
+even when package managers like pnpm do not hoist it to the consumer root.
+
+```ts
+import { definePlugin } from "corsa-oxlint";
+
+export default definePlugin({
+  meta: {
+    name: "example-plugin",
+  },
+  resolveFrom: import.meta.url,
+  rules: {
+    // ...
+  },
+});
+```
+
+Consumer overrides still win. `CORSA_EXECUTABLE`,
+`parserOptions.corsa.executable`, and `settings.corsaOxlint` continue to take
+priority over the plugin anchor.
+
 ## Configuration
 
 Oxlint does not expose arbitrary parser options at runtime, so
