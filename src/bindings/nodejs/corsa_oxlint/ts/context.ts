@@ -188,7 +188,10 @@ function asArray(value: string | string[] | undefined): string[] {
 
 function resolveNativePreviewExecutableFrom(anchor: string): string | undefined {
   const requireFromRoot = createRequire(anchor);
-  const packageJsonPath = resolveOptional(requireFromRoot, "@typescript/native-preview/package.json");
+  const packageJsonPath = resolveOptional(
+    requireFromRoot,
+    "@typescript/native-preview/package.json",
+  );
   if (packageJsonPath) {
     const binPath = nativePreviewBinPath(packageJsonPath);
     if (binPath && existsSync(binPath)) {
@@ -252,7 +255,8 @@ function applyTypeAwareParserOptionDefaults(
   if (defaults.corsa === true && resolved.corsa?.executable === undefined) {
     resolved = mergeTypeAwareParserOptions(resolved, {
       corsa: {
-        executable: process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir, undefined, resolveFrom),
+        executable:
+          process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir, undefined, resolveFrom),
       },
     });
   }
