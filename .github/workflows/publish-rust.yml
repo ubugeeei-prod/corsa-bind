@@ -37,30 +37,30 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount corsa_ref target sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
           path: .cache/corsa-ref-target
 
       - name: Mount Go build sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
           path: .cache/go-build
 
       - name: Mount pnpm store sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -79,7 +79,7 @@ jobs:
         run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
 
       - name: Setup Go for pinned Corsa ref
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: ref/corsa-upstream/go.mod
           cache: false
@@ -132,12 +132,12 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@2b7a836cbb2b48f4780ae76a7b6fd79d545fb54a # v1.3.0
+        uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-publish-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
@@ -169,7 +169,7 @@ jobs:
       - name: Exchange OIDC token for crates.io token
         if: ${{ github.event_name == 'push' || inputs.auth_mode == 'trusted' }}
         id: auth
-        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
 
       - name: Publish ordered crates with trusted publishing
         if: ${{ github.event_name == 'push' || inputs.auth_mode == 'trusted' }}
