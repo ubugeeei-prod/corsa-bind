@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -161,6 +162,79 @@ describe("corsa oxlint", () => {
         parserProjectService: true,
         languageProjectService: true,
       });
+    } finally {
+      if (previousExecutable == null) {
+        delete process.env.CORSA_EXECUTABLE;
+      } else {
+        process.env.CORSA_EXECUTABLE = previousExecutable;
+      }
+    }
+  });
+
+  it("uses plugin resolveFrom to fill the default corsa executable", () => {
+    const previousExecutable = process.env.CORSA_EXECUTABLE;
+    delete process.env.CORSA_EXECUTABLE;
+    const consumerRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-consumer-"));
+    const pluginRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-plugin-"));
+    cleanupDirs.add(consumerRoot);
+    cleanupDirs.add(pluginRoot);
+
+    const packageDir = resolve(pluginRoot, "node_modules/@typescript/native-preview");
+    const binPath = resolve(packageDir, "bin/tsgo.js");
+    mkdirSync(dirname(binPath), { recursive: true });
+    writeFileSync(
+      resolve(packageDir, "package.json"),
+      JSON.stringify({
+        name: "@typescript/native-preview",
+        bin: {
+          tsgo: "bin/tsgo.js",
+        },
+      }),
+    );
+    writeFileSync(binPath, "#!/usr/bin/env node\n");
+
+    const pluginEntry = resolve(pluginRoot, "dist/plugin.js");
+    mkdirSync(dirname(pluginEntry), { recursive: true });
+    writeFileSync(pluginEntry, "export default {};\n");
+
+    let seen: string | undefined;
+    const plugin = definePlugin({
+      meta: { name: "oxlint-plugin-corsa-demo" },
+      resolveFrom: pathToFileURL(pluginEntry).href,
+      rules: {
+        demo: {
+          meta: {
+            docs: {
+              requiresTypeChecking: true,
+            },
+            messages: {
+              demo: "demo",
+            },
+            schema: [],
+          },
+          create(context: any) {
+            seen = context.parserOptions.corsa?.executable;
+            return {};
+          },
+        },
+      },
+    });
+
+    try {
+      plugin.rules.demo.create!({
+        cwd: consumerRoot,
+        filename: resolve(consumerRoot, "fixture.ts"),
+        languageOptions: {
+          parserOptions: {},
+        },
+        report() {},
+        settings: {},
+        sourceCode: {
+          text: "const fixture = 1;",
+        },
+      } as any);
+
+      expect(seen).toBe(realpathSync(binPath));
     } finally {
       if (previousExecutable == null) {
         delete process.env.CORSA_EXECUTABLE;

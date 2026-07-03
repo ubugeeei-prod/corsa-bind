@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -133,5 +134,34 @@ describe("context", () => {
     writeFileSync(binPath, "#!/usr/bin/env node\n");
 
     expect(defaultCorsaExecutable(workspace)).toBe(realpathSync(binPath));
+  });
+
+  it("falls back to a plugin anchor when native-preview is only installed next to the plugin", () => {
+    const consumerRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-consumer-"));
+    const pluginRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-plugin-"));
+    cleanupDirs.add(consumerRoot);
+    cleanupDirs.add(pluginRoot);
+
+    const packageDir = resolve(pluginRoot, "node_modules/@typescript/native-preview");
+    const binPath = resolve(packageDir, "bin/tsgo.js");
+    mkdirSync(dirname(binPath), { recursive: true });
+    writeFileSync(
+      resolve(packageDir, "package.json"),
+      JSON.stringify({
+        name: "@typescript/native-preview",
+        bin: {
+          tsgo: "bin/tsgo.js",
+        },
+      }),
+    );
+    writeFileSync(binPath, "#!/usr/bin/env node\n");
+
+    const pluginEntry = resolve(pluginRoot, "dist/plugin.js");
+    mkdirSync(dirname(pluginEntry), { recursive: true });
+    writeFileSync(pluginEntry, "export default {};\n");
+
+    expect(defaultCorsaExecutable(consumerRoot, "linux", pathToFileURL(pluginEntry).href)).toBe(
+      realpathSync(binPath),
+    );
   });
 });

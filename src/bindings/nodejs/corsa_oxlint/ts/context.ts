@@ -21,8 +21,14 @@ const DEFAULT_TS_CONFIG = {
   },
 };
 
-export function defaultCorsaExecutable(rootDir: string, platform = process.platform): string {
-  const nativePreview = resolveNativePreviewExecutable(rootDir);
+export function defaultCorsaExecutable(
+  rootDir: string,
+  platform = process.platform,
+  resolveFrom?: string,
+): string {
+  const nativePreview =
+    resolveNativePreviewExecutableFrom(resolve(rootDir, "package.json")) ??
+    (resolveFrom ? resolveNativePreviewExecutableFrom(resolveFrom) : undefined);
   if (nativePreview) {
     return nativePreview;
   }
@@ -33,7 +39,7 @@ export function defaultCorsaExecutable(rootDir: string, platform = process.platf
   throw new Error(
     [
       "corsa-oxlint could not locate a Corsa runtime executable.",
-      "Install `@typescript/native-preview`, set `CORSA_EXECUTABLE`, or configure `parserOptions.corsa.executable`.",
+      "Install `@typescript/native-preview`, set `CORSA_EXECUTABLE`, configure `parserOptions.corsa.executable`, or pass `resolveFrom` to `definePlugin`.",
     ].join(" "),
   );
 }
@@ -70,13 +76,14 @@ export function resolveProjectConfig(context: ContextWithParserOptions): Resolve
 export function resolveTypeAwareParserOptions(
   context: ContextWithParserOptions,
   defaults: TypeAwareParserOptionDefaults = {},
+  resolveFrom?: string,
 ): TypeAwareParserOptions {
   const parserOptions = mergeTypeAwareParserOptions(
     resolveSettingsParserOptions(context.settings?.corsaOxlint),
     mergeTypeAwareParserOptions(context.parserOptions, context.languageOptions?.parserOptions),
   );
   const rootDir = resolve(parserOptions.tsconfigRootDir ?? context.cwd);
-  return applyTypeAwareParserOptionDefaults(parserOptions, defaults, rootDir);
+  return applyTypeAwareParserOptionDefaults(parserOptions, defaults, rootDir, resolveFrom);
 }
 
 type TypeAwareParserOptionDefaults = {
@@ -179,8 +186,8 @@ function asArray(value: string | string[] | undefined): string[] {
   return value ? (Array.isArray(value) ? value : [value]) : [];
 }
 
-function resolveNativePreviewExecutable(rootDir: string): string | undefined {
-  const requireFromRoot = createRequire(resolve(rootDir, "package.json"));
+function resolveNativePreviewExecutableFrom(anchor: string): string | undefined {
+  const requireFromRoot = createRequire(anchor);
   const packageJsonPath = resolveOptional(
     requireFromRoot,
     "@typescript/native-preview/package.json",
@@ -232,6 +239,7 @@ function applyTypeAwareParserOptionDefaults(
   parserOptions: TypeAwareParserOptions,
   defaults: TypeAwareParserOptionDefaults,
   rootDir: string,
+  resolveFrom?: string,
 ): TypeAwareParserOptions {
   let resolved = parserOptions;
   if (
@@ -247,7 +255,8 @@ function applyTypeAwareParserOptionDefaults(
   if (defaults.corsa === true && resolved.corsa?.executable === undefined) {
     resolved = mergeTypeAwareParserOptions(resolved, {
       corsa: {
-        executable: process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir),
+        executable:
+          process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir, undefined, resolveFrom),
       },
     });
   }

@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   AST_NODE_TYPES,
+  definePlugin,
   defineRule,
   getParserServices,
   OxlintUtils,
@@ -65,6 +66,19 @@ describe("corsa oxlint public types", () => {
     const requiresTypeChecking: boolean | undefined = created.meta.docs.requiresTypeChecking;
     expect(requiresTypeChecking).toBe(true);
     expect(created.meta.docs.url).toBe("https://example.com/typed-docs");
+  });
+
+  it("accepts resolveFrom on plugin definitions", () => {
+    const plugin = definePlugin({
+      meta: {
+        name: "typed-plugin",
+      },
+      resolveFrom: import.meta.url,
+      rules: {},
+    });
+
+    const resolveFrom: string | undefined = plugin.resolveFrom;
+    expect(resolveFrom).toBe(import.meta.url);
   });
 
   it("narrows ESTree.Node through AST_NODE_TYPES checks", () => {

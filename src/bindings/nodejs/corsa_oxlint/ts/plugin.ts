@@ -14,6 +14,11 @@ import { getParserServices } from "./parser_services";
 import type { ContextWithParserOptions, ParserServices } from "./types";
 
 export type Plugin = Omit<OxlintPlugin, "rules"> & {
+  /**
+   * Optional module URL or absolute path used to resolve the plugin's own
+   * runtime dependencies when they are not visible from the consumer root.
+   */
+  readonly resolveFrom?: string;
   readonly rules: Record<string, Rule>;
 } & Record<string, unknown>;
 export type Rule = OxlintRule & Record<string, unknown>;
@@ -88,10 +93,17 @@ const baseCompatPlugin = Reflect.get(
 ) as typeof oxlintPluginApi.definePlugin;
 
 export function definePlugin(plugin: Plugin): Plugin {
-  return defineOxlintPlugin({
+  const defined = defineOxlintPlugin({
     ...plugin,
-    rules: wrapRules(plugin.rules ?? {}),
+    rules: wrapRules(plugin.rules ?? {}, plugin.resolveFrom),
   } as OxlintPlugin) as Plugin;
+  if (plugin.resolveFrom === undefined) {
+    return defined;
+  }
+  return {
+    ...defined,
+    resolveFrom: plugin.resolveFrom,
+  };
 }
 
 /**
@@ -120,12 +132,12 @@ export function compatPlugin(plugin: Plugin): Plugin {
   return baseCompatPlugin(definePlugin(plugin)) as Plugin;
 }
 
-export function decorateRule(rule: Rule): Rule {
+export function decorateRule(rule: Rule, resolveFrom?: string): Rule {
   if (rule.create) {
     return {
       ...rule,
       create(context) {
-        return rule.create!(decorateContext(context, rule));
+        return rule.create!(decorateContext(context, rule, resolveFrom));
       },
     } as Rule;
   }
@@ -133,26 +145,34 @@ export function decorateRule(rule: Rule): Rule {
     return {
       ...rule,
       createOnce(context) {
-        return (rule as any).createOnce(decorateContext(context, rule));
+        return (rule as any).createOnce(decorateContext(context, rule, resolveFrom));
       },
     } as Rule;
   }
   return rule;
 }
 
-function wrapRules(rules: Record<string, Rule>): Record<string, Rule> {
+function wrapRules(rules: Record<string, Rule>, resolveFrom?: string): Record<string, Rule> {
   return Object.fromEntries(
-    Object.entries(rules).map(([name, rule]) => [name, decorateRule(rule)]),
+    Object.entries(rules).map(([name, rule]) => [name, decorateRule(rule, resolveFrom)]),
   );
 }
 
-function decorateContext(context: ContextWithParserOptions, rule: Rule): ContextWithParserOptions {
+function decorateContext(
+  context: ContextWithParserOptions,
+  rule: Rule,
+  resolveFrom?: string,
+): ContextWithParserOptions {
   const typeAware = requiresTypeChecking(rule);
   const parserOptions = Object.freeze(
-    resolveTypeAwareParserOptions(context, {
-      corsa: typeAware,
-      projectService: typeAware,
-    }),
+    resolveTypeAwareParserOptions(
+      context,
+      {
+        corsa: typeAware,
+        projectService: typeAware,
+      },
+      resolveFrom,
+    ),
   );
   const baseLanguageOptions = context.languageOptions;
   const languageOptions = Object.freeze({
