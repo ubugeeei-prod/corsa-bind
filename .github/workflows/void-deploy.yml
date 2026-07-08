@@ -1,0 +1,64 @@
+name: Deploy to Void
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/void-deploy.yml"
+      - ".void/project.json"
+      - "docs/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "scripts/vite/**"
+      - "vite.config.ts"
+      - "void.json"
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: void-deploy-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # Override with a VOID_API_URL repository variable to target staging.
+  VOID_API_URL: ${{ vars.VOID_API_URL || 'https://api.void.cloud' }}
+  VOID_PROJECT: corsa-bind
+
+jobs:
+  deploy:
+    name: Build and Deploy Docs
+    runs-on: blacksmith-32vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Mount Blacksmith sticky caches
+        uses: ./.github/actions/blacksmith-sticky-cache
+        with:
+          suffix: void-deploy
+          cargo-target: "false"
+          pnpm-store: "true"
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version: "24"
+          cache: false
+          run-install: true
+
+      - name: Build docs
+        if: ${{ github.event_name == 'pull_request' }}
+        run: vp run -w docs_build
+
+      - name: Deploy
+        if: ${{ github.event_name != 'pull_request' }}
+        run: npx --yes --package void@0.10.8 void deploy --project "$VOID_PROJECT"
