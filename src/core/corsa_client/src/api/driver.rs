@@ -211,7 +211,8 @@ impl ClientDriver {
         }
     }
 
-    pub(crate) async fn request_json(&self, method: &str, params: Value) -> Result<Value> {
+    pub(crate) async fn request_json(&self, method: &str, mut params: Value) -> Result<Value> {
+        encode_numeric_api_handles(&mut params);
         match self {
             Self::JsonRpc { rpc, .. } => rpc.request_value(method, params).await,
             Self::Msgpack { worker } => {
@@ -229,8 +230,9 @@ impl ClientDriver {
     pub(crate) async fn request_binary(
         &self,
         method: &str,
-        params: Value,
+        mut params: Value,
     ) -> Result<Option<Vec<u8>>> {
+        encode_numeric_api_handles(&mut params);
         match self {
             Self::JsonRpc { rpc, .. } => {
                 let value = rpc.request_value(method, params).await?;
@@ -434,5 +436,29 @@ mod tests {
         assert_eq!(params["symbols"], json!(["s0000000000000002"]));
         assert_eq!(params["type"], json!("t0000000000000001"));
         assert_eq!(params["signature"], json!("sig-1"));
+    }
+
+    #[test]
+    fn normalizes_numeric_api_handles_in_raw_json_params() {
+        let mut params = json!({
+            "snapshot": "1",
+            "project": "project-1",
+            "nested": {
+                "type": "2",
+                "types": ["3", "t0000000000000004"],
+                "location": "1.2.3./workspace/main.ts"
+            }
+        });
+
+        super::encode_numeric_api_handles(&mut params);
+
+        assert_eq!(params["snapshot"], json!(1));
+        assert_eq!(params["project"], json!("project-1"));
+        assert_eq!(params["nested"]["type"], json!(2));
+        assert_eq!(params["nested"]["types"], json!([3, "t0000000000000004"]));
+        assert_eq!(
+            params["nested"]["location"],
+            json!("1.2.3./workspace/main.ts")
+        );
     }
 }
