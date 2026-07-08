@@ -345,7 +345,17 @@ async fn open_workflow_session(cli: &Cli, dataset: &DatasetCase) -> Result<Workf
             overlay_changes: None,
         })
         .await?;
-    let project = snapshot.projects[0].id.clone();
+    let project = snapshot
+        .projects
+        .first()
+        .ok_or_else(|| {
+            CorsaError::Protocol(CompactString::from(format!(
+                "benchmark snapshot did not open a project for {}",
+                dataset.config_wire
+            )))
+        })?
+        .id
+        .clone();
     let target =
         discover_bench_target(&client, &snapshot, &project, dataset.primary_file.as_str()).await?;
     Ok(WorkflowSession {

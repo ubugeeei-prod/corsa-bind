@@ -48,12 +48,12 @@ describe("publish workflows", () => {
     expect(workflow).toContain('cross_arg="--cross-compile"');
   });
 
-  it("benchmarks PR base and head against TypeScript 6 and next", () => {
+  it("benchmarks PR base and head against TypeScript 7 and next", () => {
     const workflow = readWorkflow(".github/workflows/pr-performance.yml");
     expect(workflow).toContain('BENCH_ITERATIONS: "5"');
     expect(workflow).toContain("ref-role:");
     expect(workflow).toContain("typescript:");
-    expect(workflow).toContain('package: "typescript@^6"');
+    expect(workflow).toContain('package: "typescript@7.0.2"');
     expect(workflow).toContain('package: "typescript@next"');
     expect(workflow).toContain("Build corsa-oxlint package");
     expect(workflow).toContain("Normalize benchmark paths");
