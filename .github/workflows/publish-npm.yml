@@ -32,6 +32,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  NPM_DIST_TAG: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-') && 'beta' || '' }}
 
 jobs:
   release-gates:

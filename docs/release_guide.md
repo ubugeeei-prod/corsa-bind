@@ -148,6 +148,21 @@ The GitHub publish workflow fan-outs native binding builds per target, downloads
 those `.node` artifacts into the publish job, and only then publishes the root
 package and `corsa-oxlint`.
 
+## Prereleases
+
+Use an explicit semver prerelease when cutting a beta or release candidate:
+
+```bash
+git switch main
+git pull --ff-only
+vp run -w release 1.0.0-beta.1
+```
+
+This creates `release: v1.0.0-beta.1` and the annotated
+`v1.0.0-beta.1` tag. Tag-triggered GitHub Actions run the same release gates as
+stable releases. npm prerelease versions are published with the `beta` dist-tag,
+and the generated GitHub Release is marked as a prerelease.
+
 ## Trusted Publishing
 
 ### crates.io
