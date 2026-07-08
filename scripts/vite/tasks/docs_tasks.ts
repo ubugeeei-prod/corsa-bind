@@ -7,6 +7,6 @@ export const docsTasks = {
   },
   docs_deploy: {
     cache: false,
-    command: "npx --yes --package void@0.8.11 void deploy",
+    command: "npx --yes --package void@0.10.8 void deploy",
   },
 } satisfies RunTasks;

@@ -16,3 +16,7 @@ src/bindings/moonbit/**/_build
 src/bindings/swift/**/.build
 src/bindings/csharp/**/bin
 src/bindings/csharp/**/obj
+.void/*
+!.void/project.json
+.wrangler
+*.tsbuildinfo
