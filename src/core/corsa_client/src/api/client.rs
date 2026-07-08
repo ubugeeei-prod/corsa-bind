@@ -357,8 +357,9 @@ impl ApiClient {
             self.require_overlay_update_capability().await?;
         }
         self.initialize().await?;
+        let open_projects = params.open_project.into_iter().collect();
         let request = UpdateSnapshotRequest {
-            open_project: params.open_project,
+            open_projects,
             file_changes: params.file_changes,
             overlay_changes: params.overlay_changes,
         };

@@ -8,8 +8,8 @@ use super::{
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct UpdateSnapshotRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub open_project: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_projects: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_changes: Option<FileChanges>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -119,4 +119,28 @@ pub(crate) struct TypeNodeRequest {
     pub location: Option<NodeHandle>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub flags: Option<i32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::UpdateSnapshotRequest;
+
+    #[test]
+    fn update_snapshot_request_uses_current_open_projects_wire_field() {
+        let payload = serde_json::to_value(UpdateSnapshotRequest {
+            open_projects: vec!["/workspace/tsconfig.json".into()],
+            file_changes: None,
+            overlay_changes: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            payload,
+            json!({
+                "openProjects": ["/workspace/tsconfig.json"],
+            })
+        );
+    }
 }
