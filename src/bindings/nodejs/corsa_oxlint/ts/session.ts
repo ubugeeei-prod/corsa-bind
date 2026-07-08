@@ -575,6 +575,7 @@ export class CorsaProjectSession {
 
   private rememberType<T extends CorsaType | undefined>(type: T): T {
     if (type) {
+      normalizeType(type);
       this.#snapshotHasIssuedHandles = true;
     }
     if (type?.symbol) {
@@ -671,6 +672,7 @@ export class CorsaProjectSession {
     if (!symbol) {
       return symbol;
     }
+    normalizeSymbol(symbol);
     this.#snapshotHasIssuedHandles = true;
     this.#symbolsById.set(symbol.id, symbol);
     for (const declaration of symbol.declarations ?? []) {
@@ -701,6 +703,7 @@ export class CorsaProjectSession {
   }
 
   private rememberSignature(signature: CorsaSignature): CorsaSignature {
+    normalizeSignature(signature);
     if (signature.declaration) {
       this.rememberNode(signature.declaration);
     }
@@ -986,6 +989,71 @@ function isArrayOrTupleLikeType(session: CorsaProjectSession, type: CorsaType): 
 
 function isUsableSymbol(symbol: CorsaSymbol | null | undefined): symbol is CorsaSymbol {
   return symbol != null && !symbol.name.includes("\ufffd");
+}
+
+function normalizeType(type: CorsaType): void {
+  const mutable = type as {
+    id: string;
+    symbol?: string;
+  };
+  mutable.id = handleString((type as { id: unknown }).id);
+  const symbol = (type as { symbol?: unknown }).symbol;
+  if (symbol != null) {
+    mutable.symbol = handleString(symbol);
+  }
+}
+
+function normalizeSymbol(symbol: CorsaSymbol): void {
+  const mutable = symbol as unknown as {
+    id: string;
+    declarations?: string[];
+    valueDeclaration?: string;
+  };
+  mutable.id = handleString((symbol as { id: unknown }).id);
+  const declarations = (symbol as { declarations?: readonly unknown[] }).declarations;
+  if (Array.isArray(declarations)) {
+    mutable.declarations = declarations.map(handleString);
+  }
+  const valueDeclaration = (symbol as { valueDeclaration?: unknown }).valueDeclaration;
+  if (valueDeclaration != null) {
+    mutable.valueDeclaration = handleString(valueDeclaration);
+  }
+}
+
+function normalizeSignature(signature: CorsaSignature): void {
+  const mutable = signature as unknown as {
+    id: string;
+    declaration?: string;
+    typeParameters?: string[];
+    parameters?: string[];
+    thisParameter?: string;
+    target?: string;
+  };
+  mutable.id = handleString((signature as { id: unknown }).id);
+  const declaration = (signature as { declaration?: unknown }).declaration;
+  if (declaration != null) {
+    mutable.declaration = handleString(declaration);
+  }
+  const typeParameters = (signature as { typeParameters?: readonly unknown[] }).typeParameters;
+  if (Array.isArray(typeParameters)) {
+    mutable.typeParameters = typeParameters.map(handleString);
+  }
+  const parameters = (signature as { parameters?: readonly unknown[] }).parameters;
+  if (Array.isArray(parameters)) {
+    mutable.parameters = parameters.map(handleString);
+  }
+  const thisParameter = (signature as { thisParameter?: unknown }).thisParameter;
+  if (thisParameter != null) {
+    mutable.thisParameter = handleString(thisParameter);
+  }
+  const target = (signature as { target?: unknown }).target;
+  if (target != null) {
+    mutable.target = handleString(target);
+  }
+}
+
+function handleString(value: unknown): string {
+  return typeof value === "string" ? value : String(value);
 }
 
 function overlayTextFor(fileName: string, sourceText?: string): string | undefined {

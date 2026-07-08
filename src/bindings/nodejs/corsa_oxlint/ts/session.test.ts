@@ -146,6 +146,57 @@ describe("CorsaProjectSession", () => {
     expect(result).toEqual([]);
   });
 
+  it("normalizes numeric raw type handles before typed client calls", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.callJson.mockImplementationOnce(
+      () =>
+        ({
+          id: 14,
+          flags: 0,
+          symbol: 3,
+          texts: [],
+        }) as never,
+    );
+
+    const type = session.getBaseTypeOfLiteralType({
+      id: "literal-1",
+      flags: 0,
+      texts: [],
+    } as never);
+
+    expect(type?.id).toBe("14");
+    expect(type?.symbol).toBe("3");
+    session.typeToString(type as never);
+    expect(client.typeToString).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "project-1",
+      "14",
+      undefined,
+      undefined,
+    );
+  });
+
   it("rethrows unexpected errors from getBaseTypes", () => {
     clients.length = 0;
     const runtime = {
