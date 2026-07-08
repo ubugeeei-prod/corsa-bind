@@ -228,6 +228,10 @@ function runReleasePreflight(): void {
   runCommand(vpCommand, ["run", "-w", "fmt_check_rust"], { cwd: rootDir });
 }
 
+function formatReleaseManifestChanges(): void {
+  runCommand(vpCommand, ["fmt"], { cwd: rootDir });
+}
+
 function runFullReleaseGates(): void {
   runCommand(vpCommand, ["check"], { cwd: rootDir });
   runCommand(vpCommand, ["run", "-w", "fmt_check_rust"], { cwd: rootDir });
@@ -260,15 +264,16 @@ async function main(): Promise<void> {
   const tag = versionToTag(nextVersion);
 
   assertTagAbsent(options.remote, tag);
-  if (!options.skipGates && !options.runFullGates) {
-    runReleasePreflight();
-  }
-
   updateWorkspaceVersion(nextVersion);
   syncCargoLockfile();
+  formatReleaseManifestChanges();
 
-  if (!options.skipGates && options.runFullGates) {
-    runFullReleaseGates();
+  if (!options.skipGates) {
+    if (options.runFullGates) {
+      runFullReleaseGates();
+    } else {
+      runReleasePreflight();
+    }
   }
 
   assertReleaseTagMatchesWorkspace(tag);

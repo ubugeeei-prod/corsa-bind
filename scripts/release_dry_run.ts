@@ -9,7 +9,7 @@ import {
   corsaOxlintPackage,
   withStagedNodeBindingPackages,
 } from "./npm_release_utils.ts";
-import { publicRustCrates } from "./release_manifest.ts";
+import { isPrereleaseVersion, publicRustCrates } from "./release_manifest.ts";
 import { fail, rootDir, runCommand } from "./shared.ts";
 
 interface CrateSpec {
@@ -78,7 +78,10 @@ async function main(): Promise<void> {
           );
           continue;
         }
-        publishPackedTarball(npmPackage, { dryRun: true });
+        publishPackedTarball(npmPackage, {
+          dryRun: true,
+          tag: isPrereleaseVersion(version) ? "beta" : undefined,
+        });
       }
     },
   );
