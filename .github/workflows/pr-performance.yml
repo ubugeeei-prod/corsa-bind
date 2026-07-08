@@ -36,8 +36,8 @@ jobs:
           - base
           - head
         typescript:
-          - channel: "6"
-            package: "typescript@^6"
+          - channel: "7"
+            package: "typescript@7.0.2"
           - channel: next
             package: "typescript@next"
     steps:
@@ -182,10 +182,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cache/pr-benchmark
-          benchmark_args=()
-          if [ "${{ matrix.ref-role }}" = "base" ]; then
-            benchmark_args+=(--allow-partial-failures)
-          fi
+          benchmark_args=(--allow-partial-failures)
           cargo run --manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml --release -p corsa --bin bench_tooling_compare -- \
             --corsa .cache/corsa \
             "${benchmark_args[@]}" \

@@ -3,8 +3,8 @@ version = 1
 [corsa_upstream]
 path = "ref/corsa-upstream"
 repository = "https://github.com/microsoft/typescript-go.git"
-commit = "73868c8588924d4d972782c9ea102b322d7f3212"
-tree = "81355a169abb605dec5355169fb30ab15677b357"
-committer_date = "2026-05-30T19:52:40Z"
-author = "Anders Hejlsberg"
-subject = "Fix grammar checking for `in` and `out` modifiers in `@template` tags (#4100)"
+commit = "2bd066d87f5bafd315be9f40889d0a60b9e58e0b"
+tree = "ed2c2c12c401b84bd5888d0b889737495aa93a20"
+committer_date = "2026-07-07T21:22:40-07:00"
+author = "Jake Bailey"
+subject = "Merge branch 'main' into ts7-release"
