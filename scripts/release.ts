@@ -7,6 +7,7 @@ import {
 import {
   assertReleaseTagMatchesWorkspace,
   bumpVersion,
+  parseReleaseVersion,
   publicRustCrateNames,
   readWorkspaceVersion,
   type ReleaseBump,
@@ -26,6 +27,16 @@ const gitNoPromptEnv = {
   GIT_TERMINAL_PROMPT: "0",
 };
 
+type ReleaseTarget =
+  | {
+      kind: "bump";
+      bump: ReleaseBump;
+    }
+  | {
+      kind: "version";
+      version: string;
+    };
+
 function isPresent<T>(value: T | null): value is T {
   return value !== null;
 }
@@ -33,17 +44,17 @@ function isPresent<T>(value: T | null): value is T {
 interface ReleaseOptions {
   allowBootstrapGap: boolean;
   allowAnyBranch: boolean;
-  bump: ReleaseBump;
   push: boolean;
   remote: string;
   requiredBranch: string;
   runFullGates: boolean;
   skipGates: boolean;
+  target: ReleaseTarget;
 }
 
 function printUsage(): void {
   console.log(
-    "Usage: vp run -w release <patch|minor|major> [--no-push] [--full-gates] [--skip-gates] [--allow-bootstrap-gap]",
+    "Usage: vp run -w release <patch|minor|major|version> [--no-push] [--full-gates] [--skip-gates] [--allow-bootstrap-gap]",
   );
 }
 
@@ -57,19 +68,31 @@ function parseArgs(argv: string[]): ReleaseOptions {
   const bump = args.find(
     (arg): arg is ReleaseBump => arg === "patch" || arg === "minor" || arg === "major",
   );
-  if (!bump) {
-    throw new Error("Expected one of: patch, minor, major");
+  const version = args.find((arg) => {
+    try {
+      parseReleaseVersion(arg);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  if (bump && version) {
+    throw new Error("Expected either a version or one of: patch, minor, major, not both");
+  }
+  if (!bump && !version) {
+    throw new Error("Expected a version or one of: patch, minor, major");
   }
 
   return {
     allowBootstrapGap: args.includes("--allow-bootstrap-gap"),
     allowAnyBranch: process.env.RELEASE_ALLOW_ANY_BRANCH?.trim() === "1",
-    bump,
     push: !args.includes("--no-push"),
     remote: process.env.RELEASE_REMOTE?.trim() || defaultRemote,
     requiredBranch: process.env.RELEASE_BRANCH?.trim() || defaultBranch,
     runFullGates: args.includes("--full-gates"),
     skipGates: args.includes("--skip-gates"),
+    target: bump ? { kind: "bump", bump } : { kind: "version", version: version as string },
   };
 }
 
@@ -230,7 +253,10 @@ async function main(): Promise<void> {
   }
 
   const currentVersion = readWorkspaceVersion();
-  const nextVersion = bumpVersion(currentVersion, options.bump);
+  const nextVersion =
+    options.target.kind === "bump"
+      ? bumpVersion(currentVersion, options.target.bump)
+      : options.target.version;
   const tag = versionToTag(nextVersion);
 
   assertTagAbsent(options.remote, tag);

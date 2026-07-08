@@ -6,6 +6,9 @@ import { rootDir, runCommand } from "./shared.ts";
 
 export type ReleaseBump = "major" | "minor" | "patch";
 
+const semverPattern =
+  /^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+
 export interface RustReleaseCrate {
   manifestPath: string;
   name: string;
@@ -124,12 +127,22 @@ function escapeRegex(value: string): string {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function parseSemver(version: string): [number, number, number] {
-  const match = version.trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!match) {
-    throw new Error(`Expected a semver version like 0.2.0, received ${version}`);
+export function parseReleaseVersion(version: string): {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: string | null;
+} {
+  const match = version.trim().match(semverPattern);
+  if (!match?.groups) {
+    throw new Error(`Expected a semver version like 0.2.0 or 1.0.0-beta.1, received ${version}`);
   }
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
+  return {
+    major: Number(match.groups.major),
+    minor: Number(match.groups.minor),
+    patch: Number(match.groups.patch),
+    prerelease: match.groups.prerelease ?? null,
+  };
 }
 
 function getCargoPackageVersion(manifestPath: string): string {
@@ -301,7 +314,7 @@ export function readWorkspaceVersion(): string {
 }
 
 export function bumpVersion(currentVersion: string, bump: ReleaseBump): string {
-  const [major, minor, patch] = parseSemver(currentVersion);
+  const { major, minor, patch } = parseReleaseVersion(currentVersion);
   if (bump === "major") {
     return `${major + 1}.0.0`;
   }
@@ -312,16 +325,24 @@ export function bumpVersion(currentVersion: string, bump: ReleaseBump): string {
 }
 
 export function versionToTag(version: string): string {
-  parseSemver(version);
+  parseReleaseVersion(version);
   return `v${version}`;
 }
 
 export function normalizeReleaseTag(input: string): string {
   const tag = input.trim().replace(/^refs\/tags\//, "");
-  if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
-    throw new Error(`Expected a release tag like v0.2.0, received ${input}`);
+  if (!semverPattern.test(tag.slice(1)) || !tag.startsWith("v")) {
+    throw new Error(`Expected a release tag like v0.2.0 or v1.0.0-beta.1, received ${input}`);
   }
   return tag;
+}
+
+export function isPrereleaseVersion(version: string): boolean {
+  return parseReleaseVersion(version).prerelease !== null;
+}
+
+export function isPrereleaseTag(input: string): boolean {
+  return isPrereleaseVersion(normalizeReleaseTag(input).slice(1));
 }
 
 export function assertReleaseTagMatchesWorkspace(input: string): string {
@@ -339,7 +360,7 @@ export function assertReleaseTagMatchesWorkspace(input: string): string {
 }
 
 export function updateWorkspaceVersion(nextVersion: string): string[] {
-  parseSemver(nextVersion);
+  parseReleaseVersion(nextVersion);
 
   const changedPaths: string[] = [];
 

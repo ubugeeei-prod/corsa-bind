@@ -63,8 +63,8 @@ jobs:
             sha="$(git rev-list -n 1 "$tag")"
           fi
 
-          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Expected a release tag like v1.2.3, received $tag"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Expected a release tag like v1.2.3 or v1.0.0-beta.1, received $tag"
             exit 1
           fi
           if [[ -z "$sha" ]]; then
@@ -75,6 +75,11 @@ jobs:
           {
             echo "tag=$tag"
             echo "sha=$sha"
+            if [[ "$tag" == *-* ]]; then
+              echo "prerelease=true"
+            else
+              echo "prerelease=false"
+            fi
           } >> "$GITHUB_OUTPUT"
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
 
@@ -137,6 +142,7 @@ jobs:
 
       - name: Create GitHub Release
         env:
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         shell: bash
@@ -146,8 +152,12 @@ jobs:
             exit 0
           fi
 
-          gh release create "$RELEASE_TAG" \
+          args=(release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "$RELEASE_TAG" \
-            --generate-notes
+            --generate-notes)
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
