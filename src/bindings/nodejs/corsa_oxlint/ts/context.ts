@@ -26,6 +26,12 @@ export function defaultCorsaExecutable(
   platform = process.platform,
   resolveFrom?: string,
 ): string {
+  const stableTypeScript =
+    resolveStableTypeScriptExecutableFrom(resolve(rootDir, "package.json"), platform) ??
+    (resolveFrom ? resolveStableTypeScriptExecutableFrom(resolveFrom, platform) : undefined);
+  if (stableTypeScript) {
+    return stableTypeScript;
+  }
   const nativePreview =
     resolveNativePreviewExecutableFrom(resolve(rootDir, "package.json")) ??
     (resolveFrom ? resolveNativePreviewExecutableFrom(resolveFrom) : undefined);
@@ -39,7 +45,7 @@ export function defaultCorsaExecutable(
   throw new Error(
     [
       "corsa-oxlint could not locate a Corsa runtime executable.",
-      "Install `@typescript/native-preview`, set `CORSA_EXECUTABLE`, configure `parserOptions.corsa.executable`, or pass `resolveFrom` to `definePlugin`.",
+      "Install `typescript` 7 or `@typescript/native-preview`, set `CORSA_EXECUTABLE`, configure `parserOptions.corsa.executable`, or pass `resolveFrom` to `definePlugin`.",
     ].join(" "),
   );
 }
@@ -184,6 +190,46 @@ function globMatch(value: string, pattern: string): boolean {
 
 function asArray(value: string | string[] | undefined): string[] {
   return value ? (Array.isArray(value) ? value : [value]) : [];
+}
+
+function resolveStableTypeScriptExecutableFrom(
+  anchor: string,
+  platform: NodeJS.Platform,
+): string | undefined {
+  const requireFromAnchor = createRequire(anchor);
+  const packageJsonPath = resolveOptional(requireFromAnchor, "typescript/package.json");
+  if (!packageJsonPath || !isTypeScriptVersionSevenOrNewer(packageJsonPath)) {
+    return undefined;
+  }
+
+  const platformPackage = `@typescript/typescript-${platform}-${process.arch}`;
+  const requireFromTypeScript = createRequire(packageJsonPath);
+  const platformPackageJsonPath = resolveOptional(
+    requireFromTypeScript,
+    `${platformPackage}/package.json`,
+  );
+  if (!platformPackageJsonPath) {
+    return undefined;
+  }
+
+  const executable = resolve(
+    dirname(platformPackageJsonPath),
+    "lib",
+    platform === "win32" ? "tsc.exe" : "tsc",
+  );
+  return existsSync(executable) ? executable : undefined;
+}
+
+function isTypeScriptVersionSevenOrNewer(packageJsonPath: string): boolean {
+  try {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      readonly version?: string;
+    };
+    const major = Number.parseInt(packageJson.version?.split(".")[0] ?? "", 10);
+    return Number.isFinite(major) && major >= 7;
+  } catch {
+    return false;
+  }
 }
 
 function resolveNativePreviewExecutableFrom(anchor: string): string | undefined {

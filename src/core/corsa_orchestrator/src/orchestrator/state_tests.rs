@@ -57,7 +57,7 @@ fn malformed_results_surface_decode_errors() {
     let mut state = ReplicatedState::default();
     state.results.insert(
         "broken".into(),
-        ReplicatedCacheEntry::new([b'{'].into_iter().collect(), Some(Duration::from_secs(60))),
+        ReplicatedCacheEntry::new((*b"{").into_iter().collect(), Some(Duration::from_secs(60))),
     );
     assert!(matches!(
         state.result::<String>("broken"),

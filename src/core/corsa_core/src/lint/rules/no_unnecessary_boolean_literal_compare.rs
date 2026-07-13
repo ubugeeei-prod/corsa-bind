@@ -171,10 +171,7 @@ fn boolean_comparison(node: &LintNode) -> Option<BooleanComparison<'_>> {
     let (expression, literal_boolean_in_comparison) =
         match boolean_literal_kind(strip_parens(right)) {
             Some(is_true) => (left, is_true),
-            None => match boolean_literal_kind(strip_parens(left)) {
-                Some(is_true) => (right, is_true),
-                None => return None,
-            },
+            None => (right, boolean_literal_kind(strip_parens(left))?),
         };
 
     // Inspect the constraint type of the compared expression.

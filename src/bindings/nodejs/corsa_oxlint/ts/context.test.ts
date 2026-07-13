@@ -112,8 +112,94 @@ describe("context", () => {
     cleanupDirs.add(workspace);
 
     expect(() => defaultCorsaExecutable(workspace, "linux")).toThrow(
-      "Install `@typescript/native-preview`",
+      "Install `typescript` 7 or `@typescript/native-preview`",
     );
+  });
+
+  it("prefers the stable TypeScript 7 platform executable when available", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const typescriptDir = resolve(workspace, "node_modules/typescript");
+    const platformDir = resolve(
+      workspace,
+      `node_modules/@typescript/typescript-linux-${process.arch}`,
+    );
+    const stableBin = resolve(platformDir, "lib/tsc");
+    const previewDir = resolve(workspace, "node_modules/@typescript/native-preview");
+    const previewBin = resolve(previewDir, "bin/tsgo.js");
+
+    mkdirSync(typescriptDir, { recursive: true });
+    mkdirSync(dirname(stableBin), { recursive: true });
+    mkdirSync(dirname(previewBin), { recursive: true });
+    writeFileSync(
+      resolve(typescriptDir, "package.json"),
+      JSON.stringify({ name: "typescript", version: "7.0.2" }),
+    );
+    writeFileSync(
+      resolve(platformDir, "package.json"),
+      JSON.stringify({ name: `@typescript/typescript-linux-${process.arch}`, version: "7.0.2" }),
+    );
+    writeFileSync(stableBin, "");
+    writeFileSync(
+      resolve(previewDir, "package.json"),
+      JSON.stringify({ name: "@typescript/native-preview", bin: { tsgo: "bin/tsgo.js" } }),
+    );
+    writeFileSync(previewBin, "#!/usr/bin/env node\n");
+
+    expect(defaultCorsaExecutable(workspace, "linux")).toBe(realpathSync(stableBin));
+  });
+
+  it("resolves the stable TypeScript 7 platform executable on Windows", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const typescriptDir = resolve(workspace, "node_modules/typescript");
+    const platformDir = resolve(
+      workspace,
+      `node_modules/@typescript/typescript-win32-${process.arch}`,
+    );
+    const stableBin = resolve(platformDir, "lib/tsc.exe");
+
+    mkdirSync(typescriptDir, { recursive: true });
+    mkdirSync(dirname(stableBin), { recursive: true });
+    writeFileSync(
+      resolve(typescriptDir, "package.json"),
+      JSON.stringify({ name: "typescript", version: "7.0.2" }),
+    );
+    writeFileSync(
+      resolve(platformDir, "package.json"),
+      JSON.stringify({ name: `@typescript/typescript-win32-${process.arch}`, version: "7.0.2" }),
+    );
+    writeFileSync(stableBin, "");
+
+    expect(defaultCorsaExecutable(workspace, "win32")).toBe(realpathSync(stableBin));
+  });
+
+  it("ignores TypeScript versions before 7", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const typescriptDir = resolve(workspace, "node_modules/typescript");
+    const platformDir = resolve(
+      workspace,
+      `node_modules/@typescript/typescript-linux-${process.arch}`,
+    );
+    const stableBin = resolve(platformDir, "lib/tsc");
+    const fallback = resolve(workspace, ".cache/corsa");
+
+    mkdirSync(typescriptDir, { recursive: true });
+    mkdirSync(dirname(stableBin), { recursive: true });
+    mkdirSync(dirname(fallback), { recursive: true });
+    writeFileSync(
+      resolve(typescriptDir, "package.json"),
+      JSON.stringify({ name: "typescript", version: "6.0.3" }),
+    );
+    writeFileSync(
+      resolve(platformDir, "package.json"),
+      JSON.stringify({ name: `@typescript/typescript-linux-${process.arch}`, version: "6.0.3" }),
+    );
+    writeFileSync(stableBin, "");
+    writeFileSync(fallback, "");
+
+    expect(defaultCorsaExecutable(workspace, "linux")).toBe(fallback);
   });
 
   it("prefers the installed native-preview tsgo binary when available", () => {
@@ -155,6 +241,39 @@ describe("context", () => {
       }),
     );
     writeFileSync(binPath, "#!/usr/bin/env node\n");
+
+    const pluginEntry = resolve(pluginRoot, "dist/plugin.js");
+    mkdirSync(dirname(pluginEntry), { recursive: true });
+    writeFileSync(pluginEntry, "export default {};\n");
+
+    expect(defaultCorsaExecutable(consumerRoot, "linux", pathToFileURL(pluginEntry).href)).toBe(
+      realpathSync(binPath),
+    );
+  });
+
+  it("resolves stable TypeScript 7 from a plugin anchor", () => {
+    const consumerRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-consumer-"));
+    const pluginRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-plugin-"));
+    cleanupDirs.add(consumerRoot);
+    cleanupDirs.add(pluginRoot);
+
+    const typescriptDir = resolve(pluginRoot, "node_modules/typescript");
+    const platformDir = resolve(
+      pluginRoot,
+      `node_modules/@typescript/typescript-linux-${process.arch}`,
+    );
+    const binPath = resolve(platformDir, "lib/tsc");
+    mkdirSync(typescriptDir, { recursive: true });
+    mkdirSync(dirname(binPath), { recursive: true });
+    writeFileSync(
+      resolve(typescriptDir, "package.json"),
+      JSON.stringify({ name: "typescript", version: "7.0.2" }),
+    );
+    writeFileSync(
+      resolve(platformDir, "package.json"),
+      JSON.stringify({ name: `@typescript/typescript-linux-${process.arch}`, version: "7.0.2" }),
+    );
+    writeFileSync(binPath, "");
 
     const pluginEntry = resolve(pluginRoot, "dist/plugin.js");
     mkdirSync(dirname(pluginEntry), { recursive: true });

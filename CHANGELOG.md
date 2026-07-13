@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- `corsa-oxlint` now discovers the native Corsa runtime shipped with TypeScript 7 or newer before falling back to `@typescript/native-preview`.
 - `corsa-oxlint` now reports a dependency-focused error when no default Corsa runtime executable can be found.
 - constructor signature parameter symbol fallback now preserves non-ASCII parameter names.
 - imported inherited constructor signatures with non-ASCII JSDoc retain resolvable parameter symbols.
