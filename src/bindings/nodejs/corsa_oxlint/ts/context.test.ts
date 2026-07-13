@@ -149,6 +149,31 @@ describe("context", () => {
     expect(defaultCorsaExecutable(workspace, "linux")).toBe(realpathSync(stableBin));
   });
 
+  it("resolves the stable TypeScript 7 platform executable on Windows", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const typescriptDir = resolve(workspace, "node_modules/typescript");
+    const platformDir = resolve(
+      workspace,
+      `node_modules/@typescript/typescript-win32-${process.arch}`,
+    );
+    const stableBin = resolve(platformDir, "lib/tsc.exe");
+
+    mkdirSync(typescriptDir, { recursive: true });
+    mkdirSync(dirname(stableBin), { recursive: true });
+    writeFileSync(
+      resolve(typescriptDir, "package.json"),
+      JSON.stringify({ name: "typescript", version: "7.0.2" }),
+    );
+    writeFileSync(
+      resolve(platformDir, "package.json"),
+      JSON.stringify({ name: `@typescript/typescript-win32-${process.arch}`, version: "7.0.2" }),
+    );
+    writeFileSync(stableBin, "");
+
+    expect(defaultCorsaExecutable(workspace, "win32")).toBe(realpathSync(stableBin));
+  });
+
   it("ignores TypeScript versions before 7", () => {
     const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
     cleanupDirs.add(workspace);
