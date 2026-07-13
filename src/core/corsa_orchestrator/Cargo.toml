@@ -1,6 +1,6 @@
 [package]
 name = "corsa_orchestrator"
-version = "1.0.0-beta.1"
+version = "1.0.0-beta.2"
 edition = "2024"
 description = "Worker pooling, caching, and experimental replicated orchestration for corsa"
 publish = ["crates-io"]
@@ -25,7 +25,7 @@ lsp-types = "0.97"
 parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-corsa_client = { version = "1.0.0-beta.1", path = "../corsa_client" }
-corsa_core = { version = "1.0.0-beta.1", path = "../corsa_core" }
-corsa_lsp = { version = "1.0.0-beta.1", path = "../corsa_lsp" }
-corsa_runtime = { version = "1.0.0-beta.1", path = "../corsa_runtime" }
+corsa_client = { version = "1.0.0-beta.2", path = "../corsa_client" }
+corsa_core = { version = "1.0.0-beta.2", path = "../corsa_core" }
+corsa_lsp = { version = "1.0.0-beta.2", path = "../corsa_lsp" }
+corsa_runtime = { version = "1.0.0-beta.2", path = "../corsa_runtime" }
