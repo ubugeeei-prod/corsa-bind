@@ -104,9 +104,9 @@
     "@corsa-bind/napi": "workspace:*"
   },
   "devDependencies": {
-    "@oxlint/plugins": "1.72.0",
-    "@typescript-eslint/utils": "8.62.1",
-    "oxlint": "1.72.0",
+    "@oxlint/plugins": "1.73.0",
+    "@typescript-eslint/utils": "8.64.0",
+    "oxlint": "1.73.0",
     "oxlint-tsgolint": "0.24.0"
   },
   "peerDependencies": {
