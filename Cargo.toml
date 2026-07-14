@@ -24,7 +24,7 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 bumpalo = { version = "3", features = ["collections"] }
-compact_str = { version = "0.9", features = ["serde"] }
+compact_str = { version = "0.10", features = ["serde"] }
 log = "0.4"
 memchr = "2"
 phf = { version = "0.14", features = ["macros"] }
