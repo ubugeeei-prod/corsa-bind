@@ -233,6 +233,42 @@ describe("CorsaProjectSession", () => {
     ).toThrow(/unexpected failure/);
   });
 
+  it("returns an empty list when getBaseTypes hits an empty type handle", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.callJson.mockImplementationOnce(() => {
+      throw new Error("protocol error: api: client error: empty type handle");
+    });
+
+    expect(
+      session.getBaseTypes({
+        id: "type-1",
+        flags: 0,
+        texts: ["Base"],
+      } as never),
+    ).toEqual([]);
+  });
+
   it("returns a server-rendered cached type text when typeToString later hits a stale handle", () => {
     clients.length = 0;
     const runtime = {
@@ -304,6 +340,42 @@ describe("CorsaProjectSession", () => {
         id: "synthetic-type-argument:1:0:T",
         flags: 0,
         texts: ["T"],
+      } as never),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when getSymbolOfType hits an empty type handle", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.getSymbolOfType.mockImplementationOnce(() => {
+      throw new Error("protocol error: api: client error: empty type handle");
+    });
+
+    expect(
+      session.getSymbolOfType({
+        id: "type-1",
+        flags: 0,
+        texts: ["Base"],
       } as never),
     ).toBeUndefined();
   });

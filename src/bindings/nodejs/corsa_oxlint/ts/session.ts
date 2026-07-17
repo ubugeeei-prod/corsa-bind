@@ -247,7 +247,7 @@ export class CorsaProjectSession {
   }
 
   private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
-    if (!this.#snapshot) {
+    if (!this.#snapshot || typeId.trim().length === 0) {
       return undefined;
     }
     try {
@@ -255,7 +255,7 @@ export class CorsaProjectSession {
         this.client().getSymbolOfType(this.#snapshot, typeId) as CorsaSymbol | null,
       );
     } catch (error) {
-      if (isStaleHandleError(error)) {
+      if (isMissingTypeHandleError(error)) {
         return undefined;
       }
       throw error;
@@ -316,36 +316,56 @@ export class CorsaProjectSession {
   }
 
   getBaseTypeOfLiteralType(type: CorsaType): CorsaType | undefined {
-    return this.rememberType(
-      this.client().callJson("getBaseTypeOfLiteralType", {
-        snapshot: this.#snapshot,
-        project: this.projectId(),
-        type: type.id,
-      }),
+    return this.withMissingTypeHandleFallback<CorsaType | undefined>(type, undefined, () =>
+      this.rememberType(
+        this.client().callJson("getBaseTypeOfLiteralType", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          type: type.id,
+        }),
+      ),
     );
   }
 
   getPropertiesOfType(type: CorsaType): readonly CorsaSymbol[] {
-    return this.rememberSymbols(
-      this.client().callJson("getPropertiesOfType", {
-        snapshot: this.#snapshot,
-        project: this.projectId(),
-        type: type.id,
-      }) ?? [],
+    return this.withMissingTypeHandleFallback<readonly CorsaSymbol[]>(type, [], () =>
+      this.rememberSymbols(
+        this.client().callJson("getPropertiesOfType", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          type: type.id,
+        }) ?? [],
+      ),
     );
   }
 
   getSignaturesOfType(type: CorsaType, kind: number): readonly CorsaSignature[] {
-    const source = this.sourceContextForType(type);
-    return this.rememberSignatures(
-      this.client().callJson("getSignaturesOfType", {
-        snapshot: this.#snapshot,
-        project: this.projectId(),
-        type: type.id,
-        kind,
-        ...source,
-      }) ?? [],
-    );
+    return this.withMissingTypeHandleFallback<readonly CorsaSignature[]>(type, [], () => {
+      const source = this.sourceContextForType(type);
+      return this.rememberSignatures(
+        this.client().callJson("getSignaturesOfType", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          type: type.id,
+          kind,
+          ...source,
+        }) ?? [],
+      );
+    });
+  }
+
+  private withMissingTypeHandleFallback<T>(type: CorsaType, fallback: T, operation: () => T): T {
+    if (type.id.trim().length === 0) {
+      return fallback;
+    }
+    try {
+      return operation();
+    } catch (error) {
+      if (isMissingTypeHandleError(error)) {
+        return fallback;
+      }
+      throw error;
+    }
   }
 
   getCallSignatureFacts(
@@ -354,20 +374,22 @@ export class CorsaProjectSession {
     argumentTypeTexts: readonly (readonly string[])[],
     explicitTypeArgumentTexts: readonly string[],
   ): CorsaCallSignatureFacts {
-    const source = this.sourceContextForType(type);
-    const facts = this.client().callJson<CorsaCallSignatureFacts>("getCallSignatureFacts", {
-      snapshot: this.#snapshot,
-      project: this.projectId(),
-      type: type.id,
-      kind,
-      ...source,
-      argumentTypeTexts,
-      explicitTypeArgumentTexts,
+    return this.withMissingTypeHandleFallback<CorsaCallSignatureFacts>(type, {}, () => {
+      const source = this.sourceContextForType(type);
+      const facts = this.client().callJson<CorsaCallSignatureFacts>("getCallSignatureFacts", {
+        snapshot: this.#snapshot,
+        project: this.projectId(),
+        type: type.id,
+        kind,
+        ...source,
+        argumentTypeTexts,
+        explicitTypeArgumentTexts,
+      });
+      if (facts?.signature) {
+        this.rememberSignature(facts.signature);
+      }
+      return facts ?? {};
     });
-    if (facts?.signature) {
-      this.rememberSignature(facts.signature);
-    }
-    return facts ?? {};
   }
 
   getReturnTypeOfSignature(signature: CorsaSignature): CorsaType | undefined {
@@ -396,40 +418,44 @@ export class CorsaProjectSession {
   }
 
   getBaseTypes(type: CorsaType): readonly CorsaType[] {
-    if (isArrayOrTupleLikeType(this, type)) {
-      return [];
-    }
-    return this.rememberTypes(
-      this.client().callJson("getBaseTypes", {
-        snapshot: this.#snapshot,
-        project: this.projectId(),
-        type: type.id,
-        texts: this.typeTexts(type),
-      }) ?? [],
-    );
+    return this.withMissingTypeHandleFallback<readonly CorsaType[]>(type, [], () => {
+      if (isArrayOrTupleLikeType(this, type)) {
+        return [];
+      }
+      return this.rememberTypes(
+        this.client().callJson("getBaseTypes", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          type: type.id,
+          texts: this.typeTexts(type),
+        }) ?? [],
+      );
+    });
   }
 
   getTypeArguments(type: CorsaType): readonly CorsaType[] {
-    const source = this.sourceSliceForType(type);
-    return this.rememberTypes(
-      source
-        ? (this.client().getTypeArgumentsAtSourceRange(
-            this.#snapshot!,
-            this.projectId(),
-            type.id,
-            type.objectFlags,
-            source.node.fileName,
-            source.node.pos,
-            source.node.end,
-            this.sourceTextForPath(source.node.fileName) ?? "",
-          ) as unknown as readonly CorsaType[])
-        : (this.client().getTypeArguments(
-            this.#snapshot!,
-            this.projectId(),
-            type.id,
-            type.objectFlags,
-          ) as unknown as readonly CorsaType[]),
-    );
+    return this.withMissingTypeHandleFallback<readonly CorsaType[]>(type, [], () => {
+      const source = this.sourceSliceForType(type);
+      return this.rememberTypes(
+        source
+          ? (this.client().getTypeArgumentsAtSourceRange(
+              this.#snapshot!,
+              this.projectId(),
+              type.id,
+              type.objectFlags,
+              source.node.fileName,
+              source.node.pos,
+              source.node.end,
+              this.sourceTextForPath(source.node.fileName) ?? "",
+            ) as unknown as readonly CorsaType[])
+          : (this.client().getTypeArguments(
+              this.#snapshot!,
+              this.projectId(),
+              type.id,
+              type.objectFlags,
+            ) as unknown as readonly CorsaType[]),
+      );
+    });
   }
 
   getTypesOfType(type: CorsaType): readonly CorsaType[] {
@@ -509,28 +535,34 @@ export class CorsaProjectSession {
   }
 
   getConstraintOfType(type: CorsaType): CorsaType | undefined {
-    return this.rememberType(
-      this.client().getConstraintOfType(this.#snapshot!, this.projectId(), type.id) as
-        | CorsaType
-        | undefined,
+    return this.withMissingTypeHandleFallback<CorsaType | undefined>(type, undefined, () =>
+      this.rememberType(
+        this.client().getConstraintOfType(this.#snapshot!, this.projectId(), type.id) as
+          | CorsaType
+          | undefined,
+      ),
     );
   }
 
   private callType(method: string, type: CorsaType): CorsaType | undefined {
-    return this.rememberType(
-      this.client().callJson<CorsaType | null>(method, {
-        snapshot: this.#snapshot,
-        type: type.id,
-      }) ?? undefined,
+    return this.withMissingTypeHandleFallback<CorsaType | undefined>(type, undefined, () =>
+      this.rememberType(
+        this.client().callJson<CorsaType | null>(method, {
+          snapshot: this.#snapshot,
+          type: type.id,
+        }) ?? undefined,
+      ),
     );
   }
 
   private callTypeArray(method: string, type: CorsaType): readonly CorsaType[] {
-    return this.rememberTypes(
-      this.client().callJson<readonly CorsaType[] | null>(method, {
-        snapshot: this.#snapshot,
-        type: type.id,
-      }) ?? [],
+    return this.withMissingTypeHandleFallback<readonly CorsaType[]>(type, [], () =>
+      this.rememberTypes(
+        this.client().callJson<readonly CorsaType[] | null>(method, {
+          snapshot: this.#snapshot,
+          type: type.id,
+        }) ?? [],
+      ),
     );
   }
 
@@ -1115,8 +1147,11 @@ function isRecoverableTransportError(error: unknown): boolean {
   );
 }
 
-function isStaleHandleError(error: unknown): boolean {
-  return errorMessage(error).includes("not found in snapshot registry");
+function isMissingTypeHandleError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return (
+    message.includes("not found in snapshot registry") || message.includes("empty type handle")
+  );
 }
 
 function errorMessage(error: unknown): string {

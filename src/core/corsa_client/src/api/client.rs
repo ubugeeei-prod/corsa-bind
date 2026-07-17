@@ -532,14 +532,14 @@ impl ApiClient {
         }
     }
 
-    /// Reports whether an error means the server dropped a type handle from its
-    /// snapshot registry.
+    /// Reports whether an error means the server could not resolve a type handle.
     ///
     /// Upstream Corsa occasionally evicts a live handle mid-session (for
     /// example after a base-types query on a class with no explicit `extends`
     /// clause). A follow-up relation query on that handle then fails with
-    /// "type handle ... not found in snapshot registry". Relation endpoints
-    /// treat this as missing data so analysis can continue instead of aborting.
+    /// "type handle ... not found in snapshot registry". Some upstream paths
+    /// instead report "empty type handle" for the same missing-data condition.
+    /// Relation endpoints treat both as missing data so analysis can continue.
     /// The message arrives as [`CorsaError::Protocol`] over msgpack and as
     /// [`CorsaError::Rpc`] over JSON-RPC, so both variants are inspected.
     pub(crate) fn is_stale_handle_error(error: &CorsaError) -> bool {
@@ -673,7 +673,7 @@ fn is_unknown_api_method_message(message: &str) -> bool {
 }
 
 fn is_stale_handle_message(message: &str) -> bool {
-    message.contains("not found in snapshot registry")
+    message.contains("not found in snapshot registry") || message.contains("empty type handle")
 }
 
 fn is_protocol_panic_message(message: &str) -> bool {
@@ -746,6 +746,13 @@ mod tests {
                 ),
                 data: None,
             },
+        )));
+    }
+
+    #[test]
+    fn recognizes_empty_type_handle_protocol_error() {
+        assert!(ApiClient::is_stale_handle_error(&CorsaError::Protocol(
+            CompactString::from("api: client error: empty type handle"),
         )));
     }
 

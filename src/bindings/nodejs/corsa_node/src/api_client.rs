@@ -1943,7 +1943,7 @@ fn is_stale_handle_error(error: &CorsaError) -> bool {
 }
 
 fn is_stale_handle_message(message: &str) -> bool {
-    message.contains("not found in snapshot registry")
+    message.contains("not found in snapshot registry") || message.contains("empty type handle")
 }
 
 async fn get_signatures_of_type_with_parameter_texts(
