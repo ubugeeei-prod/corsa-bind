@@ -346,6 +346,11 @@ function implementedTypesFromTypeAndBases(
   type: CorsaType,
   checker: CorsaTypeCheckerShape,
 ): readonly CorsaType[] {
+  const session = sessionForContext(context).session;
+  const cached = session.getCachedImplementedTypes(type.id);
+  if (cached) {
+    return cached;
+  }
   // Iterative DFS over the base chain so we don't pay for one closure call
   // and one `push(...subResult)` spread per base (each spread used to copy
   // the entire growing accumulator). Visit order doesn't matter because we
@@ -381,7 +386,7 @@ function implementedTypesFromTypeAndBases(
       stack.push(baseType);
     }
   }
-  return implemented;
+  return session.cacheImplementedTypes(type.id, implemented);
 }
 
 function implementedTypesFromTypeDeclaration(
@@ -390,15 +395,21 @@ function implementedTypesFromTypeDeclaration(
   checker: CorsaTypeCheckerShape,
 ): readonly CorsaType[] {
   const session = sessionForContext(context).session;
+  const cached = session.getCachedOwnImplementedTypes(type.id);
+  if (cached) {
+    return cached;
+  }
   const symbol = checker.getSymbolOfType(type);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
   const sourceText = declarationNode
     ? sourceTextForPath(context, declarationNode.fileName)
     : undefined;
-  return declarationNode && sourceText
-    ? implementedTypesFromSourceText(context, declarationNode, sourceText, checker)
-    : [];
+  const implemented =
+    declarationNode && sourceText
+      ? implementedTypesFromSourceText(context, declarationNode, sourceText, checker)
+      : [];
+  return session.cacheOwnImplementedTypes(type.id, implemented);
 }
 
 function implementedTypesFromSourceText(

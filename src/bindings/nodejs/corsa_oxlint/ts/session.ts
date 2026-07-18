@@ -64,8 +64,12 @@ export class CorsaProjectSession {
   #projects: ProjectResponse[] = [];
   #files = new Map<string, FileCache>();
   #symbolsById = new Map<string, CorsaSymbol>();
+  #symbolsByTypeId = new Map<string, CorsaSymbol | null>();
   #symbolTypeById = new Map<string, string>();
   #nodesById = new Map<string, CorsaNode>();
+  #baseTypesById = new Map<string, readonly CorsaType[]>();
+  #implementedTypesById = new Map<string, readonly CorsaType[]>();
+  #ownImplementedTypesById = new Map<string, readonly CorsaType[]>();
   #typeLookupById = new Map<string, TypeLookup>();
   #typeSourceById = new Map<string, SourceSlice>();
   #typeTextById = new Map<string, string>();
@@ -237,17 +241,29 @@ export class CorsaProjectSession {
   }
 
   private getSymbolOfTypeUnchecked(type: CorsaType): CorsaSymbol | undefined {
+    const cached = this.#symbolsByTypeId.get(type.id);
+    if (cached !== undefined) {
+      return cached ?? undefined;
+    }
     if (type.symbol) {
       const symbol = this.getSymbol(type.symbol);
       if (isUsableSymbol(symbol)) {
+        this.#symbolsByTypeId.set(type.id, symbol);
         return symbol;
       }
     }
+    const lookupSymbol = this.getSymbolOfTypeAtLookup(type);
+    if (lookupSymbol) {
+      this.#symbolsByTypeId.set(type.id, lookupSymbol);
+      return lookupSymbol;
+    }
     const symbol = this.getSymbolOfTypeById(type.id);
     if (symbol) {
+      this.#symbolsByTypeId.set(type.id, symbol);
       return symbol;
     }
-    return this.getSymbolOfTypeAtLookup(type);
+    this.#symbolsByTypeId.set(type.id, null);
+    return undefined;
   }
 
   private getSymbolOfTypeAtLookup(type: CorsaType): CorsaSymbol | undefined {
@@ -472,15 +488,39 @@ export class CorsaProjectSession {
       if (isSyntheticTypeHandle(type.id) || isArrayOrTupleLikeType(this, type)) {
         return [];
       }
-      return this.rememberTypes(
-        this.client().callJson("getBaseTypes", {
+      const cached = this.#baseTypesById.get(type.id);
+      if (cached) {
+        return cached;
+      }
+      const baseTypes = this.rememberTypes(
+        this.client().callJson<readonly CorsaType[]>("getBaseTypes", {
           snapshot: this.#snapshot,
           project: this.projectId(),
           type: type.id,
           texts: this.typeTexts(type),
         }) ?? [],
       );
+      this.#baseTypesById.set(type.id, baseTypes);
+      return baseTypes;
     });
+  }
+
+  getCachedImplementedTypes(typeId: string): readonly CorsaType[] | undefined {
+    return this.#implementedTypesById.get(typeId);
+  }
+
+  cacheImplementedTypes(typeId: string, types: readonly CorsaType[]): readonly CorsaType[] {
+    this.#implementedTypesById.set(typeId, types);
+    return types;
+  }
+
+  getCachedOwnImplementedTypes(typeId: string): readonly CorsaType[] | undefined {
+    return this.#ownImplementedTypesById.get(typeId);
+  }
+
+  cacheOwnImplementedTypes(typeId: string, types: readonly CorsaType[]): readonly CorsaType[] {
+    this.#ownImplementedTypesById.set(typeId, types);
+    return types;
   }
 
   getTypeArguments(type: CorsaType): readonly CorsaType[] {
@@ -809,8 +849,12 @@ export class CorsaProjectSession {
 
   private clearHandleCaches(): void {
     this.#symbolsById.clear();
+    this.#symbolsByTypeId.clear();
     this.#symbolTypeById.clear();
     this.#nodesById.clear();
+    this.#baseTypesById.clear();
+    this.#implementedTypesById.clear();
+    this.#ownImplementedTypesById.clear();
     this.#typeLookupById.clear();
     this.#typeSourceById.clear();
     this.#snapshotHasIssuedHandles = false;
