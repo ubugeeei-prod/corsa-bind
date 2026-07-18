@@ -399,7 +399,7 @@ function implementedTypesFromTypeDeclaration(
   if (cached) {
     return cached;
   }
-  const symbol = checker.getSymbolOfType(type);
+  const symbol = session.getSymbolOfTypeFromSource(type);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
   const sourceText = declarationNode

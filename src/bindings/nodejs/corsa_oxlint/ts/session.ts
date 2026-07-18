@@ -240,6 +240,27 @@ export class CorsaProjectSession {
     );
   }
 
+  getSymbolOfTypeFromSource(type: CorsaType): CorsaSymbol | undefined {
+    return this.withTransportRecovery(() => {
+      const cached = this.#symbolsByTypeId.get(type.id);
+      if (cached) {
+        return cached;
+      }
+      if (type.symbol) {
+        const symbol = this.getSymbol(type.symbol);
+        if (isUsableSymbol(symbol)) {
+          this.#symbolsByTypeId.set(type.id, symbol);
+          return symbol;
+        }
+      }
+      const symbol = this.getSymbolOfTypeAtLookup(type);
+      if (symbol) {
+        this.#symbolsByTypeId.set(type.id, symbol);
+      }
+      return symbol;
+    }, "looking up a symbol from source");
+  }
+
   private getSymbolOfTypeUnchecked(type: CorsaType): CorsaSymbol | undefined {
     const cached = this.#symbolsByTypeId.get(type.id);
     if (cached !== undefined) {
@@ -277,6 +298,16 @@ export class CorsaProjectSession {
       if (texts.some((text) => text.trim() === symbol.name)) {
         return symbol;
       }
+    }
+    const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
+    let typeSymbolName = typeSymbolNameFromTexts(texts);
+    if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
+      const typeSymbol = this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
+      if (typeSymbol) {
+        return typeSymbol;
+      }
+    }
+    if (isUsableSymbol(symbol)) {
       try {
         const rendered = this.typeToString(type);
         if (!texts.includes(rendered)) {
@@ -288,28 +319,32 @@ export class CorsaProjectSession {
       if (texts.some((text) => text.trim() === symbol.name)) {
         return symbol;
       }
+      typeSymbolName = typeSymbolNameFromTexts(texts);
     }
-    const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
-    const typeSymbolName = typeSymbolNameFromTexts(texts);
     if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
-      const typePosition = findIdentifierPosition(
-        sourceText,
-        typeSymbolName,
-        lookup.position,
-        lookup.position + 512,
-      );
-      if (typePosition !== undefined && typePosition !== lookup.position) {
-        const typeSymbol = this.getSymbolAtPosition(
-          lookup.fileName,
-          typePosition,
-          lookup.sourceText,
-        );
-        if (isUsableSymbol(typeSymbol) && typeSymbol.name === typeSymbolName) {
-          return typeSymbol;
-        }
-      }
+      return this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
     }
     return undefined;
+  }
+
+  private getNearbyTypeSymbol(
+    lookup: TypeLookup,
+    sourceText: string,
+    typeSymbolName: string,
+  ): CorsaSymbol | undefined {
+    const typePosition = findIdentifierPosition(
+      sourceText,
+      typeSymbolName,
+      lookup.position,
+      lookup.position + 512,
+    );
+    if (typePosition === undefined || typePosition === lookup.position) {
+      return undefined;
+    }
+    const typeSymbol = this.getSymbolAtPosition(lookup.fileName, typePosition, lookup.sourceText);
+    return isUsableSymbol(typeSymbol) && typeSymbol.name === typeSymbolName
+      ? typeSymbol
+      : undefined;
   }
 
   private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
