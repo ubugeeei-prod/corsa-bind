@@ -810,12 +810,6 @@ export class CorsaProjectSession {
     normalizeSymbol(symbol);
     this.#snapshotHasIssuedHandles = true;
     this.#symbolsById.set(symbol.id, symbol);
-    for (const declaration of symbol.declarations ?? []) {
-      this.rememberNode(declaration);
-    }
-    if (symbol.valueDeclaration) {
-      this.rememberNode(symbol.valueDeclaration);
-    }
     return symbol;
   }
 
