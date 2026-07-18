@@ -19,6 +19,7 @@ class FakeClient {
     id: "symbol-1",
     name: "value",
   }));
+  readonly getSymbolAtPosition = vi.fn(() => undefined as { id: string; name: string } | undefined);
   readonly typeToString = vi.fn(() => "type:string");
   readonly releaseHandle = vi.fn();
   readonly close = vi.fn();
@@ -144,6 +145,40 @@ describe("CorsaProjectSession", () => {
     } as never);
 
     expect(result).toEqual([]);
+  });
+
+  it("does not send synthetic fallback types back to the runtime", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+
+    expect(
+      session.getBaseTypes({
+        id: "synthetic-type-argument:14:0:Derived",
+        flags: 0,
+        texts: ["Derived"],
+      } as never),
+    ).toEqual([]);
+    expect(client.callJson).not.toHaveBeenCalledWith("getBaseTypes", expect.anything());
   });
 
   it("normalizes numeric raw type handles before typed client calls", () => {
@@ -342,6 +377,42 @@ describe("CorsaProjectSession", () => {
         texts: ["T"],
       } as never),
     ).toBeUndefined();
+  });
+
+  it("resolves a matching symbol from the original type lookup position", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    const type = session.getTypeAtPosition("/tmp/one.ts", 4);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.getSymbolOfType.mockReturnValueOnce(null as never);
+    client.getSymbolAtPosition.mockReturnValueOnce({ id: "symbol-base", name: "Base" });
+    client.typeToString.mockReturnValueOnce("Base");
+
+    expect(session.getSymbolOfType(type as never)?.name).toBe("Base");
+    expect(client.getSymbolAtPosition).toHaveBeenCalledWith(
+      expect.any(String),
+      "project-1",
+      "/tmp/one.ts",
+      4,
+    );
   });
 
   it("returns undefined when getSymbolOfType hits an empty type handle", () => {
