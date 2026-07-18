@@ -30,7 +30,6 @@ type PreparedFileState = {
 
 type SourceSlice = {
   node: CorsaNode;
-  text: string;
 };
 
 type TypeLookup = {
@@ -765,7 +764,6 @@ export class CorsaProjectSession {
     };
     this.#typeSourceById.set(type.id, {
       node,
-      text: sourceText.slice(start, end),
     });
   }
 
@@ -899,7 +897,6 @@ export class CorsaProjectSession {
     }
     return {
       node,
-      text: sourceText.slice(node.pos, node.end),
     };
   }
 
