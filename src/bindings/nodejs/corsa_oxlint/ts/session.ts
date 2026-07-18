@@ -243,7 +243,31 @@ export class CorsaProjectSession {
         return symbol;
       }
     }
-    return this.getSymbolOfTypeById(type.id);
+    const symbol = this.getSymbolOfTypeById(type.id);
+    if (symbol) {
+      return symbol;
+    }
+    return this.getSymbolOfTypeAtLookup(type);
+  }
+
+  private getSymbolOfTypeAtLookup(type: CorsaType): CorsaSymbol | undefined {
+    const lookup = this.#typeLookupById.get(type.id);
+    if (!lookup) {
+      return undefined;
+    }
+    const symbol = this.getSymbolAtPosition(lookup.fileName, lookup.position, lookup.sourceText);
+    if (!isUsableSymbol(symbol)) {
+      return undefined;
+    }
+    const texts = this.typeTexts(type);
+    if (texts.some((text) => text.trim() === symbol.name)) {
+      return symbol;
+    }
+    try {
+      return this.typeToString(type).trim() === symbol.name ? symbol : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
@@ -419,7 +443,7 @@ export class CorsaProjectSession {
 
   getBaseTypes(type: CorsaType): readonly CorsaType[] {
     return this.withMissingTypeHandleFallback<readonly CorsaType[]>(type, [], () => {
-      if (isArrayOrTupleLikeType(this, type)) {
+      if (isSyntheticTypeHandle(type.id) || isArrayOrTupleLikeType(this, type)) {
         return [];
       }
       return this.rememberTypes(
@@ -1021,6 +1045,10 @@ function isArrayOrTupleLikeType(session: CorsaProjectSession, type: CorsaType): 
 
 function isUsableSymbol(symbol: CorsaSymbol | null | undefined): symbol is CorsaSymbol {
   return symbol != null && !symbol.name.includes("\ufffd");
+}
+
+function isSyntheticTypeHandle(handle: string): boolean {
+  return handle.startsWith("synthetic-");
 }
 
 function normalizeType(type: CorsaType): void {

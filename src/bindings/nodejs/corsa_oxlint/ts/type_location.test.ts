@@ -95,6 +95,44 @@ describe("corsa oxlint type locations", () => {
     expect(seen.classFromNode).toBe(seen.classFromId);
   });
 
+  integrationCase("exposes symbols for class declaration types", () => {
+    const seen: Record<string, string | null> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "class-declaration-type-symbols",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise class declaration type symbol lookup",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassDeclaration(node: any) {
+            const name = node.id?.name;
+            const type = services.getTypeAtLocation(node);
+            if (name) {
+              seen[name] = type ? (checker.getSymbolOfType(type)?.name ?? null) : null;
+            }
+          },
+        };
+      },
+    });
+
+    new RuleTester().run("class-declaration-type-symbols", rule as any, {
+      valid: [{ code: "class Base {}\nclass Derived extends Base {}\n" }],
+      invalid: [],
+    });
+
+    expect(seen).toEqual({ Base: "Base", Derived: "Derived" });
+  });
+
   integrationCase("resolves declared types for type reference nodes", () => {
     const seen: {
       readonly name: string;
@@ -1332,6 +1370,61 @@ describe("corsa oxlint type locations", () => {
     expect(seen.intersection.parts).toEqual(expect.arrayContaining(["Foo", "{ x: number; }"]));
     expect(seen.mapped.args).toEqual(["Foo"]);
     expect(seen.mapped.target).toBe("Readonly<T>");
+  });
+
+  integrationCase("walks base types through intersections without protocol errors", () => {
+    const visited: string[] = [];
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "intersection-base-type-walk",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise recursive base type traversal",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        const walk = (type: any, depth = 0) => {
+          if (!type || depth > 8) {
+            return;
+          }
+          visited.push(checker.typeToString(type));
+          for (const base of checker.getBaseTypes(type)) {
+            walk(base, depth + 1);
+          }
+        };
+        return {
+          TSPropertySignature(node: any) {
+            if (node.key?.name === "target") {
+              walk(services.getTypeAtLocation(node));
+            }
+          },
+        };
+      },
+    });
+
+    new RuleTester().run("intersection-base-type-walk", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Base {}",
+            "class Derived extends Base {}",
+            "interface Props {",
+            "  target: Derived & { extra: string };",
+            "}",
+          ].join("\n"),
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(visited[0]).toContain("Derived");
   });
 
   integrationCase("exposes symbols from type handles", () => {
