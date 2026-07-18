@@ -72,6 +72,7 @@ export class CorsaProjectSession {
   #ownImplementedTypesById = new Map<string, readonly CorsaType[]>();
   #typeLookupById = new Map<string, TypeLookup>();
   #typeSourceById = new Map<string, SourceSlice>();
+  #sourceLengthByPath = new Map<string, number>();
   #typeTextById = new Map<string, string>();
   #lastRefreshMs = 0;
   #snapshotHasIssuedHandles = false;
@@ -853,7 +854,7 @@ export class CorsaProjectSession {
   }
 
   private rememberNode(handle: string): CorsaNode | undefined {
-    const parsed = parseNodeHandle(handle, (fileName) => this.sourceTextForPath(fileName)?.length);
+    const parsed = parseNodeHandle(handle, (fileName) => this.sourceLengthForPath(fileName));
     if (!parsed) {
       return undefined;
     }
@@ -871,7 +872,20 @@ export class CorsaProjectSession {
     this.#ownImplementedTypesById.clear();
     this.#typeLookupById.clear();
     this.#typeSourceById.clear();
+    this.#sourceLengthByPath.clear();
     this.#snapshotHasIssuedHandles = false;
+  }
+
+  private sourceLengthForPath(path: string): number | undefined {
+    const cached = this.#sourceLengthByPath.get(path);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const length = this.sourceTextForPath(path)?.length;
+    if (length !== undefined) {
+      this.#sourceLengthByPath.set(path, length);
+    }
+    return length;
   }
 
   private sourceSliceForHandle(handle: string): SourceSlice | undefined {
