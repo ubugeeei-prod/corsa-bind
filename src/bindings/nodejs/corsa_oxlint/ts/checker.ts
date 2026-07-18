@@ -2,6 +2,7 @@ import type { Node } from "@oxlint/plugins";
 
 import { createNodeMaps, toPosition } from "./node_map";
 import { sessionForContext } from "./registry";
+import type { CorsaProjectSession } from "./session";
 import { SignatureKind } from "./types";
 import type {
   ContextWithParserOptions,
@@ -12,6 +13,16 @@ import type {
   CorsaType,
   CorsaTypeCheckerShape,
 } from "./types";
+
+type ImplementingClassCache = {
+  readonly sourceText: string;
+  readonly names: ReadonlySet<string>;
+};
+
+const implementingClassNamesBySession = new WeakMap<
+  CorsaProjectSession,
+  Map<string, ImplementingClassCache>
+>();
 
 export function createProgram(
   context: ContextWithParserOptions,
@@ -421,7 +432,7 @@ function shouldRecoverImplementationSymbol(
   type: CorsaType,
 ): boolean {
   const name = typeSymbolName(type.texts ?? []);
-  return name !== undefined && sourceDeclaresImplementingClass(context.sourceCode.text, name);
+  return name !== undefined && implementingClassNames(context).has(name);
 }
 
 function typeSymbolName(texts: readonly string[]): string | undefined {
@@ -437,24 +448,44 @@ function typeSymbolName(texts: readonly string[]): string | undefined {
   return undefined;
 }
 
-function sourceDeclaresImplementingClass(sourceText: string, name: string): boolean {
+function implementingClassNames(context: ContextWithParserOptions): ReadonlySet<string> {
+  const session = sessionForContext(context).session;
+  let byFile = implementingClassNamesBySession.get(session);
+  if (!byFile) {
+    byFile = new Map();
+    implementingClassNamesBySession.set(session, byFile);
+  }
+  const sourceText = context.sourceCode.text;
+  const cached = byFile.get(context.filename);
+  if (cached?.sourceText === sourceText) {
+    return cached.names;
+  }
+  const names = collectImplementingClassNames(sourceText);
+  byFile.set(context.filename, { sourceText, names });
+  return names;
+}
+
+function collectImplementingClassNames(sourceText: string): ReadonlySet<string> {
+  const names = new Set<string>();
   let offset = 0;
   while (offset < sourceText.length) {
     const classOffset = findKeywordOutsideTrivia(sourceText.slice(offset), "class");
     if (classOffset < 0) {
-      return false;
+      break;
     }
     const declarationStart = offset + classOffset + "class".length;
     const rest = sourceText.slice(declarationStart);
     const match = /^\s*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/u.exec(rest);
-    if (match?.[1] === name) {
+    if (match?.[1]) {
       const bodyOpen = findClassBodyOpen(rest, 0);
       const header = rest.slice(0, bodyOpen >= 0 ? bodyOpen : rest.length);
-      return findKeywordOutsideTrivia(header, "implements") >= 0;
+      if (findKeywordOutsideTrivia(header, "implements") >= 0) {
+        names.add(match[1]);
+      }
     }
     offset = declarationStart;
   }
-  return false;
+  return names;
 }
 
 function implementedTypesFromSourceText(
