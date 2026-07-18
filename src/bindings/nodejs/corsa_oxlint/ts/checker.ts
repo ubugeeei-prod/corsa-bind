@@ -213,13 +213,19 @@ function sourceTextForPath(
   context: ContextWithParserOptions,
   fileName: string,
 ): string | undefined {
-  const normalizedFileName = fileName.toLowerCase();
-  const normalizedContextFilename = context.filename.toLowerCase();
-  return normalizedFileName === normalizedContextFilename ||
-    normalizedFileName.endsWith(normalizedContextFilename) ||
-    normalizedContextFilename.endsWith(normalizedFileName)
+  return pathsReferToSameFile(fileName, context.filename)
     ? context.sourceCode.text
     : sessionForContext(context).session.getSourceTextForPath(fileName);
+}
+
+function pathsReferToSameFile(left: string, right: string): boolean {
+  const normalizedLeft = left.replaceAll("\\", "/").toLowerCase();
+  const normalizedRight = right.replaceAll("\\", "/").toLowerCase();
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.endsWith(`/${normalizedRight}`) ||
+    normalizedRight.endsWith(`/${normalizedLeft}`)
+  );
 }
 
 function typeOfNewExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaType | undefined {
@@ -384,7 +390,7 @@ function implementedTypesFromTypeDeclaration(
   checker: CorsaTypeCheckerShape,
 ): readonly CorsaType[] {
   const session = sessionForContext(context).session;
-  const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
+  const symbol = checker.getSymbolOfType(type);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
   const sourceText = declarationNode

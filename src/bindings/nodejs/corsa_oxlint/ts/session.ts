@@ -256,18 +256,42 @@ export class CorsaProjectSession {
       return undefined;
     }
     const symbol = this.getSymbolAtPosition(lookup.fileName, lookup.position, lookup.sourceText);
-    if (!isUsableSymbol(symbol)) {
-      return undefined;
-    }
-    const texts = this.typeTexts(type);
-    if (texts.some((text) => text.trim() === symbol.name)) {
+    const texts = [...this.typeTexts(type)];
+    if (isUsableSymbol(symbol) && texts.some((text) => text.trim() === symbol.name)) {
       return symbol;
     }
     try {
-      return this.typeToString(type).trim() === symbol.name ? symbol : undefined;
+      const rendered = this.typeToString(type);
+      if (!texts.includes(rendered)) {
+        texts.unshift(rendered);
+      }
     } catch {
-      return undefined;
+      // A stale handle may still have cached texts or a usable lookup symbol.
     }
+    if (isUsableSymbol(symbol) && texts.some((text) => text.trim() === symbol.name)) {
+      return symbol;
+    }
+    const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
+    const typeSymbolName = typeSymbolNameFromTexts(texts);
+    if (sourceText && typeSymbolName) {
+      const typePosition = findIdentifierPosition(
+        sourceText,
+        typeSymbolName,
+        lookup.position,
+        lookup.position + 512,
+      );
+      if (typePosition !== undefined && typePosition !== lookup.position) {
+        const typeSymbol = this.getSymbolAtPosition(
+          lookup.fileName,
+          typePosition,
+          lookup.sourceText,
+        );
+        if (isUsableSymbol(typeSymbol) && typeSymbol.name === typeSymbolName) {
+          return typeSymbol;
+        }
+      }
+    }
+    return undefined;
   }
 
   private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
@@ -773,7 +797,7 @@ export class CorsaProjectSession {
   }
 
   private rememberNode(handle: string): CorsaNode | undefined {
-    const parsed = parseNodeHandle(handle);
+    const parsed = parseNodeHandle(handle, (fileName) => this.sourceTextForPath(fileName)?.length);
     if (!parsed) {
       return undefined;
     }
@@ -807,7 +831,7 @@ export class CorsaProjectSession {
 
   private sourceTextForPath(path: string): string | undefined {
     for (const [fileName, cached] of this.#files) {
-      if (fileName === path || fileName.endsWith(path)) {
+      if (pathsReferToSameFile(fileName, path)) {
         return cached.lintSourceText ?? cached.sourceText ?? readFileOrUndefined(fileName);
       }
     }
@@ -1051,6 +1075,52 @@ function isSyntheticTypeHandle(handle: string): boolean {
   return handle.startsWith("synthetic-");
 }
 
+function typeSymbolNameFromTexts(texts: readonly string[]): string | undefined {
+  for (const text of texts) {
+    const match =
+      /^(?:typeof\s+)?(?:[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*\.)*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)(?:\s*<|$)/u.exec(
+        text.trim(),
+      );
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
+function findIdentifierPosition(
+  sourceText: string,
+  identifier: string,
+  start: number,
+  end: number,
+): number | undefined {
+  const boundedEnd = Math.min(sourceText.length, end);
+  let position = sourceText.indexOf(identifier, Math.max(0, start));
+  while (position >= 0 && position < boundedEnd) {
+    const before = position > 0 ? sourceText[position - 1] : undefined;
+    const after = sourceText[position + identifier.length];
+    if (!isIdentifierPart(before) && !isIdentifierPart(after)) {
+      return position;
+    }
+    position = sourceText.indexOf(identifier, position + identifier.length);
+  }
+  return undefined;
+}
+
+function isIdentifierPart(char: string | undefined): boolean {
+  return char !== undefined && /[$_\u200c\u200d\p{ID_Continue}]/u.test(char);
+}
+
+function pathsReferToSameFile(left: string, right: string): boolean {
+  const normalizedLeft = left.replaceAll("\\", "/").toLowerCase();
+  const normalizedRight = right.replaceAll("\\", "/").toLowerCase();
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.endsWith(`/${normalizedRight}`) ||
+    normalizedRight.endsWith(`/${normalizedLeft}`)
+  );
+}
+
 function normalizeType(type: CorsaType): void {
   const mutable = type as {
     id: string;
@@ -1148,12 +1218,24 @@ function languageIdFor(fileName: string): string {
   return "typescript";
 }
 
-function parseNodeHandle(value: string): CorsaNode | undefined {
-  const [posText, endText, _kindText, ...pathParts] = value.split(".");
+function parseNodeHandle(
+  value: string,
+  sourceLengthForPath: (fileName: string) => number | undefined,
+): CorsaNode | undefined {
+  const [posText, secondText, thirdText, ...remainingParts] = value.split(".");
   const pos = Number(posText);
-  const end = Number(endText);
-  const fileName = pathParts.join(".");
-  if (!Number.isFinite(pos) || !Number.isFinite(end) || !fileName) {
+  const second = Number(secondText);
+  const third = Number(thirdText);
+  if (!Number.isFinite(pos) || !Number.isFinite(second)) {
+    return undefined;
+  }
+  const hasEndPosition = Number.isFinite(third);
+  const fileName = (hasEndPosition ? remainingParts : [thirdText, ...remainingParts]).join(".");
+  if (!fileName) {
+    return undefined;
+  }
+  const end = hasEndPosition ? second : (sourceLengthForPath(fileName) ?? pos + 1);
+  if (end < pos) {
     return undefined;
   }
   return { id: value, fileName, pos, end, range: [pos, end] };
