@@ -240,27 +240,6 @@ export class CorsaProjectSession {
     );
   }
 
-  getSymbolOfTypeFromSource(type: CorsaType): CorsaSymbol | undefined {
-    return this.withTransportRecovery(() => {
-      const cached = this.#symbolsByTypeId.get(type.id);
-      if (cached) {
-        return cached;
-      }
-      if (type.symbol) {
-        const symbol = this.getSymbol(type.symbol);
-        if (isUsableSymbol(symbol)) {
-          this.#symbolsByTypeId.set(type.id, symbol);
-          return symbol;
-        }
-      }
-      const symbol = this.getSymbolOfTypeAtLookup(type);
-      if (symbol) {
-        this.#symbolsByTypeId.set(type.id, symbol);
-      }
-      return symbol;
-    }, "looking up a symbol from source");
-  }
-
   private getSymbolOfTypeUnchecked(type: CorsaType): CorsaSymbol | undefined {
     const cached = this.#symbolsByTypeId.get(type.id);
     if (cached !== undefined) {

@@ -399,7 +399,11 @@ function implementedTypesFromTypeDeclaration(
   if (cached) {
     return cached;
   }
-  const symbol = session.getSymbolOfTypeFromSource(type);
+  const symbol = type.symbol
+    ? session.getSymbol(type.symbol)
+    : shouldRecoverImplementationSymbol(context, type)
+      ? checker.getSymbolOfType(type)
+      : undefined;
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
   const sourceText = declarationNode
@@ -410,6 +414,48 @@ function implementedTypesFromTypeDeclaration(
       ? implementedTypesFromSourceText(context, declarationNode, sourceText, checker)
       : [];
   return session.cacheOwnImplementedTypes(type.id, implemented);
+}
+
+function shouldRecoverImplementationSymbol(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+): boolean {
+  if (((type.objectFlags ?? 0) & 1) !== 0) {
+    return true;
+  }
+  const name = typeSymbolName(type.texts ?? []);
+  return name !== undefined && sourceDeclaresClass(context.sourceCode.text, name);
+}
+
+function typeSymbolName(texts: readonly string[]): string | undefined {
+  for (const text of texts) {
+    const match =
+      /^(?:typeof\s+)?(?:[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*\.)*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)(?:\s*<|$)/u.exec(
+        text.trim(),
+      );
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
+function sourceDeclaresClass(sourceText: string, name: string): boolean {
+  let offset = 0;
+  while (offset < sourceText.length) {
+    const classOffset = findKeywordOutsideTrivia(sourceText.slice(offset), "class");
+    if (classOffset < 0) {
+      return false;
+    }
+    const declarationStart = offset + classOffset + "class".length;
+    const rest = sourceText.slice(declarationStart);
+    const match = /^\s*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/u.exec(rest);
+    if (match?.[1] === name) {
+      return true;
+    }
+    offset = declarationStart;
+  }
+  return false;
 }
 
 function implementedTypesFromSourceText(
