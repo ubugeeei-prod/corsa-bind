@@ -257,23 +257,25 @@ export class CorsaProjectSession {
     }
     const symbol = this.getSymbolAtPosition(lookup.fileName, lookup.position, lookup.sourceText);
     const texts = [...this.typeTexts(type)];
-    if (isUsableSymbol(symbol) && texts.some((text) => text.trim() === symbol.name)) {
-      return symbol;
-    }
-    try {
-      const rendered = this.typeToString(type);
-      if (!texts.includes(rendered)) {
-        texts.unshift(rendered);
+    if (isUsableSymbol(symbol)) {
+      if (texts.some((text) => text.trim() === symbol.name)) {
+        return symbol;
       }
-    } catch {
-      // A stale handle may still have cached texts or a usable lookup symbol.
-    }
-    if (isUsableSymbol(symbol) && texts.some((text) => text.trim() === symbol.name)) {
-      return symbol;
+      try {
+        const rendered = this.typeToString(type);
+        if (!texts.includes(rendered)) {
+          texts.unshift(rendered);
+        }
+      } catch {
+        // A stale handle may still have cached texts or a usable lookup symbol.
+      }
+      if (texts.some((text) => text.trim() === symbol.name)) {
+        return symbol;
+      }
     }
     const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
     const typeSymbolName = typeSymbolNameFromTexts(texts);
-    if (sourceText && typeSymbolName) {
+    if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
       const typePosition = findIdentifierPosition(
         sourceText,
         typeSymbolName,
