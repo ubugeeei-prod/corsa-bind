@@ -325,6 +325,104 @@ describe("corsa oxlint implemented types", () => {
     },
   );
 
+  integrationCase(
+    "resolves implemented interfaces for generic property arguments after a hierarchy walk",
+    () => {
+      const seen: Record<string, readonly string[] | undefined> = {};
+      const errors: string[] = [];
+      const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+      const rule = createRule({
+        name: "implemented-types-after-hierarchy-walk",
+        meta: {
+          type: "problem",
+          docs: {
+            description: "exercise property type arguments after symbol and base traversal",
+            requiresTypeChecking: true,
+          },
+          messages: { unexpected: "unexpected" },
+          schema: [],
+        },
+        defaultOptions: [],
+        create(context: any) {
+          const services = OxlintUtils.getParserServices(context);
+          const checker = services.program.getTypeChecker();
+          const walk = (type: any, depth = 0) => {
+            if (!type || depth > 8) {
+              return;
+            }
+            checker.getSymbolOfType(type);
+            for (const base of checker.getBaseTypes(type)) {
+              walk(base, depth + 1);
+            }
+          };
+          return {
+            ClassDeclaration(node: any) {
+              const type = services.getTypeAtLocation(node);
+              walk(type);
+              if (node.id?.name && type) {
+                seen[node.id.name] = checker
+                  .getImplementedTypesOfType(type)
+                  .map((implemented) => checker.typeToString(implemented));
+              }
+            },
+            PropertyDefinition(node: any) {
+              try {
+                const type = services.getTypeAtLocation(node);
+                if (type) {
+                  checker.getImplementedTypesOfType(type);
+                  for (const argument of checker.getTypeArguments(type)) {
+                    seen.argument = checker
+                      .getImplementedTypesOfType(argument)
+                      .map((implemented) => checker.typeToString(implemented));
+                  }
+                }
+              } catch (error) {
+                errors.push(error instanceof Error ? error.message : String(error));
+              }
+            },
+          };
+        },
+      });
+
+      new RuleTester({ languageOptions: { sourceType: "module" } }).run(
+        "implemented-types-after-hierarchy-walk",
+        rule as any,
+        {
+          valid: [
+            {
+              code: [
+                "interface IContainer { name: string; }",
+                "abstract class ContainerBase implements IContainer {",
+                "  abstract readonly name: string;",
+                "}",
+                "class Container extends ContainerBase {",
+                '  readonly name: string = "x";',
+                "}",
+                "interface Wrapper<T> { value: T; }",
+                "class Holder {",
+                "  public field: Wrapper<Container>;",
+                "}",
+              ].join("\n"),
+              settings: {
+                corsaOxlint: {
+                  parserOptions: {
+                    corsa: { executable: realCorsaBinary },
+                  },
+                },
+              },
+            },
+          ],
+          invalid: [],
+        },
+      );
+
+      expect(errors).toEqual([]);
+      expect(seen.ContainerBase).toEqual(["IContainer"]);
+      expect(seen.Container).toEqual(["IContainer"]);
+      expect(seen.argument).toEqual(["IContainer"]);
+    },
+  );
+
   integrationCase("returns inherited implemented interfaces from class types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

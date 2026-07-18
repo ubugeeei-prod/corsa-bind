@@ -2,6 +2,7 @@ import type { Node } from "@oxlint/plugins";
 
 import { createNodeMaps, toPosition } from "./node_map";
 import { sessionForContext } from "./registry";
+import type { CorsaProjectSession } from "./session";
 import { SignatureKind } from "./types";
 import type {
   ContextWithParserOptions,
@@ -12,6 +13,16 @@ import type {
   CorsaType,
   CorsaTypeCheckerShape,
 } from "./types";
+
+type ImplementingClassCache = {
+  readonly sourceText: string;
+  readonly declarations: ReadonlyMap<string, readonly [start: number, end: number]>;
+};
+
+const implementingClassNamesBySession = new WeakMap<
+  CorsaProjectSession,
+  Map<string, ImplementingClassCache>
+>();
 
 export function createProgram(
   context: ContextWithParserOptions,
@@ -213,13 +224,19 @@ function sourceTextForPath(
   context: ContextWithParserOptions,
   fileName: string,
 ): string | undefined {
-  const normalizedFileName = fileName.toLowerCase();
-  const normalizedContextFilename = context.filename.toLowerCase();
-  return normalizedFileName === normalizedContextFilename ||
-    normalizedFileName.endsWith(normalizedContextFilename) ||
-    normalizedContextFilename.endsWith(normalizedFileName)
+  return pathsReferToSameFile(fileName, context.filename)
     ? context.sourceCode.text
     : sessionForContext(context).session.getSourceTextForPath(fileName);
+}
+
+function pathsReferToSameFile(left: string, right: string): boolean {
+  const normalizedLeft = left.replaceAll("\\", "/").toLowerCase();
+  const normalizedRight = right.replaceAll("\\", "/").toLowerCase();
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.endsWith(`/${normalizedRight}`) ||
+    normalizedRight.endsWith(`/${normalizedLeft}`)
+  );
 }
 
 function typeOfNewExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaType | undefined {
@@ -340,6 +357,11 @@ function implementedTypesFromTypeAndBases(
   type: CorsaType,
   checker: CorsaTypeCheckerShape,
 ): readonly CorsaType[] {
+  const session = sessionForContext(context).session;
+  const cached = session.getCachedImplementedTypes(type.id);
+  if (cached) {
+    return cached;
+  }
   // Iterative DFS over the base chain so we don't pay for one closure call
   // and one `push(...subResult)` spread per base (each spread used to copy
   // the entire growing accumulator). Visit order doesn't matter because we
@@ -375,7 +397,7 @@ function implementedTypesFromTypeAndBases(
       stack.push(baseType);
     }
   }
-  return implemented;
+  return session.cacheImplementedTypes(type.id, implemented);
 }
 
 function implementedTypesFromTypeDeclaration(
@@ -384,15 +406,99 @@ function implementedTypesFromTypeDeclaration(
   checker: CorsaTypeCheckerShape,
 ): readonly CorsaType[] {
   const session = sessionForContext(context).session;
+  const cached = session.getCachedOwnImplementedTypes(type.id);
+  if (cached) {
+    return cached;
+  }
   const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-  const declarationNode = declaration ? session.getNode(declaration) : undefined;
+  const declarationNode = declaration
+    ? session.getNode(declaration)
+    : implementingClassDeclaration(context, type);
   const sourceText = declarationNode
     ? sourceTextForPath(context, declarationNode.fileName)
     : undefined;
-  return declarationNode && sourceText
-    ? implementedTypesFromSourceText(context, declarationNode, sourceText, checker)
-    : [];
+  const implemented =
+    declarationNode && sourceText
+      ? implementedTypesFromSourceText(context, declarationNode, sourceText, checker)
+      : [];
+  return session.cacheOwnImplementedTypes(type.id, implemented);
+}
+
+function implementingClassDeclaration(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+): CorsaNode | undefined {
+  const name = typeSymbolName(type.texts ?? []);
+  if (!name) {
+    return undefined;
+  }
+  const range = implementingClassDeclarations(context).get(name);
+  return range
+    ? {
+        fileName: context.filename,
+        pos: range[0],
+        end: range[1],
+        range,
+      }
+    : undefined;
+}
+
+function typeSymbolName(texts: readonly string[]): string | undefined {
+  for (const text of texts) {
+    const match =
+      /^(?:typeof\s+)?(?:[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*\.)*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)(?:\s*<|$)/u.exec(
+        text.trim(),
+      );
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
+function implementingClassDeclarations(
+  context: ContextWithParserOptions,
+): ReadonlyMap<string, readonly [start: number, end: number]> {
+  const session = sessionForContext(context).session;
+  let byFile = implementingClassNamesBySession.get(session);
+  if (!byFile) {
+    byFile = new Map();
+    implementingClassNamesBySession.set(session, byFile);
+  }
+  const sourceText = context.sourceCode.text;
+  const cached = byFile.get(context.filename);
+  if (cached?.sourceText === sourceText) {
+    return cached.declarations;
+  }
+  const declarations = collectImplementingClassDeclarations(sourceText);
+  byFile.set(context.filename, { sourceText, declarations });
+  return declarations;
+}
+
+function collectImplementingClassDeclarations(
+  sourceText: string,
+): ReadonlyMap<string, readonly [start: number, end: number]> {
+  const declarations = new Map<string, readonly [start: number, end: number]>();
+  let offset = 0;
+  while (offset < sourceText.length) {
+    const classOffset = findKeywordOutsideTrivia(sourceText.slice(offset), "class");
+    if (classOffset < 0) {
+      break;
+    }
+    const declarationStart = offset + classOffset + "class".length;
+    const rest = sourceText.slice(declarationStart);
+    const match = /^\s*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/u.exec(rest);
+    if (match?.[1]) {
+      const bodyOpen = findClassBodyOpen(rest, 0);
+      const header = rest.slice(0, bodyOpen >= 0 ? bodyOpen : rest.length);
+      if (findKeywordOutsideTrivia(header, "implements") >= 0) {
+        declarations.set(match[1], [offset + classOffset, sourceText.length]);
+      }
+    }
+    offset = declarationStart;
+  }
+  return declarations;
 }
 
 function implementedTypesFromSourceText(

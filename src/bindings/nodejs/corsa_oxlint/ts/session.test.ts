@@ -415,6 +415,78 @@ describe("CorsaProjectSession", () => {
     );
   });
 
+  it("resolves a nominal type symbol from a property type annotation", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+    const sourceText = "interface Props { p: Derived; }";
+    const propertyPosition = sourceText.indexOf("p:");
+    const typePosition = sourceText.indexOf("Derived");
+
+    const type = session.getTypeAtPosition("/tmp/one.ts", propertyPosition, sourceText);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.getSymbolOfType.mockReturnValueOnce(null as never);
+    client.getSymbolAtPosition
+      .mockReturnValueOnce({ id: "symbol-property", name: "p" })
+      .mockReturnValueOnce({ id: "symbol-derived", name: "Derived" });
+    client.typeToString.mockReturnValueOnce("Derived");
+    (type as { texts: string[] }).texts = [];
+
+    expect(session.getSymbolOfType(type as never)?.name).toBe("Derived");
+    expect(client.getSymbolAtPosition).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "project-1",
+      "/tmp/one.ts",
+      typePosition,
+    );
+  });
+
+  it("parses declaration handles that omit an end position", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+    const sourceText = "class Container {}";
+    session.getTypeAtPosition("/tmp/one.ts", 0, sourceText);
+
+    expect(session.getNode("0.264./tmp/one.ts")).toEqual({
+      id: "0.264./tmp/one.ts",
+      fileName: "/tmp/one.ts",
+      pos: 0,
+      end: sourceText.length,
+      range: [0, sourceText.length],
+    });
+    expect(session.getNode("0.18.264./tmp/one.ts")?.range).toEqual([0, 18]);
+  });
+
   it("returns undefined when getSymbolOfType hits an empty type handle", () => {
     clients.length = 0;
     const runtime = {

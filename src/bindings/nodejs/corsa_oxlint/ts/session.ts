@@ -30,7 +30,6 @@ type PreparedFileState = {
 
 type SourceSlice = {
   node: CorsaNode;
-  text: string;
 };
 
 type TypeLookup = {
@@ -64,10 +63,15 @@ export class CorsaProjectSession {
   #projects: ProjectResponse[] = [];
   #files = new Map<string, FileCache>();
   #symbolsById = new Map<string, CorsaSymbol>();
+  #symbolsByTypeId = new Map<string, CorsaSymbol | null>();
   #symbolTypeById = new Map<string, string>();
   #nodesById = new Map<string, CorsaNode>();
+  #baseTypesById = new Map<string, readonly CorsaType[]>();
+  #implementedTypesById = new Map<string, readonly CorsaType[]>();
+  #ownImplementedTypesById = new Map<string, readonly CorsaType[]>();
   #typeLookupById = new Map<string, TypeLookup>();
   #typeSourceById = new Map<string, SourceSlice>();
+  #sourceLengthByPath = new Map<string, number>();
   #typeTextById = new Map<string, string>();
   #lastRefreshMs = 0;
   #snapshotHasIssuedHandles = false;
@@ -237,17 +241,29 @@ export class CorsaProjectSession {
   }
 
   private getSymbolOfTypeUnchecked(type: CorsaType): CorsaSymbol | undefined {
+    const cached = this.#symbolsByTypeId.get(type.id);
+    if (cached !== undefined) {
+      return cached ?? undefined;
+    }
     if (type.symbol) {
       const symbol = this.getSymbol(type.symbol);
       if (isUsableSymbol(symbol)) {
+        this.#symbolsByTypeId.set(type.id, symbol);
         return symbol;
       }
     }
     const symbol = this.getSymbolOfTypeById(type.id);
     if (symbol) {
+      this.#symbolsByTypeId.set(type.id, symbol);
       return symbol;
     }
-    return this.getSymbolOfTypeAtLookup(type);
+    const lookupSymbol = this.getSymbolOfTypeAtLookup(type);
+    if (lookupSymbol) {
+      this.#symbolsByTypeId.set(type.id, lookupSymbol);
+      return lookupSymbol;
+    }
+    this.#symbolsByTypeId.set(type.id, null);
+    return undefined;
   }
 
   private getSymbolOfTypeAtLookup(type: CorsaType): CorsaSymbol | undefined {
@@ -256,18 +272,58 @@ export class CorsaProjectSession {
       return undefined;
     }
     const symbol = this.getSymbolAtPosition(lookup.fileName, lookup.position, lookup.sourceText);
-    if (!isUsableSymbol(symbol)) {
+    const texts = [...this.typeTexts(type)];
+    if (isUsableSymbol(symbol)) {
+      if (texts.some((text) => text.trim() === symbol.name)) {
+        return symbol;
+      }
+    }
+    const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
+    let typeSymbolName = typeSymbolNameFromTexts(texts);
+    if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
+      const typeSymbol = this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
+      if (typeSymbol) {
+        return typeSymbol;
+      }
+    }
+    if (isUsableSymbol(symbol)) {
+      try {
+        const rendered = this.typeToString(type);
+        if (!texts.includes(rendered)) {
+          texts.unshift(rendered);
+        }
+      } catch {
+        // A stale handle may still have cached texts or a usable lookup symbol.
+      }
+      if (texts.some((text) => text.trim() === symbol.name)) {
+        return symbol;
+      }
+      typeSymbolName = typeSymbolNameFromTexts(texts);
+    }
+    if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
+      return this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
+    }
+    return undefined;
+  }
+
+  private getNearbyTypeSymbol(
+    lookup: TypeLookup,
+    sourceText: string,
+    typeSymbolName: string,
+  ): CorsaSymbol | undefined {
+    const typePosition = findIdentifierPosition(
+      sourceText,
+      typeSymbolName,
+      lookup.position,
+      lookup.position + 512,
+    );
+    if (typePosition === undefined || typePosition === lookup.position) {
       return undefined;
     }
-    const texts = this.typeTexts(type);
-    if (texts.some((text) => text.trim() === symbol.name)) {
-      return symbol;
-    }
-    try {
-      return this.typeToString(type).trim() === symbol.name ? symbol : undefined;
-    } catch {
-      return undefined;
-    }
+    const typeSymbol = this.getSymbolAtPosition(lookup.fileName, typePosition, lookup.sourceText);
+    return isUsableSymbol(typeSymbol) && typeSymbol.name === typeSymbolName
+      ? typeSymbol
+      : undefined;
   }
 
   private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
@@ -446,15 +502,39 @@ export class CorsaProjectSession {
       if (isSyntheticTypeHandle(type.id) || isArrayOrTupleLikeType(this, type)) {
         return [];
       }
-      return this.rememberTypes(
-        this.client().callJson("getBaseTypes", {
+      const cached = this.#baseTypesById.get(type.id);
+      if (cached) {
+        return cached;
+      }
+      const baseTypes = this.rememberTypes(
+        this.client().callJson<readonly CorsaType[]>("getBaseTypes", {
           snapshot: this.#snapshot,
           project: this.projectId(),
           type: type.id,
           texts: this.typeTexts(type),
         }) ?? [],
       );
+      this.#baseTypesById.set(type.id, baseTypes);
+      return baseTypes;
     });
+  }
+
+  getCachedImplementedTypes(typeId: string): readonly CorsaType[] | undefined {
+    return this.#implementedTypesById.get(typeId);
+  }
+
+  cacheImplementedTypes(typeId: string, types: readonly CorsaType[]): readonly CorsaType[] {
+    this.#implementedTypesById.set(typeId, types);
+    return types;
+  }
+
+  getCachedOwnImplementedTypes(typeId: string): readonly CorsaType[] | undefined {
+    return this.#ownImplementedTypesById.get(typeId);
+  }
+
+  cacheOwnImplementedTypes(typeId: string, types: readonly CorsaType[]): readonly CorsaType[] {
+    this.#ownImplementedTypesById.set(typeId, types);
+    return types;
   }
 
   getTypeArguments(type: CorsaType): readonly CorsaType[] {
@@ -684,7 +764,6 @@ export class CorsaProjectSession {
     };
     this.#typeSourceById.set(type.id, {
       node,
-      text: sourceText.slice(start, end),
     });
   }
 
@@ -731,12 +810,6 @@ export class CorsaProjectSession {
     normalizeSymbol(symbol);
     this.#snapshotHasIssuedHandles = true;
     this.#symbolsById.set(symbol.id, symbol);
-    for (const declaration of symbol.declarations ?? []) {
-      this.rememberNode(declaration);
-    }
-    if (symbol.valueDeclaration) {
-      this.rememberNode(symbol.valueDeclaration);
-    }
     return symbol;
   }
 
@@ -773,7 +846,7 @@ export class CorsaProjectSession {
   }
 
   private rememberNode(handle: string): CorsaNode | undefined {
-    const parsed = parseNodeHandle(handle);
+    const parsed = parseNodeHandle(handle, (fileName) => this.sourceLengthForPath(fileName));
     if (!parsed) {
       return undefined;
     }
@@ -783,11 +856,28 @@ export class CorsaProjectSession {
 
   private clearHandleCaches(): void {
     this.#symbolsById.clear();
+    this.#symbolsByTypeId.clear();
     this.#symbolTypeById.clear();
     this.#nodesById.clear();
+    this.#baseTypesById.clear();
+    this.#implementedTypesById.clear();
+    this.#ownImplementedTypesById.clear();
     this.#typeLookupById.clear();
     this.#typeSourceById.clear();
+    this.#sourceLengthByPath.clear();
     this.#snapshotHasIssuedHandles = false;
+  }
+
+  private sourceLengthForPath(path: string): number | undefined {
+    const cached = this.#sourceLengthByPath.get(path);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const length = this.sourceTextForPath(path)?.length;
+    if (length !== undefined) {
+      this.#sourceLengthByPath.set(path, length);
+    }
+    return length;
   }
 
   private sourceSliceForHandle(handle: string): SourceSlice | undefined {
@@ -801,13 +891,16 @@ export class CorsaProjectSession {
     }
     return {
       node,
-      text: sourceText.slice(node.pos, node.end),
     };
   }
 
   private sourceTextForPath(path: string): string | undefined {
+    const direct = this.#files.get(path);
+    if (direct) {
+      return direct.lintSourceText ?? direct.sourceText ?? readFileOrUndefined(path);
+    }
     for (const [fileName, cached] of this.#files) {
-      if (fileName === path || fileName.endsWith(path)) {
+      if (pathsReferToSameFile(fileName, path)) {
         return cached.lintSourceText ?? cached.sourceText ?? readFileOrUndefined(fileName);
       }
     }
@@ -1051,6 +1144,52 @@ function isSyntheticTypeHandle(handle: string): boolean {
   return handle.startsWith("synthetic-");
 }
 
+function typeSymbolNameFromTexts(texts: readonly string[]): string | undefined {
+  for (const text of texts) {
+    const match =
+      /^(?:typeof\s+)?(?:[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*\.)*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)(?:\s*<|$)/u.exec(
+        text.trim(),
+      );
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
+function findIdentifierPosition(
+  sourceText: string,
+  identifier: string,
+  start: number,
+  end: number,
+): number | undefined {
+  const boundedEnd = Math.min(sourceText.length, end);
+  let position = sourceText.indexOf(identifier, Math.max(0, start));
+  while (position >= 0 && position < boundedEnd) {
+    const before = position > 0 ? sourceText[position - 1] : undefined;
+    const after = sourceText[position + identifier.length];
+    if (!isIdentifierPart(before) && !isIdentifierPart(after)) {
+      return position;
+    }
+    position = sourceText.indexOf(identifier, position + identifier.length);
+  }
+  return undefined;
+}
+
+function isIdentifierPart(char: string | undefined): boolean {
+  return char !== undefined && /[$_\u200c\u200d\p{ID_Continue}]/u.test(char);
+}
+
+function pathsReferToSameFile(left: string, right: string): boolean {
+  const normalizedLeft = left.replaceAll("\\", "/").toLowerCase();
+  const normalizedRight = right.replaceAll("\\", "/").toLowerCase();
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.endsWith(`/${normalizedRight}`) ||
+    normalizedRight.endsWith(`/${normalizedLeft}`)
+  );
+}
+
 function normalizeType(type: CorsaType): void {
   const mutable = type as {
     id: string;
@@ -1148,12 +1287,24 @@ function languageIdFor(fileName: string): string {
   return "typescript";
 }
 
-function parseNodeHandle(value: string): CorsaNode | undefined {
-  const [posText, endText, _kindText, ...pathParts] = value.split(".");
+function parseNodeHandle(
+  value: string,
+  sourceLengthForPath: (fileName: string) => number | undefined,
+): CorsaNode | undefined {
+  const [posText, secondText, thirdText, ...remainingParts] = value.split(".");
   const pos = Number(posText);
-  const end = Number(endText);
-  const fileName = pathParts.join(".");
-  if (!Number.isFinite(pos) || !Number.isFinite(end) || !fileName) {
+  const second = Number(secondText);
+  const third = Number(thirdText);
+  if (!Number.isFinite(pos) || !Number.isFinite(second)) {
+    return undefined;
+  }
+  const hasEndPosition = Number.isFinite(third);
+  const fileName = (hasEndPosition ? remainingParts : [thirdText, ...remainingParts]).join(".");
+  if (!fileName) {
+    return undefined;
+  }
+  const end = hasEndPosition ? second : (sourceLengthForPath(fileName) ?? pos + 1);
+  if (end < pos) {
     return undefined;
   }
   return { id: value, fileName, pos, end, range: [pos, end] };

@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- `corsa-oxlint` now resolves nominal type symbols for interface and class property annotations.
+- `corsa-oxlint` now returns direct and inherited implemented interfaces after symbol, base-type, and generic-argument traversal while accepting compact TypeScript 7 declaration handles.
 - `corsa-oxlint` now discovers the native Corsa runtime shipped with TypeScript 7 or newer before falling back to `@typescript/native-preview`.
 - `corsa-oxlint` now reports a dependency-focused error when no default Corsa runtime executable can be found.
 - constructor signature parameter symbol fallback now preserves non-ASCII parameter names.

@@ -1428,7 +1428,7 @@ describe("corsa oxlint type locations", () => {
   });
 
   integrationCase("exposes symbols from type handles", () => {
-    const seen: Record<string, string | undefined> = {};
+    const seen: Record<string, string | null | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
     const rule = createRule({
       name: "type-symbol-accessor",
@@ -1453,7 +1453,14 @@ describe("corsa oxlint type locations", () => {
               return;
             }
             const type = checker.getTypeAtLocation(node);
-            seen.animal = type ? checker.getSymbolOfType(type)?.name : undefined;
+            seen.animal = type ? (checker.getSymbolOfType(type)?.name ?? null) : undefined;
+          },
+          PropertyDefinition(node: any) {
+            if (node.key?.name !== "resident") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            seen.resident = type ? (checker.getSymbolOfType(type)?.name ?? null) : undefined;
           },
         };
       },
@@ -1463,7 +1470,15 @@ describe("corsa oxlint type locations", () => {
     tester.run("type-symbol-accessor", rule as any, {
       valid: [
         {
-          code: ["class Animal {}", "interface Bag {", "  animal: Animal;", "}"].join("\n"),
+          code: [
+            "class Animal {}",
+            "interface Bag {",
+            "  animal: Animal;",
+            "}",
+            "class Habitat {",
+            "  resident: Animal;",
+            "}",
+          ].join("\n"),
           settings: {
             corsaOxlint: {
               parserOptions: {
@@ -1480,6 +1495,7 @@ describe("corsa oxlint type locations", () => {
     });
 
     expect(seen.animal).toBe("Animal");
+    expect(seen.resident).toBe("Animal");
   });
 
   integrationCase("exposes symbols for type references with the default corsa executable", () => {
