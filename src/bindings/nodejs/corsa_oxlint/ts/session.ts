@@ -901,6 +901,10 @@ export class CorsaProjectSession {
   }
 
   private sourceTextForPath(path: string): string | undefined {
+    const direct = this.#files.get(path);
+    if (direct) {
+      return direct.lintSourceText ?? direct.sourceText ?? readFileOrUndefined(path);
+    }
     for (const [fileName, cached] of this.#files) {
       if (pathsReferToSameFile(fileName, path)) {
         return cached.lintSourceText ?? cached.sourceText ?? readFileOrUndefined(fileName);
