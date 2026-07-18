@@ -420,11 +420,8 @@ function shouldRecoverImplementationSymbol(
   context: ContextWithParserOptions,
   type: CorsaType,
 ): boolean {
-  if (((type.objectFlags ?? 0) & 1) !== 0) {
-    return true;
-  }
   const name = typeSymbolName(type.texts ?? []);
-  return name !== undefined && sourceDeclaresClass(context.sourceCode.text, name);
+  return name !== undefined && sourceDeclaresImplementingClass(context.sourceCode.text, name);
 }
 
 function typeSymbolName(texts: readonly string[]): string | undefined {
@@ -440,7 +437,7 @@ function typeSymbolName(texts: readonly string[]): string | undefined {
   return undefined;
 }
 
-function sourceDeclaresClass(sourceText: string, name: string): boolean {
+function sourceDeclaresImplementingClass(sourceText: string, name: string): boolean {
   let offset = 0;
   while (offset < sourceText.length) {
     const classOffset = findKeywordOutsideTrivia(sourceText.slice(offset), "class");
@@ -451,7 +448,9 @@ function sourceDeclaresClass(sourceText: string, name: string): boolean {
     const rest = sourceText.slice(declarationStart);
     const match = /^\s*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/u.exec(rest);
     if (match?.[1] === name) {
-      return true;
+      const bodyOpen = findClassBodyOpen(rest, 0);
+      const header = rest.slice(0, bodyOpen >= 0 ? bodyOpen : rest.length);
+      return findKeywordOutsideTrivia(header, "implements") >= 0;
     }
     offset = declarationStart;
   }
