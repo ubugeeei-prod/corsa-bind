@@ -252,15 +252,15 @@ export class CorsaProjectSession {
         return symbol;
       }
     }
-    const lookupSymbol = this.getSymbolOfTypeAtLookup(type);
-    if (lookupSymbol) {
-      this.#symbolsByTypeId.set(type.id, lookupSymbol);
-      return lookupSymbol;
-    }
     const symbol = this.getSymbolOfTypeById(type.id);
     if (symbol) {
       this.#symbolsByTypeId.set(type.id, symbol);
       return symbol;
+    }
+    const lookupSymbol = this.getSymbolOfTypeAtLookup(type);
+    if (lookupSymbol) {
+      this.#symbolsByTypeId.set(type.id, lookupSymbol);
+      return lookupSymbol;
     }
     this.#symbolsByTypeId.set(type.id, null);
     return undefined;
