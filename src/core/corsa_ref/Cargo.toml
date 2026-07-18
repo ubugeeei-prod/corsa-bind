@@ -1,6 +1,6 @@
 [package]
 name = "corsa_ref"
-version = "1.0.0-beta.3"
+version = "1.0.0-beta.4"
 edition = "2024"
 description = "Pinned upstream ref management and verification tooling for corsa"
 publish = false
@@ -22,7 +22,7 @@ path = "src/main.rs"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
-corsa_core = { version = "1.0.0-beta.3", path = "../corsa_core" }
+corsa_core = { version = "1.0.0-beta.4", path = "../corsa_core" }
 
 [dev-dependencies]
 tempfile = "3"
