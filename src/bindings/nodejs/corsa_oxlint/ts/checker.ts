@@ -440,7 +440,9 @@ function implementedTypesFromTypeDeclaration(
       ? implementingClassDeclaration(context, type, symbol)
       : undefined;
   const resolvedDeclarationNode =
-    localImplementingDeclaration ?? declarationNode ?? implementingClassDeclaration(context, type, symbol);
+    localImplementingDeclaration ??
+    declarationNode ??
+    implementingClassDeclaration(context, type, symbol);
   const sourceText = resolvedDeclarationNode
     ? sourceTextForPath(context, resolvedDeclarationNode.fileName)
     : undefined;
