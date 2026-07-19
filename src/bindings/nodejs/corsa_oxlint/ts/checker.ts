@@ -55,13 +55,15 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
         return typeOfNewExpression(node as Node, this);
       }
       const lookupNode = nodeForTypeLookup(node);
-      return sessionForContext(context).session.getTypeAtSourceRange(
+      const type = sessionForContext(context).session.getTypeAtSourceRange(
         filenameFor(context, lookupNode),
         toPosition(lookupNode),
         endPosition(lookupNode),
         sourceTextFor(context, lookupNode),
         nodeKind(lookupNode),
       );
+      primeImplementedTypesCacheFromNode(context, node, type, this);
+      return type;
     },
     getContextualType(node) {
       return this.getTypeAtLocation(node);
@@ -206,6 +208,26 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return (type.flags & typeFlags.intersection) !== 0;
     },
   };
+}
+
+function primeImplementedTypesCacheFromNode(
+  context: ContextWithParserOptions,
+  node: Node | CorsaNode,
+  type: CorsaType | undefined,
+  checker: CorsaTypeCheckerShape,
+): void {
+  if (!type || "pos" in node) {
+    return;
+  }
+  const kind = (node as { readonly type?: string }).type;
+  if (kind !== "ClassDeclaration" && kind !== "ClassExpression") {
+    return;
+  }
+  const session = sessionForContext(context).session;
+  if (session.getCachedOwnImplementedTypes(type.id)) {
+    return;
+  }
+  session.cacheOwnImplementedTypes(type.id, checker.getImplementedTypes(node));
 }
 
 const typeFlags = {
@@ -412,15 +434,19 @@ function implementedTypesFromTypeDeclaration(
   }
   const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-  const declarationNode = declaration
-    ? session.getNode(declaration)
-    : implementingClassDeclaration(context, type);
-  const sourceText = declarationNode
-    ? sourceTextForPath(context, declarationNode.fileName)
+  const declarationNode = declaration ? session.getNode(declaration) : undefined;
+  const localImplementingDeclaration =
+    declarationNode && pathsReferToSameFile(declarationNode.fileName, context.filename)
+      ? implementingClassDeclaration(context, type, symbol)
+      : undefined;
+  const resolvedDeclarationNode =
+    localImplementingDeclaration ?? declarationNode ?? implementingClassDeclaration(context, type, symbol);
+  const sourceText = resolvedDeclarationNode
+    ? sourceTextForPath(context, resolvedDeclarationNode.fileName)
     : undefined;
   const implemented =
-    declarationNode && sourceText
-      ? implementedTypesFromSourceText(context, declarationNode, sourceText, checker)
+    resolvedDeclarationNode && sourceText
+      ? implementedTypesFromSourceText(context, resolvedDeclarationNode, sourceText, checker)
       : [];
   return session.cacheOwnImplementedTypes(type.id, implemented);
 }
@@ -428,8 +454,9 @@ function implementedTypesFromTypeDeclaration(
 function implementingClassDeclaration(
   context: ContextWithParserOptions,
   type: CorsaType,
+  symbol?: CorsaSymbol,
 ): CorsaNode | undefined {
-  const name = typeSymbolName(type.texts ?? []);
+  const name = implementingClassName(type, symbol);
   if (!name) {
     return undefined;
   }
@@ -442,6 +469,10 @@ function implementingClassDeclaration(
         range,
       }
     : undefined;
+}
+
+function implementingClassName(type: CorsaType, symbol?: CorsaSymbol): string | undefined {
+  return symbol?.name || typeSymbolName(type.texts ?? []);
 }
 
 function typeSymbolName(texts: readonly string[]): string | undefined {
