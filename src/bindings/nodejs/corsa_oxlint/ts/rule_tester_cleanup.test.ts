@@ -36,8 +36,8 @@ vi.mock("./context", () => ({
   defaultCorsaExecutable: vi.fn(() => "/tmp/corsa"),
   mergeTypeAwareParserOptions: vi.fn(
     (left: Record<string, unknown> | undefined, right: Record<string, unknown> | undefined) => ({
-      ...(left ?? {}),
-      ...(right ?? {}),
+      ...left,
+      ...right,
     }),
   ),
 }));

@@ -1594,7 +1594,9 @@ describe("corsa oxlint type locations", () => {
             const symbol = type ? checker.getSymbolOfType(type) : undefined;
             seen[keyName] = {
               name: symbol?.name,
-              codepoints: symbol ? [...symbol.name].map((char) => char.codePointAt(0) ?? 0) : null,
+              codepoints: symbol
+                ? Array.from(symbol.name, (char) => char.codePointAt(0) ?? 0)
+                : null,
             };
           },
         };
