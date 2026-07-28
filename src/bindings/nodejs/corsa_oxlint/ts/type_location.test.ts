@@ -4,24 +4,16 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { defaultCorsaExecutable } from "./context";
 import { createTypeChecker } from "./checker";
 import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
+import { resolvedRealCorsaBinary } from "./test_support";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
+const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
-
-function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
-  try {
-    return defaultCorsaExecutable(rootDir);
-  } catch {
-    return undefined;
-  }
-}
 
 describe("corsa oxlint type locations", () => {
   integrationCase("resolves types from declaration wrapper nodes", () => {

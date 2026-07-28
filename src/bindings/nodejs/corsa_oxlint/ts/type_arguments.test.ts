@@ -1,23 +1,13 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { defaultCorsaExecutable } from "./context";
 import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
+import { resolvedRealCorsaBinary } from "./test_support";
 
-const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
+const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
-
-function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
-  try {
-    return defaultCorsaExecutable(rootDir);
-  } catch {
-    return undefined;
-  }
-}
 
 describe("corsa oxlint type arguments", () => {
   integrationCase("returns empty type arguments for non-generic types", () => {

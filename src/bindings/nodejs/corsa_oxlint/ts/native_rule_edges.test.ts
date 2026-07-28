@@ -1,23 +1,13 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 
 import { describe, it } from "vitest";
 
-import { defaultCorsaExecutable } from "./context";
 import { RuleTester } from "./rule_tester";
+import { resolvedRealCorsaBinary } from "./test_support";
 import { corsaOxlintRules } from "./rules";
 
-const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
+const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
-
-function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
-  try {
-    return defaultCorsaExecutable(rootDir);
-  } catch {
-    return undefined;
-  }
-}
 
 describe("corsa oxlint native rule edges", () => {
   integrationCase("covers array and enum edge cases", () => {

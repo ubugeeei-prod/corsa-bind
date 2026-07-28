@@ -5,23 +5,15 @@ import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { defaultCorsaExecutable } from "./context";
 import { OxlintUtils } from "./oxlint_utils";
 import { getParserServices } from "./parser_services";
 import { decorateRule, definePlugin } from "./plugin";
 import { RuleTester } from "./rule_tester";
+import { resolvedRealCorsaBinary } from "./test_support";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
-const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
+const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const cleanupDirs = new Set<string>();
-
-function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
-  try {
-    return defaultCorsaExecutable(rootDir);
-  } catch {
-    return undefined;
-  }
-}
 
 afterEach(() => {
   for (const dir of cleanupDirs) {
