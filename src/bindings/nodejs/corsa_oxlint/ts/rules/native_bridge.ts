@@ -9,7 +9,7 @@ import type {
 
 import { createNativeRule } from "./rule_creator";
 import { checkerFor, propertyNamesOfNode, typeAtNode, typeTextsAtNode } from "./type_utils";
-import type { ContextWithParserOptions, CorsaCallSignatureFacts, CorsaType } from "../types";
+import type { ContextWithParserOptions, CorsaCallSignatureFacts } from "../types";
 
 type RangedNode = {
   readonly type: string;
@@ -583,17 +583,6 @@ function typeParameterName(node: any): string | undefined {
     return node.name.name;
   }
   return undefined;
-}
-
-function renderTypeTexts(context: ContextWithParserOptions, type: CorsaType): readonly string[] {
-  const texts = new Set<string>();
-  const checker = checkerFor(context);
-  for (const text of [...(type.texts ?? []), checker.typeToString(type)]) {
-    if (text) {
-      texts.add(text);
-    }
-  }
-  return [...texts];
 }
 
 function nearestFunctionAncestor(context: ContextWithParserOptions, node: any): any {
