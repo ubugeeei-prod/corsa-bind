@@ -157,6 +157,79 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.byType).toEqual(["IChild"]);
   });
 
+  integrationCase("returns implemented interfaces from same-file class declaration types", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "implemented-types-of-same-file-class-declarations",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise implemented types resolved from same-file class declaration types",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassDeclaration(node: any) {
+            const className = node.id?.name;
+            const type = checker.getTypeAtLocation(node);
+            if (!className || !type) {
+              return;
+            }
+            seen[className] = checker
+              .getImplementedTypesOfType(type)
+              .map((implemented) => checker.typeToString(implemented));
+          },
+        };
+      },
+    });
+
+    new RuleTester({ languageOptions: { sourceType: "module" } }).run(
+      "implemented-types-of-same-file-class-declarations",
+      rule as any,
+      {
+        valid: [
+          {
+            code: [
+              "interface IContainer { name: string; }",
+              "class Plain implements IContainer {",
+              '  name = "x";',
+              "}",
+              "abstract class ContainerBase implements IContainer {",
+              "  abstract readonly name: string;",
+              "}",
+              "class Container extends ContainerBase {",
+              '  readonly name: string = "x";',
+              "}",
+            ].join("\n"),
+            settings: {
+              corsaOxlint: {
+                parserOptions: {
+                  corsa: {
+                    executable: realCorsaBinary,
+                  },
+                },
+              },
+            },
+          },
+        ],
+        invalid: [],
+      },
+    );
+
+    expect(seen.Plain).toEqual(["IContainer"]);
+    expect(seen.ContainerBase).toEqual(["IContainer"]);
+    expect(seen.Container).toEqual(["IContainer"]);
+  });
+
   integrationCase("resolves namespace-qualified implemented interfaces from class types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
