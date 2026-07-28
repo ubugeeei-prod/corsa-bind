@@ -14,7 +14,8 @@ The script uses the local `gh` and `codex` CLIs to:
 - create a local `codex/issue-<number>-...` branch
 - run `codex exec` with the issue context
 - commit generated changes with a Conventional Commits title
-- push the branch and open a draft pull request
+- push the branch and open a ready-for-review pull request
+- enable squash auto-merge
 - wait for pull request checks unless disabled
 
 Processed issues are recorded in `.cache/issue-agent/state.json`, which is
@@ -47,7 +48,8 @@ Useful options:
 ```bash
 vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --model gpt-5
 vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --no-wait-ci
-vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --no-draft
+vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --draft
+vp exec node --strip-types ./scripts/issue_agent.ts run --issue 328 --no-auto-merge
 ```
 
 ## Watch Issues
@@ -74,7 +76,8 @@ The script enforces these local conventions:
 - PR titles use Conventional Commits format.
 - PR titles do not include `[codex]`.
 - PR bodies include `Closes #<issue-number>`.
-- PRs are draft by default.
+- PRs are ready for review and use squash auto-merge by default.
+- `--draft` keeps work in progress, while `--no-auto-merge` leaves merging manual.
 - PR checks are watched by default after creation.
 
 Codex is asked to write proposed PR metadata under
