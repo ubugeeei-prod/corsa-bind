@@ -6,12 +6,13 @@ import { fail, rootDir } from "./shared.ts";
 type Mode = "run" | "watch";
 
 interface Options {
+  readonly autoMerge: boolean;
   readonly baseBranch?: string;
+  readonly draft: boolean;
   readonly issueNumber?: number;
   readonly limit: number;
   readonly mode: Mode;
   readonly model?: string;
-  readonly noDraft: boolean;
   readonly noWaitCi: boolean;
   readonly once: boolean;
   readonly pollSeconds: number;
@@ -56,10 +57,11 @@ function usage(): never {
   node --strip-types ./scripts/issue_agent.ts watch [--repo owner/name] [--poll-seconds 60] [--once]
 
 Options:
+  --draft                 Open a draft PR and skip auto-merge.
   --base <branch>          Base branch. Defaults to the repository default branch.
   --limit <n>              Max open issues to inspect per poll. Default: 50.
   --model <model>          Model passed to codex exec.
-  --no-draft              Open ready-for-review PRs instead of draft PRs.
+  --no-auto-merge         Do not enable squash auto-merge on ready PRs.
   --no-wait-ci            Do not wait for pull request checks after creating a PR.
   --state-file <path>     Processed issue state. Default: .cache/issue-agent/state.json.
 `);
@@ -73,10 +75,11 @@ function parseArgs(args: readonly string[]): Options {
   }
 
   let issueNumber: number | undefined;
+  let autoMerge = true;
   let baseBranch: string | undefined;
+  let draft = false;
   let limit = 50;
   let model: string | undefined;
-  let noDraft = false;
   let noWaitCi = false;
   let once = false;
   let pollSeconds = 60;
@@ -95,6 +98,9 @@ function parseArgs(args: readonly string[]): Options {
     };
 
     switch (arg) {
+      case "--draft":
+        draft = true;
+        break;
       case "--base":
         baseBranch = readValue();
         break;
@@ -113,8 +119,11 @@ function parseArgs(args: readonly string[]): Options {
       case "--model":
         model = readValue();
         break;
+      case "--no-auto-merge":
+        autoMerge = false;
+        break;
       case "--no-draft":
-        noDraft = true;
+        draft = false;
         break;
       case "--no-wait-ci":
         noWaitCi = true;
@@ -144,12 +153,13 @@ function parseArgs(args: readonly string[]): Options {
   }
 
   return {
+    autoMerge,
     baseBranch,
+    draft,
     issueNumber,
     limit,
     mode: modeArg,
     model,
-    noDraft,
     noWaitCi,
     once,
     pollSeconds,
@@ -457,10 +467,14 @@ function processIssue(
     "--body-file",
     prBodyFile,
   ];
-  if (!options.noDraft) {
+  if (options.draft) {
     prArgs.push("--draft");
   }
   const prUrl = checked("gh", prArgs).trim();
+
+  if (options.autoMerge && !options.draft) {
+    checked("gh", ["pr", "merge", prUrl, "--repo", repo, "--auto", "--squash"]);
+  }
 
   if (!options.noWaitCi) {
     const result = runCommand(
