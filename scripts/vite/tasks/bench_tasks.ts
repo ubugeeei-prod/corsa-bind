@@ -33,7 +33,12 @@ export const benchTasks = {
   },
   bench_tooling_setup_cli_compare: {
     cache: false,
-    command: "npm ci --no-fund --no-audit",
+    // typescript-eslint pins a `typescript` peer range that lags new TypeScript
+    // majors, but the benchmark deliberately measures it against TypeScript 7
+    // and next. Skip peer resolution so the pinned toolchain installs; the
+    // PR Performance workflow already force-installs its matrix TypeScript
+    // into this directory with the same flag.
+    command: "npm ci --no-fund --no-audit --legacy-peer-deps",
     cwd: "bench/cli_compare",
   },
   bench_tooling_compare: {
