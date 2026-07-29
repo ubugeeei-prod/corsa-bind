@@ -32,10 +32,16 @@ type SourceSlice = {
   node: CorsaNode;
 };
 
+type SourceRange = {
+  start: number;
+  end: number;
+};
+
 type TypeLookup = {
   fileName: string;
   position: number;
   sourceText?: string;
+  symbolSearchRange?: SourceRange;
 };
 
 const typeFlags = {
@@ -71,6 +77,8 @@ export class CorsaProjectSession {
   #ownImplementedTypesById = new Map<string, readonly CorsaType[]>();
   #typeLookupById = new Map<string, TypeLookup>();
   #typeSourceById = new Map<string, SourceSlice>();
+  #classDeclarationByTypeId = new Map<string, CorsaNode>();
+  #symbolSearchRangeByTypeId = new Map<string, SourceRange>();
   #sourceLengthByPath = new Map<string, number>();
   #typeTextById = new Map<string, string>();
   #lastRefreshMs = 0;
@@ -281,7 +289,7 @@ export class CorsaProjectSession {
     const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
     let typeSymbolName = typeSymbolNameFromTexts(texts);
     if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
-      const typeSymbol = this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
+      const typeSymbol = this.getNearbyTypeSymbol(type, lookup, sourceText, typeSymbolName, texts);
       if (typeSymbol) {
         return typeSymbol;
       }
@@ -301,29 +309,214 @@ export class CorsaProjectSession {
       typeSymbolName = typeSymbolNameFromTexts(texts);
     }
     if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
-      return this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
+      return this.getNearbyTypeSymbol(type, lookup, sourceText, typeSymbolName, texts);
     }
     return undefined;
   }
 
   private getNearbyTypeSymbol(
+    type: CorsaType,
     lookup: TypeLookup,
     sourceText: string,
     typeSymbolName: string,
+    texts: readonly string[],
   ): CorsaSymbol | undefined {
-    const typePosition = findIdentifierPosition(
+    if (lookup.symbolSearchRange) {
+      return this.findMatchingTypeSymbol(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        lookup.symbolSearchRange.start,
+        lookup.symbolSearchRange.end,
+      );
+    }
+    const nearbySymbol = this.findMatchingTypeSymbol(
+      type,
+      lookup,
       sourceText,
       typeSymbolName,
       lookup.position,
       lookup.position + 512,
     );
-    if (typePosition === undefined || typePosition === lookup.position) {
+    if (nearbySymbol) {
+      return nearbySymbol;
+    }
+    for (const qualifiedName of qualifiedTypeNamesFromTexts(texts, typeSymbolName)) {
+      const qualifiedSymbol = this.findQualifiedTypeSymbol(
+        type,
+        lookup,
+        sourceText,
+        qualifiedName,
+        typeSymbolName,
+      );
+      if (qualifiedSymbol) {
+        return qualifiedSymbol;
+      }
+    }
+    return this.findUniqueTypeSymbol(type, lookup, sourceText, typeSymbolName);
+  }
+
+  /**
+   * Anchors a qualified type text such as `Second.Base` on its qualifier, so a
+   * same-named declaration under a different container cannot win the lookup.
+   */
+  private findQualifiedTypeSymbol(
+    type: CorsaType,
+    lookup: TypeLookup,
+    sourceText: string,
+    qualifiedName: string,
+    typeSymbolName: string,
+  ): CorsaSymbol | undefined {
+    const qualifiers = qualifiedName.slice(0, -(typeSymbolName.length + 1)).split(".");
+    const qualifier = qualifiers[qualifiers.length - 1];
+    const containerRange = qualifier ? namespaceRangeByName(sourceText, qualifier) : undefined;
+    if (containerRange) {
+      const declarationSymbol = this.findMatchingTypeSymbol(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        containerRange.start,
+        containerRange.end,
+      );
+      if (declarationSymbol) {
+        return declarationSymbol;
+      }
+    }
+    let offset = 0;
+    while (offset < sourceText.length) {
+      const start = sourceText.indexOf(qualifiedName, offset);
+      if (start < 0) {
+        return undefined;
+      }
+      const before = start > 0 ? sourceText[start - 1] : undefined;
+      const after = sourceText[start + qualifiedName.length];
+      // A leading `.` means the qualifier itself is nested under another
+      // container, so this occurrence names a different type.
+      if (before !== "." && !isIdentifierPart(before) && !isIdentifierPart(after)) {
+        const symbol = this.getMatchingSymbolAtPosition(
+          type,
+          lookup,
+          sourceText,
+          typeSymbolName,
+          start + qualifiedName.length - typeSymbolName.length,
+        );
+        if (symbol) {
+          return symbol;
+        }
+      }
+      offset = start + qualifiedName.length;
+    }
+    return undefined;
+  }
+
+  /**
+   * Scans the whole file, but only accepts a match when every occurrence of the
+   * name resolves to the same declaration. Returning the first same-named
+   * symbol would otherwise cache the wrong nominal symbol, and the wrong
+   * implemented interfaces, for any file that declares two types with the same
+   * simple name in different scopes.
+   */
+  private findUniqueTypeSymbol(
+    type: CorsaType,
+    lookup: TypeLookup,
+    sourceText: string,
+    typeSymbolName: string,
+  ): CorsaSymbol | undefined {
+    let uniqueSymbol: CorsaSymbol | undefined;
+    let uniqueKey: string | undefined;
+    let offset = 0;
+    while (offset < sourceText.length) {
+      const position = findIdentifierPosition(
+        sourceText,
+        typeSymbolName,
+        offset,
+        sourceText.length,
+      );
+      if (position === undefined) {
+        break;
+      }
+      const symbol = this.getMatchingSymbolAtPosition(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        position,
+      );
+      if (symbol) {
+        const key = symbolDeclarationKey(symbol);
+        if (uniqueKey !== undefined && uniqueKey !== key) {
+          return undefined;
+        }
+        uniqueSymbol ??= symbol;
+        uniqueKey = key;
+      }
+      offset = position + typeSymbolName.length;
+    }
+    return uniqueSymbol;
+  }
+
+  private findMatchingTypeSymbol(
+    type: CorsaType,
+    lookup: TypeLookup,
+    sourceText: string,
+    typeSymbolName: string,
+    start: number,
+    end: number,
+  ): CorsaSymbol | undefined {
+    let offset = Math.max(0, start);
+    const boundary = Math.min(sourceText.length, end);
+    while (offset < boundary) {
+      const position = findIdentifierPosition(sourceText, typeSymbolName, offset, boundary);
+      if (position === undefined) {
+        return undefined;
+      }
+      const symbol = this.getMatchingSymbolAtPosition(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        position,
+      );
+      if (symbol) {
+        return symbol;
+      }
+      offset = position + typeSymbolName.length;
+    }
+    return undefined;
+  }
+
+  private getMatchingSymbolAtPosition(
+    type: CorsaType,
+    lookup: TypeLookup,
+    sourceText: string,
+    typeSymbolName: string,
+    position: number | undefined,
+  ): CorsaSymbol | undefined {
+    if (position === undefined || position === lookup.position) {
       return undefined;
     }
-    const typeSymbol = this.getSymbolAtPosition(lookup.fileName, typePosition, lookup.sourceText);
-    return isUsableSymbol(typeSymbol) && typeSymbol.name === typeSymbolName
-      ? typeSymbol
-      : undefined;
+    const typeSymbol = this.getSymbolAtPosition(lookup.fileName, position, lookup.sourceText);
+    if (!isUsableSymbol(typeSymbol) || typeSymbol.name !== typeSymbolName) {
+      return undefined;
+    }
+    const classStart = classDeclarationStartAtIdentifier(sourceText, position);
+    if (classStart !== undefined) {
+      this.#classDeclarationByTypeId.set(type.id, {
+        fileName: lookup.fileName,
+        pos: classStart,
+        end: sourceText.length,
+        range: [classStart, sourceText.length],
+      });
+    }
+    const symbolSearchRange =
+      containingNamespaceRange(sourceText, position) ??
+      qualifiedNamespaceRangeAtIdentifier(sourceText, position);
+    if (symbolSearchRange) {
+      this.#symbolSearchRangeByTypeId.set(type.id, symbolSearchRange);
+    }
+    return typeSymbol;
   }
 
   private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
@@ -351,6 +544,10 @@ export class CorsaProjectSession {
 
   getSourceTextForPath(path: string): string | undefined {
     return this.sourceTextForPath(path);
+  }
+
+  getClassDeclarationForType(type: CorsaType): CorsaNode | undefined {
+    return this.#classDeclarationByTypeId.get(type.id);
   }
 
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined {
@@ -506,6 +703,8 @@ export class CorsaProjectSession {
       if (cached) {
         return cached;
       }
+      const lookup = this.#typeLookupById.get(type.id);
+      const relatedTypeLookup = lookup ? this.relatedTypeLookup(type, lookup) : undefined;
       const baseTypes = this.rememberTypes(
         this.client().callJson<readonly CorsaType[]>("getBaseTypes", {
           snapshot: this.#snapshot,
@@ -514,9 +713,57 @@ export class CorsaProjectSession {
           texts: this.typeTexts(type),
         }) ?? [],
       );
+      for (const baseType of baseTypes) {
+        this.cacheTypeText(baseType);
+        if (relatedTypeLookup && !this.#typeLookupById.has(baseType.id)) {
+          this.#typeLookupById.set(baseType.id, relatedTypeLookup);
+        }
+      }
       this.#baseTypesById.set(type.id, baseTypes);
       return baseTypes;
     });
+  }
+
+  private relatedTypeLookup(type: CorsaType, lookup: TypeLookup): TypeLookup {
+    if (lookup.symbolSearchRange) {
+      return lookup;
+    }
+    const rememberedRange = this.#symbolSearchRangeByTypeId.get(type.id);
+    if (rememberedRange) {
+      return { ...lookup, symbolSearchRange: rememberedRange };
+    }
+    const cachedSymbol = this.#symbolsByTypeId.get(type.id);
+    const symbol =
+      cachedSymbol === null ? undefined : (cachedSymbol ?? this.getSymbolOfTypeUnchecked(type));
+    const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
+    if (!symbol || !sourceText) {
+      return lookup;
+    }
+    const recoveredDeclaration = uniqueClassDeclarationPosition(sourceText, symbol.name);
+    if (recoveredDeclaration !== undefined) {
+      const recoveredRange =
+        qualifiedBaseNamespaceRangeAtDeclaration(sourceText, recoveredDeclaration) ??
+        containingNamespaceRange(sourceText, recoveredDeclaration);
+      if (recoveredRange) {
+        return { ...lookup, symbolSearchRange: recoveredRange };
+      }
+    }
+    const declarationHandles = [symbol.valueDeclaration, ...(symbol.declarations ?? [])].filter(
+      (handle): handle is string => handle !== undefined,
+    );
+    for (const handle of declarationHandles) {
+      const declaration = this.getNode(handle);
+      if (!declaration || !pathsReferToSameFile(declaration.fileName, lookup.fileName)) {
+        continue;
+      }
+      const symbolSearchRange =
+        qualifiedBaseNamespaceRangeAtDeclaration(sourceText, declaration.pos) ??
+        containingNamespaceRange(sourceText, declaration.pos);
+      if (symbolSearchRange) {
+        return { ...lookup, symbolSearchRange };
+      }
+    }
+    return lookup;
   }
 
   getCachedImplementedTypes(typeId: string): readonly CorsaType[] | undefined {
@@ -864,6 +1111,8 @@ export class CorsaProjectSession {
     this.#ownImplementedTypesById.clear();
     this.#typeLookupById.clear();
     this.#typeSourceById.clear();
+    this.#classDeclarationByTypeId.clear();
+    this.#symbolSearchRangeByTypeId.clear();
     this.#sourceLengthByPath.clear();
     this.#snapshotHasIssuedHandles = false;
   }
@@ -1155,6 +1404,221 @@ function typeSymbolNameFromTexts(texts: readonly string[]): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Collects the qualified spellings of `typeSymbolName` (such as `Second.Base`)
+ * carried by a type's rendered texts. These keep the container context that
+ * `typeSymbolNameFromTexts` drops.
+ */
+function qualifiedTypeNamesFromTexts(
+  texts: readonly string[],
+  typeSymbolName: string,
+): readonly string[] {
+  const qualifiedNames: string[] = [];
+  for (const text of texts) {
+    const rendered = text.trim().replace(/^typeof\s+/u, "");
+    const typeArgumentStart = rendered.indexOf("<");
+    const withoutTypeArguments =
+      typeArgumentStart < 0 ? rendered : rendered.slice(0, typeArgumentStart);
+    const name = withoutTypeArguments.trimEnd();
+    if (name.endsWith(`.${typeSymbolName}`) && !qualifiedNames.includes(name)) {
+      qualifiedNames.push(name);
+    }
+  }
+  return qualifiedNames;
+}
+
+/**
+ * Identifies a symbol by its declaration handle, which encodes a source range
+ * and therefore stays comparable across separate lookups, unlike the opaque
+ * symbol handle.
+ */
+function symbolDeclarationKey(symbol: CorsaSymbol): string {
+  return symbol.valueDeclaration ?? symbol.declarations[0] ?? symbol.id;
+}
+
+function classDeclarationStartAtIdentifier(
+  sourceText: string,
+  identifierPosition: number,
+): number | undefined {
+  const prefixStart = Math.max(0, identifierPosition - 128);
+  const prefix = sourceText.slice(prefixStart, identifierPosition);
+  const match = /\bclass\s*$/u.exec(prefix);
+  return match ? prefixStart + match.index : undefined;
+}
+
+function uniqueClassDeclarationPosition(sourceText: string, className: string): number | undefined {
+  const escapedName = className.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const declarationPattern = new RegExp(`\\bclass\\s+${escapedName}\\b`, "gu");
+  const declaration = declarationPattern.exec(sourceText);
+  if (!declaration || declarationPattern.exec(sourceText)) {
+    return undefined;
+  }
+  return declaration.index;
+}
+
+function qualifiedNamespaceRangeAtIdentifier(
+  sourceText: string,
+  identifierPosition: number,
+): SourceRange | undefined {
+  const prefixStart = Math.max(0, identifierPosition - 256);
+  const prefix = sourceText.slice(prefixStart, identifierPosition);
+  const match = /([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)\s*\.\s*$/u.exec(prefix);
+  return match?.[1] ? namespaceRangeByName(sourceText, match[1]) : undefined;
+}
+
+function qualifiedBaseNamespaceRangeAtDeclaration(
+  sourceText: string,
+  declarationPosition: number,
+): SourceRange | undefined {
+  const headerEnd = sourceText.indexOf("{", declarationPosition);
+  const header = sourceText.slice(
+    declarationPosition,
+    headerEnd < 0 ? declarationPosition + 512 : headerEnd,
+  );
+  const match =
+    /\bextends\s+(?:[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*\.)+([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/u.exec(
+      header,
+    );
+  if (!match) {
+    return undefined;
+  }
+  const qualifiedBase = match[0].slice("extends".length).trim();
+  const qualifiers = qualifiedBase.split(".");
+  const qualifier = qualifiers[qualifiers.length - 2];
+  return qualifier ? namespaceRangeByName(sourceText, qualifier) : undefined;
+}
+
+function namespaceRangeByName(sourceText: string, name: string): SourceRange | undefined {
+  const escapedName = name.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const declarationPattern = new RegExp(`\\b(?:namespace|module)\\s+${escapedName}\\s*\\{`, "gu");
+  const declaration = declarationPattern.exec(sourceText);
+  if (!declaration) {
+    return undefined;
+  }
+  const open = declaration.index + declaration[0].lastIndexOf("{");
+  const scanner = createSourceScanner();
+  let depth = 1;
+  for (let index = open + 1; index < sourceText.length; index += 1) {
+    const nextIndex = scanner.skip(sourceText, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    if (sourceText[index] === "{") {
+      depth += 1;
+    } else if (sourceText[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return { start: open + 1, end: index };
+      }
+    }
+  }
+  return undefined;
+}
+
+function containingNamespaceRange(sourceText: string, position: number): SourceRange | undefined {
+  const scanner = createSourceScanner();
+  const blocks: { start: number; namespace: boolean }[] = [];
+  let pendingNamespace = false;
+  let innermost: SourceRange | undefined;
+  for (let index = 0; index < sourceText.length; index += 1) {
+    const nextIndex = scanner.skip(sourceText, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    const char = sourceText[index];
+    if (isIdentifierStart(char)) {
+      let end = index + 1;
+      while (isIdentifierPart(sourceText[end])) {
+        end += 1;
+      }
+      const identifier = sourceText.slice(index, end);
+      if (identifier === "namespace" || identifier === "module") {
+        pendingNamespace = true;
+      }
+      index = end - 1;
+      continue;
+    }
+    if (char === "{") {
+      blocks.push({ start: index + 1, namespace: pendingNamespace });
+      pendingNamespace = false;
+      continue;
+    }
+    if (char === "}") {
+      const block = blocks.pop();
+      if (
+        block?.namespace &&
+        block.start <= position &&
+        position < index &&
+        (!innermost || block.start >= innermost.start)
+      ) {
+        innermost = { start: block.start, end: index };
+      }
+      continue;
+    }
+    if (pendingNamespace && (char === ";" || char === "=")) {
+      pendingNamespace = false;
+    }
+  }
+  return innermost;
+}
+
+function createSourceScanner(): {
+  skip(text: string, index: number): number;
+} {
+  let quote: string | undefined;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  return {
+    skip(text, index) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (inLineComment) {
+        if (char === "\n" || char === "\r") {
+          inLineComment = false;
+        }
+        return index + 1;
+      }
+      if (inBlockComment) {
+        if (char === "*" && next === "/") {
+          inBlockComment = false;
+          return index + 2;
+        }
+        return index + 1;
+      }
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === quote) {
+          quote = undefined;
+        }
+        return index + 1;
+      }
+      if (char === "/" && next === "/") {
+        inLineComment = true;
+        return index + 2;
+      }
+      if (char === "/" && next === "*") {
+        inBlockComment = true;
+        return index + 2;
+      }
+      if (char === '"' || char === "'" || char === "`") {
+        quote = char;
+        return index + 1;
+      }
+      return index;
+    },
+  };
+}
+
+function isIdentifierStart(char: string | undefined): boolean {
+  return char !== undefined && /[$_\p{ID_Start}]/u.test(char);
 }
 
 function findIdentifierPosition(

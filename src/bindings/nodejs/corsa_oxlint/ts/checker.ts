@@ -14,9 +14,20 @@ import type {
   CorsaTypeCheckerShape,
 } from "./types";
 
+type ImplementingClassDeclarations = {
+  /** Ranges of the classes that carry an `implements` clause, keyed by name. */
+  readonly byName: ReadonlyMap<string, readonly (readonly [start: number, end: number])[]>;
+  /**
+   * Names declared by more than one class in the file. A lookup by simple name
+   * cannot tell those declarations apart, so it needs a declaration position to
+   * pick the right one.
+   */
+  readonly ambiguousNames: ReadonlySet<string>;
+};
+
 type ImplementingClassCache = {
   readonly sourceText: string;
-  readonly declarations: ReadonlyMap<string, readonly [start: number, end: number]>;
+  readonly declarations: ImplementingClassDeclarations;
 };
 
 const implementingClassNamesBySession = new WeakMap<
@@ -432,14 +443,17 @@ function implementedTypesFromTypeDeclaration(
   if (cached) {
     return cached;
   }
-  const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
+  const symbol =
+    (type.symbol ? session.getSymbol(type.symbol) : undefined) ?? checker.getSymbolOfType(type);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
+  const matchedDeclarationNode = session.getClassDeclarationForType(type);
   const localImplementingDeclaration =
     declarationNode && pathsReferToSameFile(declarationNode.fileName, context.filename)
-      ? implementingClassDeclaration(context, type, symbol)
+      ? implementingClassDeclaration(context, type, symbol, declarationNode)
       : undefined;
   const resolvedDeclarationNode =
+    matchedDeclarationNode ??
     localImplementingDeclaration ??
     declarationNode ??
     implementingClassDeclaration(context, type, symbol);
@@ -457,12 +471,20 @@ function implementingClassDeclaration(
   context: ContextWithParserOptions,
   type: CorsaType,
   symbol?: CorsaSymbol,
+  declarationNode?: CorsaNode,
 ): CorsaNode | undefined {
   const name = implementingClassName(type, symbol);
   if (!name) {
     return undefined;
   }
-  const range = implementingClassDeclarations(context).get(name);
+  const { byName, ambiguousNames } = implementingClassDeclarations(context);
+  const ranges = byName.get(name);
+  if (!ranges || ranges.length === 0) {
+    return undefined;
+  }
+  const range = ambiguousNames.has(name)
+    ? declaredRange(ranges, declarationNode, context.filename)
+    : ranges[0];
   return range
     ? {
         fileName: context.filename,
@@ -471,6 +493,23 @@ function implementingClassDeclaration(
         range,
       }
     : undefined;
+}
+
+/**
+ * Picks the candidate whose `class` keyword sits inside `declarationNode`, which
+ * is the declaration the symbol actually points at. Without a usable declaration
+ * range there is nothing to disambiguate with, so the lookup gives up rather
+ * than returning a same-named class from another scope.
+ */
+function declaredRange(
+  ranges: readonly (readonly [start: number, end: number])[],
+  declarationNode: CorsaNode | undefined,
+  filename: string,
+): readonly [start: number, end: number] | undefined {
+  if (!declarationNode || !pathsReferToSameFile(declarationNode.fileName, filename)) {
+    return undefined;
+  }
+  return ranges.find(([start]) => start >= declarationNode.pos && start < declarationNode.end);
 }
 
 function implementingClassName(type: CorsaType, symbol?: CorsaSymbol): string | undefined {
@@ -492,7 +531,7 @@ function typeSymbolName(texts: readonly string[]): string | undefined {
 
 function implementingClassDeclarations(
   context: ContextWithParserOptions,
-): ReadonlyMap<string, readonly [start: number, end: number]> {
+): ImplementingClassDeclarations {
   const session = sessionForContext(context).session;
   let byFile = implementingClassNamesBySession.get(session);
   if (!byFile) {
@@ -509,10 +548,10 @@ function implementingClassDeclarations(
   return declarations;
 }
 
-function collectImplementingClassDeclarations(
-  sourceText: string,
-): ReadonlyMap<string, readonly [start: number, end: number]> {
-  const declarations = new Map<string, readonly [start: number, end: number]>();
+function collectImplementingClassDeclarations(sourceText: string): ImplementingClassDeclarations {
+  const byName = new Map<string, (readonly [start: number, end: number])[]>();
+  const declaredNames = new Set<string>();
+  const ambiguousNames = new Set<string>();
   let offset = 0;
   while (offset < sourceText.length) {
     const classOffset = findKeywordOutsideTrivia(sourceText.slice(offset), "class");
@@ -523,15 +562,26 @@ function collectImplementingClassDeclarations(
     const rest = sourceText.slice(declarationStart);
     const match = /^\s*([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/u.exec(rest);
     if (match?.[1]) {
+      const name = match[1];
+      if (declaredNames.has(name)) {
+        ambiguousNames.add(name);
+      }
+      declaredNames.add(name);
       const bodyOpen = findClassBodyOpen(rest, 0);
       const header = rest.slice(0, bodyOpen >= 0 ? bodyOpen : rest.length);
       if (findKeywordOutsideTrivia(header, "implements") >= 0) {
-        declarations.set(match[1], [offset + classOffset, sourceText.length]);
+        const range = [offset + classOffset, sourceText.length] as const;
+        const ranges = byName.get(name);
+        if (ranges) {
+          ranges.push(range);
+        } else {
+          byName.set(name, [range]);
+        }
       }
     }
     offset = declarationStart;
   }
-  return declarations;
+  return { byName, ambiguousNames };
 }
 
 function implementedTypesFromSourceText(

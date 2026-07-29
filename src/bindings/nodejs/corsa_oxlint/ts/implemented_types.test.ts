@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +11,32 @@ import { RuleTester } from "./rule_tester";
 import { resolvedRealCorsaBinary } from "./test_support";
 
 const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
+const stableTypeScript7Binary = optionalStableTypeScript7Executable() ?? "";
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+const stableTypeScript7Case = existsSync(stableTypeScript7Binary) ? it : it.skip;
+
+/**
+ * Resolves the `tsc` shipped by the installed stable `typescript` package, so
+ * the regression test below runs against a released TypeScript 7 runtime rather
+ * than the Corsa build this repository pins.
+ */
+function optionalStableTypeScript7Executable(): string | undefined {
+  try {
+    const require = createRequire(import.meta.url);
+    const typeScriptPackage = require.resolve("typescript/package.json");
+    const requireFromTypeScript = createRequire(typeScriptPackage);
+    const platformPackage = requireFromTypeScript.resolve(
+      `@typescript/typescript-${process.platform}-${process.arch}/package.json`,
+    );
+    return resolve(
+      dirname(platformPackage),
+      "lib",
+      process.platform === "win32" ? "tsc.exe" : "tsc",
+    );
+  } catch {
+    return undefined;
+  }
+}
 
 describe("corsa oxlint implemented types", () => {
   integrationCase("exposes class implements clause types", () => {
@@ -703,6 +729,212 @@ describe("corsa oxlint implemented types", () => {
       expect(seen.foo).toEqual(["IFoo"]);
     },
   );
+
+  stableTypeScript7Case("preserves symbols and implemented types on immediate base types", () => {
+    const seen: Record<
+      string,
+      {
+        readonly symbol: string | null;
+        readonly implemented: readonly string[];
+        readonly bases: readonly {
+          readonly text: string;
+          readonly symbol: string | null;
+          readonly implemented: readonly string[];
+        }[];
+      }
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "base-type-identity",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise symbol and implements lookups on base type handles",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSPropertySignature(node: any) {
+            const name = node.key?.name;
+            if (!name) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            if (!type || checker.typeToString(type) === "string") {
+              return;
+            }
+            seen[name] = {
+              symbol: checker.getSymbolOfType(type)?.name ?? null,
+              implemented: checker
+                .getImplementedTypesOfType(type)
+                .map((implemented: any) => checker.typeToString(implemented)),
+              bases: checker.getBaseTypes(type).map((base: any) => ({
+                text: checker.typeToString(base),
+                symbol: checker.getSymbolOfType(base)?.name ?? null,
+                implemented: checker
+                  .getImplementedTypesOfType(base)
+                  .map((implemented: any) => checker.typeToString(implemented)),
+              })),
+            };
+          },
+        };
+      },
+    });
+
+    new RuleTester({ languageOptions: { sourceType: "module" } }).run(
+      "base-type-identity",
+      rule as any,
+      {
+        valid: [
+          {
+            code: [
+              "interface I { name: string; }",
+              'class A_Base implements I { name = "x"; }',
+              "class A_Leaf extends A_Base {}",
+              "class B_Root {}",
+              'class B_Base extends B_Root implements I { name = "x"; }',
+              "class B_Leaf extends B_Base {}",
+              "interface Props { a: A_Leaf; b: B_Leaf; }",
+              "namespace First {",
+              "  export interface IFirst { first: string; }",
+              '  export class Base implements IFirst { first = "x"; }',
+              "  export class Leaf extends Base {}",
+              "}",
+              "namespace Second {",
+              "  export interface ISecond { second: string; }",
+              '  export class Base implements ISecond { second = "x"; }',
+              "  export class Leaf extends Base {}",
+              "}",
+              "interface NamespacedProps {",
+              "  firstLeaf: First.Leaf;",
+              "  secondLeaf: Second.Leaf;",
+              "}",
+            ].join("\n"),
+            settings: {
+              corsaOxlint: {
+                parserOptions: {
+                  corsa: {
+                    executable: stableTypeScript7Binary,
+                  },
+                },
+              },
+            },
+          },
+        ],
+        invalid: [],
+      },
+    );
+
+    expect(seen).toEqual({
+      a: {
+        symbol: "A_Leaf",
+        implemented: ["I"],
+        bases: [{ text: "A_Base", symbol: "A_Base", implemented: ["I"] }],
+      },
+      b: {
+        symbol: "B_Leaf",
+        implemented: ["I"],
+        bases: [{ text: "B_Base", symbol: "B_Base", implemented: ["I"] }],
+      },
+      firstLeaf: {
+        symbol: "Leaf",
+        implemented: ["IFirst"],
+        bases: [{ text: "Base", symbol: "Base", implemented: ["IFirst"] }],
+      },
+      secondLeaf: {
+        symbol: "Leaf",
+        implemented: ["ISecond"],
+        bases: [{ text: "Base", symbol: "Base", implemented: ["ISecond"] }],
+      },
+    });
+  });
+
+  stableTypeScript7Case("does not confuse base types that share a simple name", () => {
+    const seen: Record<
+      string,
+      readonly {
+        readonly symbol: string | null;
+        readonly implemented: readonly string[];
+      }[]
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "duplicate-base-names",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise base type recovery when two declarations share a simple name",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSPropertySignature(node: any) {
+            const name = node.key?.name;
+            if (!name) {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            if (!type) {
+              return;
+            }
+            seen[name] = checker.getBaseTypes(type).map((base: any) => ({
+              symbol: checker.getSymbolOfType(base)?.name ?? null,
+              implemented: checker
+                .getImplementedTypesOfType(base)
+                .map((implemented: any) => checker.typeToString(implemented)),
+            }));
+          },
+        };
+      },
+    });
+
+    new RuleTester({ languageOptions: { sourceType: "module" } }).run(
+      "duplicate-base-names",
+      rule as any,
+      {
+        valid: [
+          {
+            code: [
+              "interface I { name: string; }",
+              'namespace First { export class Base implements I { name = "x"; } }',
+              "namespace Second { export class Base { size = 1; } }",
+              "class FirstLeaf extends First.Base {}",
+              "class SecondLeaf extends Second.Base {}",
+              "interface Props { a: FirstLeaf; b: SecondLeaf; }",
+            ].join("\n"),
+            settings: {
+              corsaOxlint: {
+                parserOptions: {
+                  corsa: {
+                    executable: stableTypeScript7Binary,
+                  },
+                },
+              },
+            },
+          },
+        ],
+        invalid: [],
+      },
+    );
+
+    // `Second.Base` must never inherit `First.Base`'s implemented interfaces,
+    // even though both declarations are named `Base`. Recovery is allowed to
+    // report no symbol for an ambiguous name, but never the wrong one.
+    expect(seen.a?.map((base) => base.implemented)).toEqual([["I"]]);
+    expect(seen.b?.map((base) => base.implemented)).toEqual([[]]);
+  });
 
   integrationCase("returns implemented interfaces from external declaration class types", () => {
     const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-external-implements-"));
