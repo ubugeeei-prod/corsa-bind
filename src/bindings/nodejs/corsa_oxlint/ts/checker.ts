@@ -503,7 +503,7 @@ function declaredRange(
   ranges: readonly (readonly [start: number, end: number])[],
   declarationNode: CorsaNode | undefined,
   filename: string,
-): (readonly [start: number, end: number]) | undefined {
+): readonly [start: number, end: number] | undefined {
   if (!declarationNode || !pathsReferToSameFile(declarationNode.fileName, filename)) {
     return undefined;
   }
