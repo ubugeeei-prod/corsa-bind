@@ -16,7 +16,7 @@ name = "corsa_core"
 path = "src/lib.rs"
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 bumpalo = { workspace = true }
 compact_str = { workspace = true }
 memchr = { workspace = true }
