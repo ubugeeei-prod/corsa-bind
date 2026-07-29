@@ -281,7 +281,7 @@ export class CorsaProjectSession {
     const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
     let typeSymbolName = typeSymbolNameFromTexts(texts);
     if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
-      const typeSymbol = this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
+      const typeSymbol = this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName, texts);
       if (typeSymbol) {
         return typeSymbol;
       }
@@ -301,7 +301,7 @@ export class CorsaProjectSession {
       typeSymbolName = typeSymbolNameFromTexts(texts);
     }
     if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
-      return this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName);
+      return this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName, texts);
     }
     return undefined;
   }
@@ -310,6 +310,7 @@ export class CorsaProjectSession {
     lookup: TypeLookup,
     sourceText: string,
     typeSymbolName: string,
+    texts: readonly string[],
   ): CorsaSymbol | undefined {
     const nearbySymbol = this.findMatchingTypeSymbol(
       lookup,
@@ -321,7 +322,92 @@ export class CorsaProjectSession {
     if (nearbySymbol) {
       return nearbySymbol;
     }
-    return this.findMatchingTypeSymbol(lookup, sourceText, typeSymbolName, 0, sourceText.length);
+    for (const qualifiedName of qualifiedTypeNamesFromTexts(texts, typeSymbolName)) {
+      const qualifiedSymbol = this.findQualifiedTypeSymbol(
+        lookup,
+        sourceText,
+        qualifiedName,
+        typeSymbolName,
+      );
+      if (qualifiedSymbol) {
+        return qualifiedSymbol;
+      }
+    }
+    return this.findUniqueTypeSymbol(lookup, sourceText, typeSymbolName);
+  }
+
+  /**
+   * Anchors a qualified type text such as `Second.Base` on its qualifier, so a
+   * same-named declaration under a different container cannot win the lookup.
+   */
+  private findQualifiedTypeSymbol(
+    lookup: TypeLookup,
+    sourceText: string,
+    qualifiedName: string,
+    typeSymbolName: string,
+  ): CorsaSymbol | undefined {
+    let offset = 0;
+    while (offset < sourceText.length) {
+      const start = sourceText.indexOf(qualifiedName, offset);
+      if (start < 0) {
+        return undefined;
+      }
+      const before = start > 0 ? sourceText[start - 1] : undefined;
+      const after = sourceText[start + qualifiedName.length];
+      // A leading `.` means the qualifier itself is nested under another
+      // container, so this occurrence names a different type.
+      if (before !== "." && !isIdentifierPart(before) && !isIdentifierPart(after)) {
+        const symbol = this.getMatchingSymbolAtPosition(
+          lookup,
+          typeSymbolName,
+          start + qualifiedName.length - typeSymbolName.length,
+        );
+        if (symbol) {
+          return symbol;
+        }
+      }
+      offset = start + qualifiedName.length;
+    }
+    return undefined;
+  }
+
+  /**
+   * Scans the whole file, but only accepts a match when every occurrence of the
+   * name resolves to the same declaration. Returning the first same-named
+   * symbol would otherwise cache the wrong nominal symbol, and the wrong
+   * implemented interfaces, for any file that declares two types with the same
+   * simple name in different scopes.
+   */
+  private findUniqueTypeSymbol(
+    lookup: TypeLookup,
+    sourceText: string,
+    typeSymbolName: string,
+  ): CorsaSymbol | undefined {
+    let uniqueSymbol: CorsaSymbol | undefined;
+    let uniqueKey: string | undefined;
+    let offset = 0;
+    while (offset < sourceText.length) {
+      const position = findIdentifierPosition(
+        sourceText,
+        typeSymbolName,
+        offset,
+        sourceText.length,
+      );
+      if (position === undefined) {
+        break;
+      }
+      const symbol = this.getMatchingSymbolAtPosition(lookup, typeSymbolName, position);
+      if (symbol) {
+        const key = symbolDeclarationKey(symbol);
+        if (uniqueKey !== undefined && uniqueKey !== key) {
+          return undefined;
+        }
+        uniqueSymbol ??= symbol;
+        uniqueKey = key;
+      }
+      offset = position + typeSymbolName.length;
+    }
+    return uniqueSymbol;
   }
 
   private findMatchingTypeSymbol(
@@ -1197,6 +1283,38 @@ function typeSymbolNameFromTexts(texts: readonly string[]): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Collects the qualified spellings of `typeSymbolName` (such as `Second.Base`)
+ * carried by a type's rendered texts. These keep the container context that
+ * `typeSymbolNameFromTexts` drops.
+ */
+function qualifiedTypeNamesFromTexts(
+  texts: readonly string[],
+  typeSymbolName: string,
+): readonly string[] {
+  const qualifiedNames: string[] = [];
+  for (const text of texts) {
+    const rendered = text.trim().replace(/^typeof\s+/u, "");
+    const typeArgumentStart = rendered.indexOf("<");
+    const withoutTypeArguments =
+      typeArgumentStart < 0 ? rendered : rendered.slice(0, typeArgumentStart);
+    const name = withoutTypeArguments.trimEnd();
+    if (name.endsWith(`.${typeSymbolName}`) && !qualifiedNames.includes(name)) {
+      qualifiedNames.push(name);
+    }
+  }
+  return qualifiedNames;
+}
+
+/**
+ * Identifies a symbol by its declaration handle, which encodes a source range
+ * and therefore stays comparable across separate lookups, unlike the opaque
+ * symbol handle.
+ */
+function symbolDeclarationKey(symbol: CorsaSymbol): string {
+  return symbol.valueDeclaration ?? symbol.declarations[0] ?? symbol.id;
 }
 
 function findIdentifierPosition(
