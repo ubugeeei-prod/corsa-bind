@@ -432,7 +432,8 @@ function implementedTypesFromTypeDeclaration(
   if (cached) {
     return cached;
   }
-  const symbol = type.symbol ? session.getSymbol(type.symbol) : undefined;
+  const symbol =
+    (type.symbol ? session.getSymbol(type.symbol) : undefined) ?? checker.getSymbolOfType(type);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
   const localImplementingDeclaration =

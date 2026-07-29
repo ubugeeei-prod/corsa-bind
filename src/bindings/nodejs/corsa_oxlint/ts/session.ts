@@ -311,16 +311,51 @@ export class CorsaProjectSession {
     sourceText: string,
     typeSymbolName: string,
   ): CorsaSymbol | undefined {
-    const typePosition = findIdentifierPosition(
+    const nearbySymbol = this.findMatchingTypeSymbol(
+      lookup,
       sourceText,
       typeSymbolName,
       lookup.position,
       lookup.position + 512,
     );
-    if (typePosition === undefined || typePosition === lookup.position) {
+    if (nearbySymbol) {
+      return nearbySymbol;
+    }
+    return this.findMatchingTypeSymbol(lookup, sourceText, typeSymbolName, 0, sourceText.length);
+  }
+
+  private findMatchingTypeSymbol(
+    lookup: TypeLookup,
+    sourceText: string,
+    typeSymbolName: string,
+    start: number,
+    end: number,
+  ): CorsaSymbol | undefined {
+    let offset = Math.max(0, start);
+    const boundary = Math.min(sourceText.length, end);
+    while (offset < boundary) {
+      const position = findIdentifierPosition(sourceText, typeSymbolName, offset, boundary);
+      if (position === undefined) {
+        return undefined;
+      }
+      const symbol = this.getMatchingSymbolAtPosition(lookup, typeSymbolName, position);
+      if (symbol) {
+        return symbol;
+      }
+      offset = position + typeSymbolName.length;
+    }
+    return undefined;
+  }
+
+  private getMatchingSymbolAtPosition(
+    lookup: TypeLookup,
+    typeSymbolName: string,
+    position: number | undefined,
+  ): CorsaSymbol | undefined {
+    if (position === undefined || position === lookup.position) {
       return undefined;
     }
-    const typeSymbol = this.getSymbolAtPosition(lookup.fileName, typePosition, lookup.sourceText);
+    const typeSymbol = this.getSymbolAtPosition(lookup.fileName, position, lookup.sourceText);
     return isUsableSymbol(typeSymbol) && typeSymbol.name === typeSymbolName
       ? typeSymbol
       : undefined;
@@ -514,6 +549,13 @@ export class CorsaProjectSession {
           texts: this.typeTexts(type),
         }) ?? [],
       );
+      const lookup = this.#typeLookupById.get(type.id);
+      for (const baseType of baseTypes) {
+        this.cacheTypeText(baseType);
+        if (lookup && !this.#typeLookupById.has(baseType.id)) {
+          this.#typeLookupById.set(baseType.id, lookup);
+        }
+      }
       this.#baseTypesById.set(type.id, baseTypes);
       return baseTypes;
     });
