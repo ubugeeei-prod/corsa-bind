@@ -82,6 +82,8 @@ fn msgpack_api_supports_capabilities_and_overlay_updates() {
             .unwrap();
         let capabilities = client.describe_capabilities().await.unwrap();
         assert!(capabilities.overlay.update_snapshot_overlay_changes);
+        assert!(capabilities.lsp.available);
+        assert!(!capabilities.lsp.editor.hover);
         let snapshot = client
             .update_snapshot(UpdateSnapshotParams {
                 open_project: Some("/workspace/tsconfig.json".into()),

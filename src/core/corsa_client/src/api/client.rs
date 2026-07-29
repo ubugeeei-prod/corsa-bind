@@ -20,7 +20,7 @@ use std::{
 };
 
 use super::{
-    capabilities::{CapabilitiesResponse, RuntimeCapabilities},
+    capabilities::{CapabilitiesResponse, LspCapabilities, RuntimeCapabilities},
     changes::{UpdateSnapshotParams, UpdateSnapshotResponse},
     config::{ApiMode, ApiSpawnConfig},
     document::DocumentIdentifier,
@@ -310,6 +310,9 @@ impl ApiClient {
                                 .runtime
                                 .merge_with_local(self.runtime_capabilities.clone());
                             parsed.runtime.capability_endpoint = true;
+                            parsed.lsp = parsed
+                                .lsp
+                                .merge_with_local(LspCapabilities::from_runtime(&parsed.runtime));
                             parsed
                         }
                         Err(CorsaError::Rpc(error))
@@ -652,10 +655,15 @@ impl RuntimeCapabilities {
 
 fn infer_runtime_kind(path: &Path) -> Option<CompactString> {
     let normalized = path.to_string_lossy().to_ascii_lowercase();
+    let file_name = normalized
+        .rsplit(|character| ['/', '\\'].contains(&character))
+        .next();
     let kind = if normalized.contains("mock_corsa") {
         "mock-corsa"
     } else if normalized.contains("native-preview") {
         "native-preview"
+    } else if matches!(file_name, Some("tsc" | "tsc.exe" | "tsgo" | "tsgo.exe")) {
+        "typescript"
     } else if normalized.ends_with("/corsa")
         || normalized.ends_with("\\corsa.exe")
         || normalized.ends_with("\\corsa")
@@ -682,7 +690,9 @@ fn is_protocol_panic_message(message: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{ApiClient, is_unknown_api_method_message};
+    use std::path::Path;
+
+    use super::{ApiClient, infer_runtime_kind, is_unknown_api_method_message};
     use crate::CorsaError;
     use corsa_core::{RpcResponseError, fast::CompactString};
 
@@ -691,6 +701,30 @@ mod tests {
         assert!(is_unknown_api_method_message(
             "api: invalid request: unknown API method \"describeCapabilities\""
         ));
+    }
+
+    #[test]
+    fn infers_typescript_runtime_from_standard_executable_names() {
+        for path in [
+            "/tmp/typescript/lib/tsc",
+            "/tmp/typescript/lib/tsgo",
+            r"C:\typescript\lib\tsc.exe",
+            r"C:\typescript\lib\tsgo.exe",
+        ] {
+            assert_eq!(
+                infer_runtime_kind(Path::new(path)).as_deref(),
+                Some("typescript"),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn does_not_infer_typescript_runtime_from_wrapper_names() {
+        assert_eq!(
+            infer_runtime_kind(Path::new("/tmp/my-tsc-wrapper")).as_deref(),
+            Some("custom")
+        );
     }
 
     #[test]
