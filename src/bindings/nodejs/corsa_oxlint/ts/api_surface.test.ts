@@ -186,11 +186,13 @@ describe("api surface", () => {
               skipLibCheck: true,
               types: ["node"],
               typeRoots: [resolve(workspaceRoot, "node_modules/@types")],
-              baseUrl: workspaceRoot,
+              // TypeScript 7 removed `baseUrl` and rejects non-relative `paths`
+              // entries, so the mapping is spelled as an absolute path.
               paths: {
-                "@corsa-bind/napi": ["src/bindings/nodejs/corsa_node/ts/index.ts"],
+                "@corsa-bind/napi": [
+                  resolve(workspaceRoot, "src/bindings/nodejs/corsa_node/ts/index.ts"),
+                ],
               },
-              ignoreDeprecations: "6.0",
             },
             files: [resolve(workspace, "rule.ts")],
           },

@@ -3,8 +3,8 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { defaultCorsaExecutable } from "./context";
 import { RuleTester } from "./rule_tester";
+import { resolvedRealCorsaBinary } from "./test_support";
 import {
   implementedNativeRuleNames,
   pendingNativeRuleNames,
@@ -15,17 +15,9 @@ import defaultCorsaOxlintPlugin from "./rules";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const upstreamRulesDir = resolve(workspaceRoot, ".cache/tsgolint_upstream/internal/rules");
-const realCorsaBinary = optionalDefaultCorsaExecutable(workspaceRoot) ?? "";
+const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const upstreamCase = existsSync(upstreamRulesDir) ? it : it.skip;
 const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
-
-function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
-  try {
-    return defaultCorsaExecutable(rootDir);
-  } catch {
-    return undefined;
-  }
-}
 
 describe("corsa oxlint native rules", () => {
   it("exports the native plugin surface", () => {
