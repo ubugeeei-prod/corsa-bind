@@ -32,10 +32,16 @@ type SourceSlice = {
   node: CorsaNode;
 };
 
+type SourceRange = {
+  start: number;
+  end: number;
+};
+
 type TypeLookup = {
   fileName: string;
   position: number;
   sourceText?: string;
+  symbolSearchRange?: SourceRange;
 };
 
 const typeFlags = {
@@ -71,6 +77,8 @@ export class CorsaProjectSession {
   #ownImplementedTypesById = new Map<string, readonly CorsaType[]>();
   #typeLookupById = new Map<string, TypeLookup>();
   #typeSourceById = new Map<string, SourceSlice>();
+  #classDeclarationByTypeId = new Map<string, CorsaNode>();
+  #symbolSearchRangeByTypeId = new Map<string, SourceRange>();
   #sourceLengthByPath = new Map<string, number>();
   #typeTextById = new Map<string, string>();
   #lastRefreshMs = 0;
@@ -281,7 +289,7 @@ export class CorsaProjectSession {
     const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
     let typeSymbolName = typeSymbolNameFromTexts(texts);
     if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
-      const typeSymbol = this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName, texts);
+      const typeSymbol = this.getNearbyTypeSymbol(type, lookup, sourceText, typeSymbolName, texts);
       if (typeSymbol) {
         return typeSymbol;
       }
@@ -301,18 +309,30 @@ export class CorsaProjectSession {
       typeSymbolName = typeSymbolNameFromTexts(texts);
     }
     if (isUsableSymbol(symbol) && sourceText && typeSymbolName) {
-      return this.getNearbyTypeSymbol(lookup, sourceText, typeSymbolName, texts);
+      return this.getNearbyTypeSymbol(type, lookup, sourceText, typeSymbolName, texts);
     }
     return undefined;
   }
 
   private getNearbyTypeSymbol(
+    type: CorsaType,
     lookup: TypeLookup,
     sourceText: string,
     typeSymbolName: string,
     texts: readonly string[],
   ): CorsaSymbol | undefined {
+    if (lookup.symbolSearchRange) {
+      return this.findMatchingTypeSymbol(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        lookup.symbolSearchRange.start,
+        lookup.symbolSearchRange.end,
+      );
+    }
     const nearbySymbol = this.findMatchingTypeSymbol(
+      type,
       lookup,
       sourceText,
       typeSymbolName,
@@ -324,6 +344,7 @@ export class CorsaProjectSession {
     }
     for (const qualifiedName of qualifiedTypeNamesFromTexts(texts, typeSymbolName)) {
       const qualifiedSymbol = this.findQualifiedTypeSymbol(
+        type,
         lookup,
         sourceText,
         qualifiedName,
@@ -333,7 +354,7 @@ export class CorsaProjectSession {
         return qualifiedSymbol;
       }
     }
-    return this.findUniqueTypeSymbol(lookup, sourceText, typeSymbolName);
+    return this.findUniqueTypeSymbol(type, lookup, sourceText, typeSymbolName);
   }
 
   /**
@@ -341,11 +362,28 @@ export class CorsaProjectSession {
    * same-named declaration under a different container cannot win the lookup.
    */
   private findQualifiedTypeSymbol(
+    type: CorsaType,
     lookup: TypeLookup,
     sourceText: string,
     qualifiedName: string,
     typeSymbolName: string,
   ): CorsaSymbol | undefined {
+    const qualifiers = qualifiedName.slice(0, -(typeSymbolName.length + 1)).split(".");
+    const qualifier = qualifiers[qualifiers.length - 1];
+    const containerRange = qualifier ? namespaceRangeByName(sourceText, qualifier) : undefined;
+    if (containerRange) {
+      const declarationSymbol = this.findMatchingTypeSymbol(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        containerRange.start,
+        containerRange.end,
+      );
+      if (declarationSymbol) {
+        return declarationSymbol;
+      }
+    }
     let offset = 0;
     while (offset < sourceText.length) {
       const start = sourceText.indexOf(qualifiedName, offset);
@@ -358,7 +396,9 @@ export class CorsaProjectSession {
       // container, so this occurrence names a different type.
       if (before !== "." && !isIdentifierPart(before) && !isIdentifierPart(after)) {
         const symbol = this.getMatchingSymbolAtPosition(
+          type,
           lookup,
+          sourceText,
           typeSymbolName,
           start + qualifiedName.length - typeSymbolName.length,
         );
@@ -379,6 +419,7 @@ export class CorsaProjectSession {
    * simple name in different scopes.
    */
   private findUniqueTypeSymbol(
+    type: CorsaType,
     lookup: TypeLookup,
     sourceText: string,
     typeSymbolName: string,
@@ -396,7 +437,13 @@ export class CorsaProjectSession {
       if (position === undefined) {
         break;
       }
-      const symbol = this.getMatchingSymbolAtPosition(lookup, typeSymbolName, position);
+      const symbol = this.getMatchingSymbolAtPosition(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        position,
+      );
       if (symbol) {
         const key = symbolDeclarationKey(symbol);
         if (uniqueKey !== undefined && uniqueKey !== key) {
@@ -411,6 +458,7 @@ export class CorsaProjectSession {
   }
 
   private findMatchingTypeSymbol(
+    type: CorsaType,
     lookup: TypeLookup,
     sourceText: string,
     typeSymbolName: string,
@@ -424,7 +472,13 @@ export class CorsaProjectSession {
       if (position === undefined) {
         return undefined;
       }
-      const symbol = this.getMatchingSymbolAtPosition(lookup, typeSymbolName, position);
+      const symbol = this.getMatchingSymbolAtPosition(
+        type,
+        lookup,
+        sourceText,
+        typeSymbolName,
+        position,
+      );
       if (symbol) {
         return symbol;
       }
@@ -434,7 +488,9 @@ export class CorsaProjectSession {
   }
 
   private getMatchingSymbolAtPosition(
+    type: CorsaType,
     lookup: TypeLookup,
+    sourceText: string,
     typeSymbolName: string,
     position: number | undefined,
   ): CorsaSymbol | undefined {
@@ -442,9 +498,25 @@ export class CorsaProjectSession {
       return undefined;
     }
     const typeSymbol = this.getSymbolAtPosition(lookup.fileName, position, lookup.sourceText);
-    return isUsableSymbol(typeSymbol) && typeSymbol.name === typeSymbolName
-      ? typeSymbol
-      : undefined;
+    if (!isUsableSymbol(typeSymbol) || typeSymbol.name !== typeSymbolName) {
+      return undefined;
+    }
+    const classStart = classDeclarationStartAtIdentifier(sourceText, position);
+    if (classStart !== undefined) {
+      this.#classDeclarationByTypeId.set(type.id, {
+        fileName: lookup.fileName,
+        pos: classStart,
+        end: sourceText.length,
+        range: [classStart, sourceText.length],
+      });
+    }
+    const symbolSearchRange =
+      containingNamespaceRange(sourceText, position) ??
+      qualifiedNamespaceRangeAtIdentifier(sourceText, position);
+    if (symbolSearchRange) {
+      this.#symbolSearchRangeByTypeId.set(type.id, symbolSearchRange);
+    }
+    return typeSymbol;
   }
 
   private getSymbolOfTypeById(typeId: string): CorsaSymbol | undefined {
@@ -472,6 +544,10 @@ export class CorsaProjectSession {
 
   getSourceTextForPath(path: string): string | undefined {
     return this.sourceTextForPath(path);
+  }
+
+  getClassDeclarationForType(type: CorsaType): CorsaNode | undefined {
+    return this.#classDeclarationByTypeId.get(type.id);
   }
 
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined {
@@ -627,6 +703,8 @@ export class CorsaProjectSession {
       if (cached) {
         return cached;
       }
+      const lookup = this.#typeLookupById.get(type.id);
+      const relatedTypeLookup = lookup ? this.relatedTypeLookup(type, lookup) : undefined;
       const baseTypes = this.rememberTypes(
         this.client().callJson<readonly CorsaType[]>("getBaseTypes", {
           snapshot: this.#snapshot,
@@ -635,16 +713,57 @@ export class CorsaProjectSession {
           texts: this.typeTexts(type),
         }) ?? [],
       );
-      const lookup = this.#typeLookupById.get(type.id);
       for (const baseType of baseTypes) {
         this.cacheTypeText(baseType);
-        if (lookup && !this.#typeLookupById.has(baseType.id)) {
-          this.#typeLookupById.set(baseType.id, lookup);
+        if (relatedTypeLookup && !this.#typeLookupById.has(baseType.id)) {
+          this.#typeLookupById.set(baseType.id, relatedTypeLookup);
         }
       }
       this.#baseTypesById.set(type.id, baseTypes);
       return baseTypes;
     });
+  }
+
+  private relatedTypeLookup(type: CorsaType, lookup: TypeLookup): TypeLookup {
+    if (lookup.symbolSearchRange) {
+      return lookup;
+    }
+    const rememberedRange = this.#symbolSearchRangeByTypeId.get(type.id);
+    if (rememberedRange) {
+      return { ...lookup, symbolSearchRange: rememberedRange };
+    }
+    const cachedSymbol = this.#symbolsByTypeId.get(type.id);
+    const symbol =
+      cachedSymbol === null ? undefined : (cachedSymbol ?? this.getSymbolOfTypeUnchecked(type));
+    const sourceText = lookup.sourceText ?? this.sourceTextForPath(lookup.fileName);
+    if (!symbol || !sourceText) {
+      return lookup;
+    }
+    const recoveredDeclaration = uniqueClassDeclarationPosition(sourceText, symbol.name);
+    if (recoveredDeclaration !== undefined) {
+      const recoveredRange =
+        qualifiedBaseNamespaceRangeAtDeclaration(sourceText, recoveredDeclaration) ??
+        containingNamespaceRange(sourceText, recoveredDeclaration);
+      if (recoveredRange) {
+        return { ...lookup, symbolSearchRange: recoveredRange };
+      }
+    }
+    const declarationHandles = [symbol.valueDeclaration, ...(symbol.declarations ?? [])].filter(
+      (handle): handle is string => handle !== undefined,
+    );
+    for (const handle of declarationHandles) {
+      const declaration = this.getNode(handle);
+      if (!declaration || !pathsReferToSameFile(declaration.fileName, lookup.fileName)) {
+        continue;
+      }
+      const symbolSearchRange =
+        qualifiedBaseNamespaceRangeAtDeclaration(sourceText, declaration.pos) ??
+        containingNamespaceRange(sourceText, declaration.pos);
+      if (symbolSearchRange) {
+        return { ...lookup, symbolSearchRange };
+      }
+    }
+    return lookup;
   }
 
   getCachedImplementedTypes(typeId: string): readonly CorsaType[] | undefined {
@@ -992,6 +1111,8 @@ export class CorsaProjectSession {
     this.#ownImplementedTypesById.clear();
     this.#typeLookupById.clear();
     this.#typeSourceById.clear();
+    this.#classDeclarationByTypeId.clear();
+    this.#symbolSearchRangeByTypeId.clear();
     this.#sourceLengthByPath.clear();
     this.#snapshotHasIssuedHandles = false;
   }
@@ -1315,6 +1436,189 @@ function qualifiedTypeNamesFromTexts(
  */
 function symbolDeclarationKey(symbol: CorsaSymbol): string {
   return symbol.valueDeclaration ?? symbol.declarations[0] ?? symbol.id;
+}
+
+function classDeclarationStartAtIdentifier(
+  sourceText: string,
+  identifierPosition: number,
+): number | undefined {
+  const prefixStart = Math.max(0, identifierPosition - 128);
+  const prefix = sourceText.slice(prefixStart, identifierPosition);
+  const match = /\bclass\s*$/u.exec(prefix);
+  return match ? prefixStart + match.index : undefined;
+}
+
+function uniqueClassDeclarationPosition(sourceText: string, className: string): number | undefined {
+  const escapedName = className.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const declarationPattern = new RegExp(`\\bclass\\s+${escapedName}\\b`, "gu");
+  const declaration = declarationPattern.exec(sourceText);
+  if (!declaration || declarationPattern.exec(sourceText)) {
+    return undefined;
+  }
+  return declaration.index;
+}
+
+function qualifiedNamespaceRangeAtIdentifier(
+  sourceText: string,
+  identifierPosition: number,
+): SourceRange | undefined {
+  const prefixStart = Math.max(0, identifierPosition - 256);
+  const prefix = sourceText.slice(prefixStart, identifierPosition);
+  const match = /([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)\s*\.\s*$/u.exec(prefix);
+  return match?.[1] ? namespaceRangeByName(sourceText, match[1]) : undefined;
+}
+
+function qualifiedBaseNamespaceRangeAtDeclaration(
+  sourceText: string,
+  declarationPosition: number,
+): SourceRange | undefined {
+  const headerEnd = sourceText.indexOf("{", declarationPosition);
+  const header = sourceText.slice(
+    declarationPosition,
+    headerEnd < 0 ? declarationPosition + 512 : headerEnd,
+  );
+  const match =
+    /\bextends\s+(?:[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*\.)+([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/u.exec(
+      header,
+    );
+  if (!match) {
+    return undefined;
+  }
+  const qualifiedBase = match[0].slice("extends".length).trim();
+  const qualifiers = qualifiedBase.split(".");
+  const qualifier = qualifiers[qualifiers.length - 2];
+  return qualifier ? namespaceRangeByName(sourceText, qualifier) : undefined;
+}
+
+function namespaceRangeByName(sourceText: string, name: string): SourceRange | undefined {
+  const escapedName = name.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const declarationPattern = new RegExp(`\\b(?:namespace|module)\\s+${escapedName}\\s*\\{`, "gu");
+  const declaration = declarationPattern.exec(sourceText);
+  if (!declaration) {
+    return undefined;
+  }
+  const open = declaration.index + declaration[0].lastIndexOf("{");
+  const scanner = createSourceScanner();
+  let depth = 1;
+  for (let index = open + 1; index < sourceText.length; index += 1) {
+    const nextIndex = scanner.skip(sourceText, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    if (sourceText[index] === "{") {
+      depth += 1;
+    } else if (sourceText[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return { start: open + 1, end: index };
+      }
+    }
+  }
+  return undefined;
+}
+
+function containingNamespaceRange(sourceText: string, position: number): SourceRange | undefined {
+  const scanner = createSourceScanner();
+  const blocks: { start: number; namespace: boolean }[] = [];
+  let pendingNamespace = false;
+  let innermost: SourceRange | undefined;
+  for (let index = 0; index < sourceText.length; index += 1) {
+    const nextIndex = scanner.skip(sourceText, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    const char = sourceText[index];
+    if (isIdentifierStart(char)) {
+      let end = index + 1;
+      while (isIdentifierPart(sourceText[end])) {
+        end += 1;
+      }
+      const identifier = sourceText.slice(index, end);
+      if (identifier === "namespace" || identifier === "module") {
+        pendingNamespace = true;
+      }
+      index = end - 1;
+      continue;
+    }
+    if (char === "{") {
+      blocks.push({ start: index + 1, namespace: pendingNamespace });
+      pendingNamespace = false;
+      continue;
+    }
+    if (char === "}") {
+      const block = blocks.pop();
+      if (
+        block?.namespace &&
+        block.start <= position &&
+        position < index &&
+        (!innermost || block.start >= innermost.start)
+      ) {
+        innermost = { start: block.start, end: index };
+      }
+      continue;
+    }
+    if (pendingNamespace && (char === ";" || char === "=")) {
+      pendingNamespace = false;
+    }
+  }
+  return innermost;
+}
+
+function createSourceScanner(): {
+  skip(text: string, index: number): number;
+} {
+  let quote: string | undefined;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  return {
+    skip(text, index) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (inLineComment) {
+        if (char === "\n" || char === "\r") {
+          inLineComment = false;
+        }
+        return index + 1;
+      }
+      if (inBlockComment) {
+        if (char === "*" && next === "/") {
+          inBlockComment = false;
+          return index + 2;
+        }
+        return index + 1;
+      }
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === quote) {
+          quote = undefined;
+        }
+        return index + 1;
+      }
+      if (char === "/" && next === "/") {
+        inLineComment = true;
+        return index + 2;
+      }
+      if (char === "/" && next === "*") {
+        inBlockComment = true;
+        return index + 2;
+      }
+      if (char === '"' || char === "'" || char === "`") {
+        quote = char;
+        return index + 1;
+      }
+      return index;
+    },
+  };
+}
+
+function isIdentifierStart(char: string | undefined): boolean {
+  return char !== undefined && /[$_\p{ID_Start}]/u.test(char);
 }
 
 function findIdentifierPosition(

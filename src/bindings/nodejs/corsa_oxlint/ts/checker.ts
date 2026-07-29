@@ -447,11 +447,13 @@ function implementedTypesFromTypeDeclaration(
     (type.symbol ? session.getSymbol(type.symbol) : undefined) ?? checker.getSymbolOfType(type);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
+  const matchedDeclarationNode = session.getClassDeclarationForType(type);
   const localImplementingDeclaration =
     declarationNode && pathsReferToSameFile(declarationNode.fileName, context.filename)
       ? implementingClassDeclaration(context, type, symbol, declarationNode)
       : undefined;
   const resolvedDeclarationNode =
+    matchedDeclarationNode ??
     localImplementingDeclaration ??
     declarationNode ??
     implementingClassDeclaration(context, type, symbol);

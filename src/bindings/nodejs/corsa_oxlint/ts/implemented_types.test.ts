@@ -801,6 +801,20 @@ describe("corsa oxlint implemented types", () => {
               'class B_Base extends B_Root implements I { name = "x"; }',
               "class B_Leaf extends B_Base {}",
               "interface Props { a: A_Leaf; b: B_Leaf; }",
+              "namespace First {",
+              "  export interface IFirst { first: string; }",
+              '  export class Base implements IFirst { first = "x"; }',
+              "  export class Leaf extends Base {}",
+              "}",
+              "namespace Second {",
+              "  export interface ISecond { second: string; }",
+              '  export class Base implements ISecond { second = "x"; }',
+              "  export class Leaf extends Base {}",
+              "}",
+              "interface NamespacedProps {",
+              "  firstLeaf: First.Leaf;",
+              "  secondLeaf: Second.Leaf;",
+              "}",
             ].join("\n"),
             settings: {
               corsaOxlint: {
@@ -827,6 +841,16 @@ describe("corsa oxlint implemented types", () => {
         symbol: "B_Leaf",
         implemented: ["I"],
         bases: [{ text: "B_Base", symbol: "B_Base", implemented: ["I"] }],
+      },
+      firstLeaf: {
+        symbol: "Leaf",
+        implemented: ["IFirst"],
+        bases: [{ text: "Base", symbol: "Base", implemented: ["IFirst"] }],
+      },
+      secondLeaf: {
+        symbol: "Leaf",
+        implemented: ["ISecond"],
+        bases: [{ text: "Base", symbol: "Base", implemented: ["ISecond"] }],
       },
     });
   });
