@@ -50,8 +50,8 @@ pub use callbacks::{
 };
 /// Runtime capability descriptors exposed by `describeCapabilities`.
 pub use capabilities::{
-    CapabilitiesResponse, DiagnosticsCapabilities, EditorCapabilities, OverlayCapabilities,
-    RuntimeCapabilities,
+    CapabilitiesResponse, DiagnosticsCapabilities, EditorCapabilities, LspCapabilities,
+    OverlayCapabilities, RuntimeCapabilities,
 };
 /// Snapshot update inputs and change summaries.
 pub use changes::{

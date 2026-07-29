@@ -108,11 +108,19 @@ export interface EditorCapabilities {
   completion: boolean;
 }
 
+export interface LspCapabilities {
+  available: boolean;
+  editor: EditorCapabilities;
+}
+
 export interface CapabilitiesResponse {
   runtime: RuntimeCapabilities;
   overlay: OverlayCapabilities;
   diagnostics: DiagnosticsCapabilities;
+  /** Editor features available through the active API transport. */
   editor: EditorCapabilities;
+  /** Features available by starting the executable as a separate LSP server. */
+  lsp: LspCapabilities;
 }
 
 export interface FileDiagnosticsResponse {

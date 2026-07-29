@@ -106,6 +106,8 @@ fn project_session_supports_capabilities_diagnostics_and_editor_helpers() {
 
         let capabilities = session.describe_capabilities().await.unwrap();
         assert!(capabilities.editor.completion);
+        assert!(capabilities.lsp.available);
+        assert!(!capabilities.lsp.editor.completion);
 
         session
             .refresh_with_overlay_changes(

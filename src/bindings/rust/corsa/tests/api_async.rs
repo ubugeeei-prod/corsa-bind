@@ -624,6 +624,8 @@ fn async_api_supports_capabilities_overlay_diagnostics_and_editor_surface() {
         assert!(capabilities.overlay.update_snapshot_overlay_changes);
         assert!(capabilities.diagnostics.file);
         assert!(capabilities.editor.hover);
+        assert!(capabilities.lsp.available);
+        assert!(!capabilities.lsp.editor.hover);
 
         let snapshot = client
             .update_snapshot(UpdateSnapshotParams {

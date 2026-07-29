@@ -14,9 +14,14 @@ pub struct CapabilitiesResponse {
     /// Diagnostics API availability by scope.
     #[serde(default)]
     pub diagnostics: DiagnosticsCapabilities,
-    /// Editor-style API availability by feature.
+    /// Editor-style availability on the active API transport.
     #[serde(default)]
     pub editor: EditorCapabilities,
+    /// Editor-style availability when the executable is started as an LSP server.
+    ///
+    /// LSP is a separate process and transport from the active API session.
+    #[serde(default)]
+    pub lsp: LspCapabilities,
 }
 
 /// Runtime identity details for the active worker.
@@ -82,14 +87,71 @@ pub struct EditorCapabilities {
     pub completion: bool,
 }
 
+/// Capability summary for the executable's separate LSP transport.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LspCapabilities {
+    /// Whether the executable can be started as an LSP server.
+    #[serde(default)]
+    pub available: bool,
+    /// Editor features advertised by that LSP server.
+    #[serde(default)]
+    pub editor: EditorCapabilities,
+}
+
 impl CapabilitiesResponse {
     pub(crate) fn fallback(runtime: RuntimeCapabilities) -> Self {
+        let lsp = LspCapabilities::from_runtime(&runtime);
         Self {
             runtime,
             overlay: OverlayCapabilities::default(),
             diagnostics: DiagnosticsCapabilities::default(),
             editor: EditorCapabilities::default(),
+            lsp,
         }
+    }
+}
+
+impl EditorCapabilities {
+    fn all() -> Self {
+        Self {
+            hover: true,
+            definition: true,
+            references: true,
+            rename: true,
+            completion: true,
+        }
+    }
+
+    fn merge_with_local(mut self, local: Self) -> Self {
+        self.hover |= local.hover;
+        self.definition |= local.definition;
+        self.references |= local.references;
+        self.rename |= local.rename;
+        self.completion |= local.completion;
+        self
+    }
+}
+
+impl LspCapabilities {
+    pub(crate) fn from_runtime(runtime: &RuntimeCapabilities) -> Self {
+        match runtime.kind.as_deref() {
+            Some("corsa" | "native-preview" | "typescript") => Self {
+                available: true,
+                editor: EditorCapabilities::all(),
+            },
+            Some("mock-corsa") => Self {
+                available: true,
+                editor: EditorCapabilities::default(),
+            },
+            _ => Self::default(),
+        }
+    }
+
+    pub(crate) fn merge_with_local(mut self, local: Self) -> Self {
+        self.available |= local.available;
+        self.editor = self.editor.merge_with_local(local.editor);
+        self
     }
 }
 
@@ -111,7 +173,7 @@ impl RuntimeCapabilities {
 
 #[cfg(test)]
 mod tests {
-    use super::{CapabilitiesResponse, RuntimeCapabilities};
+    use super::{CapabilitiesResponse, LspCapabilities, RuntimeCapabilities};
     use corsa_core::fast::CompactString;
 
     #[test]
@@ -127,5 +189,39 @@ mod tests {
         assert!(!response.overlay.update_snapshot_overlay_changes);
         assert!(!response.diagnostics.snapshot);
         assert!(!response.editor.hover);
+        assert!(response.lsp.available);
+        assert!(response.lsp.editor.hover);
+    }
+
+    #[test]
+    fn mock_runtime_reports_lsp_transport_without_unadvertised_editor_features() {
+        let lsp = LspCapabilities::from_runtime(&RuntimeCapabilities {
+            kind: Some(CompactString::from("mock-corsa")),
+            ..RuntimeCapabilities::default()
+        });
+
+        assert!(lsp.available);
+        assert!(!lsp.editor.hover);
+        assert!(!lsp.editor.definition);
+    }
+
+    #[test]
+    fn custom_runtime_keeps_server_advertised_lsp_features() {
+        let advertised = LspCapabilities {
+            available: true,
+            editor: super::EditorCapabilities {
+                hover: true,
+                ..super::EditorCapabilities::default()
+            },
+        };
+        let local = LspCapabilities::from_runtime(&RuntimeCapabilities {
+            kind: Some(CompactString::from("custom")),
+            ..RuntimeCapabilities::default()
+        });
+
+        let merged = advertised.merge_with_local(local);
+        assert!(merged.available);
+        assert!(merged.editor.hover);
+        assert!(!merged.editor.definition);
     }
 }
