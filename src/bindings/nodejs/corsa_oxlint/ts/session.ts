@@ -501,7 +501,8 @@ export class CorsaProjectSession {
     if (!isUsableSymbol(typeSymbol) || typeSymbol.name !== typeSymbolName) {
       return undefined;
     }
-    const classStart = classDeclarationStartAtIdentifier(sourceText, position);
+    const uniqueDeclaration = uniqueClassDeclarationPosition(sourceText, typeSymbolName);
+    const classStart = classDeclarationStartAtIdentifier(sourceText, position) ?? uniqueDeclaration;
     if (classStart !== undefined) {
       this.#classDeclarationByTypeId.set(type.id, {
         fileName: lookup.fileName,
@@ -511,10 +512,22 @@ export class CorsaProjectSession {
       });
     }
     const symbolSearchRange =
-      containingNamespaceRange(sourceText, position) ??
-      qualifiedNamespaceRangeAtIdentifier(sourceText, position);
+      uniqueDeclaration === undefined
+        ? (qualifiedNamespaceRangeAtIdentifier(sourceText, position) ??
+          containingNamespaceRange(sourceText, position))
+        : containingNamespaceRange(sourceText, uniqueDeclaration);
     if (symbolSearchRange) {
       this.#symbolSearchRangeByTypeId.set(type.id, symbolSearchRange);
+      if (uniqueDeclaration !== undefined) {
+        this.#typeLookupById.set(type.id, { ...lookup, symbolSearchRange });
+      }
+    } else if (uniqueDeclaration !== undefined) {
+      // A reference can live inside a namespace while resolving to a
+      // top-level declaration. Do not let the reference scope leak into the
+      // next base-type lookup.
+      this.#symbolSearchRangeByTypeId.delete(type.id);
+      const { symbolSearchRange: _symbolSearchRange, ...unscopedLookup } = lookup;
+      this.#typeLookupById.set(type.id, unscopedLookup);
     }
     return typeSymbol;
   }
