@@ -855,6 +855,77 @@ describe("corsa oxlint implemented types", () => {
     });
   });
 
+  stableTypeScript7Case("preserves terminal base symbols for namespace-scoped leaves", () => {
+    const seen: { text: string; symbol: string | null }[] = [];
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "namespace-terminal-base-symbol",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise terminal base symbols reached from a namespace-scoped class",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        const walk = (type: any) => {
+          seen.push({
+            text: checker.typeToString(type),
+            symbol: checker.getSymbolOfType(type)?.name ?? null,
+          });
+          for (const base of checker.getBaseTypes(type)) {
+            walk(base);
+          }
+        };
+        return {
+          TSPropertySignature(node: any) {
+            if (node.key?.name === "leaf") {
+              walk(services.getTypeAtLocation(node));
+            }
+          },
+        };
+      },
+    });
+
+    new RuleTester({ languageOptions: { sourceType: "module" } }).run(
+      "namespace-terminal-base-symbol",
+      rule as any,
+      {
+        valid: [
+          {
+            code: [
+              "class Root {}",
+              "class Mid extends Root {}",
+              "namespace ns { export class Leaf extends Mid {} }",
+              "interface Props { leaf: ns.Leaf; }",
+            ].join("\n"),
+            settings: {
+              corsaOxlint: {
+                parserOptions: {
+                  corsa: {
+                    executable: stableTypeScript7Binary,
+                  },
+                },
+              },
+            },
+          },
+        ],
+        invalid: [],
+      },
+    );
+
+    expect(seen).toEqual([
+      { text: "Leaf", symbol: "Leaf" },
+      { text: "Mid", symbol: "Mid" },
+      { text: "Root", symbol: "Root" },
+    ]);
+  });
+
   stableTypeScript7Case("does not confuse base types that share a simple name", () => {
     const seen: Record<
       string,
