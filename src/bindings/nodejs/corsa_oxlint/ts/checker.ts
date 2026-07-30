@@ -292,6 +292,17 @@ function nodeForTypeLookup(node: Node | CorsaNode): Node | CorsaNode {
     return node;
   }
   switch ((node as { readonly type?: string }).type) {
+    case "ClassBody": {
+      const parent = childNode(node, "parent");
+      if (
+        parent &&
+        ((parent as { readonly type?: string }).type === "ClassDeclaration" ||
+          (parent as { readonly type?: string }).type === "ClassExpression")
+      ) {
+        return childNode(parent, "id") ?? parent;
+      }
+      return node;
+    }
     case "ClassDeclaration":
     case "ClassExpression":
       return childNode(node, "id") ?? node;
