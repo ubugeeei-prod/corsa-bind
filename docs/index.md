@@ -87,16 +87,14 @@ points.
 
 - [Node.js binding](./nodejs_binding.md) — the full `@corsa-bind/napi` surface for Node, Deno, and Bun.
 - [Language bindings](./language_bindings.md) — native bindings for Elixir, C, C++, Go, Zig, C#, Swift, MoonBit.
-- [Type-aware Oxlint](./oxlint_guide.md) — `corsa-oxlint` rule authoring, native rules, and stylistic rules.
+- [Type-aware Oxlint](./oxlint_guide.md) — `corsa-oxlint` rule authoring and native rules.
 - [Native rules](./native_rules.md) — the full set of type-aware rules implemented natively in Rust.
-- [Stylistic rules](./stylistic_rules.md) — the Rust-backed `@stylistic`-compatible formatting rules.
 
 ## Run and ship
 
 - [CI and local checks](./ci_guide.md) — reproduce the GitHub checks locally.
 - [Local issue agent](./ai_agent_issue_workflow.md) — turn GitHub Issues into implementation PRs from a local machine.
 - [Performance commands](./performance.md) — benchmark entrypoints and the artifacts they write.
-- [Stylistic benchmark](./stylistic_benchmark.md) — native stylistic throughput vs the upstream `@stylistic` plugin.
 - [Release process](./release_guide.md) — package publishing and release verification.
 - [API index](./api/index.md) — generated reference pages for the public Node entrypoints.
 

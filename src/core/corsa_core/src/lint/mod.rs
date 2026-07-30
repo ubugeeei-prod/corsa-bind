@@ -5,11 +5,6 @@ mod helpers;
 mod host_facts;
 mod registry;
 mod rules;
-mod stylistic;
-#[cfg(test)]
-mod stylistic_conformance;
-#[cfg(test)]
-mod stylistic_golden;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -36,9 +31,6 @@ pub use rules::{
     RestrictTemplateExpressionsRule, ReturnAwaitRule, StrictBooleanExpressionsRule,
     StrictVoidReturnRule, SwitchExhaustivenessCheckRule, UnboundMethodRule,
     UseUnknownInCatchCallbackVariableRule,
-};
-pub use stylistic::{
-    StylisticRuleConfig, StylisticRunConfig, run_stylistic_lint, stylistic_rule_metas,
 };
 pub use types::{
     LintDiagnostic, LintFix, LintNode, LintSuggestion, NodeMetadataDepth, RuleBridgeRequirements,

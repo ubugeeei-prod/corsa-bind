@@ -1,6 +1,6 @@
 ---
 title: Type-aware Oxlint
-description: Author type-aware Oxlint rules with corsa-oxlint — RuleCreator, parser services, settings.corsaOxlint config, the native rule set, stylistic rules, and RuleTester.
+description: Author type-aware Oxlint rules with corsa-oxlint — RuleCreator, parser services, settings.corsaOxlint config, the native rule set, and RuleTester.
 ---
 
 # Type-Aware Oxlint (`corsa-oxlint`)
@@ -28,7 +28,6 @@ The package exposes several entry points:
 | ----------------------------------------------------- | --------------------------------------------------------- |
 | `corsa-oxlint`                                        | `OxlintUtils`, `RuleTester`, and compatibility namespaces |
 | `corsa-oxlint/rules`                                  | the built-in TS-native / Rust-backed rule plugin          |
-| `corsa-oxlint/stylistic`                              | the native stylistic rule plugin                          |
 | `corsa-oxlint/ast-utils`, `corsa-oxlint/eslint-utils` | AST and ESLint-style helpers                              |
 
 It also re-exports compatibility namespaces (`ESLintUtils`, `TSESLint`,
@@ -148,50 +147,6 @@ the tracked upstream `tsgolint/internal/rules` surface — the unsafe,
 unnecessary, promise/control-flow, preference/style, and type/export families.
 `pendingNativeRuleNames` is intentionally empty, and a test fails if the
 implemented + pending sets drift away from the tracked upstream list.
-
-## Stylistic rules
-
-`corsa-oxlint/stylistic` is a separate path for Rust-backed style rules that do
-**not** need type information. They are native re-implementations of the
-[`@stylistic`](https://eslint.style) plugin: a single Rust scan (lexer +
-bracket/expression context) turns the source into diagnostics, and the JS plugin
-caches the result per source/config so all enabled rules share a single N-API
-call.
-
-```ts
-import { corsaStylisticPlugin } from "corsa-oxlint/stylistic";
-
-export default [
-  {
-    settings: {
-      corsaStylistic: {
-        rules: {
-          "eol-last": ["always"],
-          quotes: ["single", { avoidEscape: true }],
-          "comma-dangle": ["always-multiline"],
-          "object-curly-spacing": ["always"],
-          "space-before-function-paren": ["always"],
-        },
-      },
-    },
-    plugins: { stylistic: corsaStylisticPlugin },
-    rules: {
-      "stylistic/eol-last": "error",
-      "stylistic/quotes": "error",
-      "stylistic/comma-dangle": "error",
-    },
-  },
-];
-```
-
-Options can be supplied directly in `rules` (for example
-`"stylistic/quotes": ["error", "single"]`). For the fastest multi-rule path,
-put the same option payloads in `settings.corsaStylistic.rules` so the bridge
-batches every configured stylistic rule into one Rust source scan.
-
-See the **[stylistic rules reference](./stylistic_rules.md)** for the native
-scan engine, the full rule list with default options, and how parity is verified
-against the real `@stylistic` plugin.
 
 ## Testing rules with `RuleTester`
 

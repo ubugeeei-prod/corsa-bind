@@ -227,8 +227,8 @@ classifyTypeText("string[]");
 `Utils` groups the predicate family: `isStringLikeTypeTexts`,
 `isNumberLikeTypeTexts`, `isPromiseLikeTypeTexts`, `splitTopLevelTypeText`,
 `splitTypeText`, and friends. The native lint entry points
-(`runNativeLintRule`, `nativeLintRuleMetas`, `runNativeStylisticLint`) are also
-exported here and are what `corsa-oxlint` builds on.
+(`runNativeLintRule`, `nativeLintRuleMetas`) are also exported here and are
+what `corsa-oxlint` builds on.
 
 ## LSP and distributed orchestration
 

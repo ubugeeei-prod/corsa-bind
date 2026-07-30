@@ -68,12 +68,6 @@
       "bun": "./dist/rules/index.js",
       "import": "./dist/rules/index.js"
     },
-    "./stylistic": {
-      "types": "./dist/stylistic.d.ts",
-      "deno": "./dist/stylistic.js",
-      "bun": "./dist/stylistic.js",
-      "import": "./dist/stylistic.js"
-    },
     "./compat": {
       "types": "./dist/oxlint_compat.d.ts",
       "deno": "./dist/oxlint_compat.js",

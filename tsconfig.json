@@ -15,7 +15,6 @@
       "corsa-oxlint/oxlint-utils": ["./src/bindings/nodejs/corsa_oxlint/ts/oxlint_utils.ts"],
       "corsa-oxlint/rule-tester": ["./src/bindings/nodejs/corsa_oxlint/ts/rule_tester.ts"],
       "corsa-oxlint/rules": ["./src/bindings/nodejs/corsa_oxlint/ts/rules/index.ts"],
-      "corsa-oxlint/stylistic": ["./src/bindings/nodejs/corsa_oxlint/ts/stylistic.ts"],
       "corsa-oxlint/ts-estree": ["./src/bindings/nodejs/corsa_oxlint/ts/ts_estree.ts"],
       "corsa-oxlint/ts-eslint": ["./src/bindings/nodejs/corsa_oxlint/ts/ts_eslint.ts"],
       "corsa-oxlint/ts-utils": ["./src/bindings/nodejs/corsa_oxlint/ts/ts_utils.ts"]

@@ -26,17 +26,11 @@ const NAV_GROUPS = [
       "language_bindings/index.html",
       "oxlint_guide/index.html",
       "native_rules/index.html",
-      "stylistic_rules/index.html",
     ],
   },
   {
     title: "Run",
-    routes: [
-      "ci_guide/index.html",
-      "performance/index.html",
-      "stylistic_benchmark/index.html",
-      "benchmarking_guide/index.html",
-    ],
+    routes: ["ci_guide/index.html", "performance/index.html", "benchmarking_guide/index.html"],
   },
   {
     title: "Ship",
@@ -56,7 +50,6 @@ const NAV_GROUPS = [
       "api/corsa-bind-napi/index.html",
       "api/corsa-oxlint/index.html",
       "api/corsa-oxlint-rules/index.html",
-      "api/corsa-oxlint-stylistic/index.html",
       "api_reference/index.html",
     ],
   },
@@ -70,10 +63,8 @@ const ROUTE_TITLES = new Map<string, string>([
   ["language_bindings/index.html", "Language bindings"],
   ["oxlint_guide/index.html", "Type-aware Oxlint"],
   ["native_rules/index.html", "Native rules"],
-  ["stylistic_rules/index.html", "Stylistic rules"],
   ["ci_guide/index.html", "CI and local checks"],
   ["performance/index.html", "Performance commands"],
-  ["stylistic_benchmark/index.html", "Stylistic benchmark"],
   ["benchmarking_guide/index.html", "Benchmarking model"],
   ["production_readiness/index.html", "Production readiness"],
   ["production_readiness_audit/index.html", "Readiness audit"],
@@ -85,7 +76,6 @@ const ROUTE_TITLES = new Map<string, string>([
   ["api/corsa-bind-napi/index.html", "@corsa-bind/napi"],
   ["api/corsa-oxlint/index.html", "corsa-oxlint"],
   ["api/corsa-oxlint-rules/index.html", "Oxlint rules"],
-  ["api/corsa-oxlint-stylistic/index.html", "Stylistic rules"],
   ["api_reference/index.html", "API docs generation"],
 ]);
 

@@ -28,10 +28,6 @@ export interface CorsaOxlintSettings extends TypeAwareParserOptions {
   parserOptions?: TypeAwareParserOptions;
 }
 
-export interface CorsaStylisticSettings {
-  rules?: Record<string, readonly unknown[]>;
-}
-
 export interface ResolvedRuntimeOptions {
   executable: string;
   cwd: string;
@@ -185,7 +181,6 @@ export type ContextWithParserOptions = Context & {
   };
   readonly settings?: {
     readonly corsaOxlint?: CorsaOxlintSettings;
-    readonly corsaStylistic?: CorsaStylisticSettings;
     readonly [key: string]: unknown;
   };
   readonly parserServices?: ParserServices;

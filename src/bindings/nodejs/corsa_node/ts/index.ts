@@ -7,7 +7,6 @@ import type {
   NativeLintDiagnostic,
   NativeLintNode,
   NativeLintRuleMeta,
-  NativeStylisticRunConfig,
   SymbolResponse,
   TypeResponse,
   TypeTextKind,
@@ -205,12 +204,6 @@ export const runNativeLintRule = binding.runNativeLintRule as (
   node: NativeLintNode,
 ) => NativeLintDiagnostic[];
 export const nativeLintRuleMetas = binding.nativeLintRuleMetas as () => NativeLintRuleMeta[];
-export const runNativeStylisticLint = binding.runNativeStylisticLint as (
-  sourceText: string,
-  config: NativeStylisticRunConfig,
-) => NativeLintDiagnostic[];
-export const nativeStylisticRuleMetas =
-  binding.nativeStylisticRuleMetas as () => NativeLintRuleMeta[];
 export const classifyTypeText = binding.classifyTypeText as (text?: string) => TypeTextKind;
 export const splitTopLevelTypeText = binding.splitTopLevelTypeText as (
   text: string,

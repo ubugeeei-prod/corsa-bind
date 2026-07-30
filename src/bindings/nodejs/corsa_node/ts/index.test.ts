@@ -13,10 +13,8 @@ import {
   isErrorLikeTypeTexts,
   isStringArrayLikeTypeTexts,
   isPromiseLikeTypeTexts,
-  nativeStylisticRuleMetas,
   nativeLintRuleMetas,
   runNativeLintRule,
-  runNativeStylisticLint,
   splitTopLevelTypeText,
   splitTypeText,
   isUnsafeAssignment,
@@ -195,73 +193,6 @@ describe("CorsaApiClient", () => {
       ".splice(",
       ", 1)",
     ]);
-  });
-
-  it("runs Rust-authored native stylistic rules", () => {
-    const diagnostics = runNativeStylisticLint('\u{feff}const\tlabel = "value";  \r\n\n\n', {
-      rules: [
-        { name: "unicode-bom", options: ["never"] },
-        { name: "quotes", options: ["single"] },
-        { name: "no-trailing-spaces", options: [] },
-        { name: "no-tabs", options: [] },
-        { name: "linebreak-style", options: ["unix"] },
-        { name: "no-multiple-empty-lines", options: [{ max: 1 }] },
-      ],
-    });
-
-    expect(nativeStylisticRuleMetas().map((meta) => meta.name)).toEqual([
-      "eol-last",
-      "linebreak-style",
-      "no-multiple-empty-lines",
-      "no-tabs",
-      "no-trailing-spaces",
-      "quotes",
-      "unicode-bom",
-      "arrow-spacing",
-      "comma-spacing",
-      "semi-spacing",
-      "space-in-parens",
-      "template-curly-spacing",
-      "rest-spread-spacing",
-      "no-multi-spaces",
-      "no-whitespace-before-property",
-      "dot-location",
-      "spaced-comment",
-      "object-curly-spacing",
-      "array-bracket-spacing",
-      "computed-property-spacing",
-      "block-spacing",
-      "space-before-blocks",
-      "function-call-spacing",
-      "space-before-function-paren",
-      "no-floating-decimal",
-      "template-tag-spacing",
-      "yield-star-spacing",
-      "generator-star-spacing",
-      "comma-dangle",
-      "space-infix-ops",
-      "max-len",
-      "semi-style",
-      "comma-style",
-      "arrow-parens",
-      "switch-colon-spacing",
-      "no-extra-semi",
-      "new-parens",
-      "space-unary-ops",
-      "wrap-regex",
-      "implicit-arrow-linebreak",
-      "operator-linebreak",
-      "keyword-spacing",
-    ]);
-    expect(diagnostics.map((diagnostic) => diagnostic.ruleName)).toEqual([
-      "unicode-bom",
-      "quotes",
-      "no-trailing-spaces",
-      "no-tabs",
-      "linebreak-style",
-      "no-multiple-empty-lines",
-    ]);
-    expect(diagnostics[1].suggestions?.[0]?.fixes[0]?.replacementText).toBe("'value'");
   });
 
   it("roundtrips through the mock corsa binary", () => {

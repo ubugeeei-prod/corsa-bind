@@ -7,6 +7,10 @@
 - `corsa-oxlint` now exposes a `RuleContext<MessageId, Options>` type and generic `defineRule` wrapper for narrowing rule options and report message IDs.
 - `corsa-oxlint` now exposes per-node-type `ESTree.*` aliases from the root entrypoint.
 
+### Removed
+
+- The `corsa-oxlint/stylistic` entrypoint, native stylistic lint engine, and stylistic benchmarks have moved to [`ubugeeei-prod/oxlint-plugins`](https://github.com/ubugeeei-prod/oxlint-plugins).
+
 ### Fixed
 
 - `corsa-oxlint` now resolves nominal type symbols for interface and class property annotations.
