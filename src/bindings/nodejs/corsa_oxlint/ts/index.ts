@@ -25,7 +25,6 @@ export { SignatureKind } from "./types";
 export type { RuleTesterConfig } from "./rule_tester";
 export { TSESLint } from "./ts_eslint";
 export * as rules from "./rules/index";
-export * as stylistic from "./stylistic";
 export { oxlintCompat } from "./oxlint_compat";
 type CorsaAstNodeType = keyof typeof CorsaAST_NODE_TYPES;
 
@@ -368,7 +367,6 @@ export type {
   CorsaProgramShape,
   CorsaRuntimeOptions,
   CorsaOxlintSettings,
-  CorsaStylisticSettings,
   CorsaSignature,
   CorsaSymbol,
   CorsaType,

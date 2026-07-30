@@ -174,6 +174,5 @@ pendingNativeRuleNames` exactly equals the upstream `tsgolint/internal/rules`
 
 ## See also
 
-- [Type-aware Oxlint](./oxlint_guide.md) — authoring model, native rules, and stylistic rules
-- [Stylistic rules](./stylistic_rules.md) — the Rust-backed `@stylistic`-compatible formatting rules
+- [Type-aware Oxlint](./oxlint_guide.md) — authoring model and native rules
 - [Node.js binding](./nodejs_binding.md) — the underlying `@corsa-bind/napi` surface

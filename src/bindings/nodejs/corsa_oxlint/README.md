@@ -18,7 +18,6 @@ plugins with real type information powered by Corsa.
 - lets custom Oxlint rules query types and symbols from JS or TS
 - ships a `RuleTester` wrapper that injects temp projects and type-aware config
 - ships a growing TS-native ruleset under `corsa-oxlint/rules`
-- ships a source-wide native stylistic ruleset under `corsa-oxlint/stylistic`
 
 The design goal is simple: performance-critical pieces live in Rust, `napi-rs`
 bridges them into Node, and end users still get to author custom plugins and
@@ -148,52 +147,6 @@ unsafe, unnecessary, promise/control-flow, preference/style, and type/export
 families. `pendingNativeRuleNames` is intentionally empty, and
 `native_rules.test.ts` fails if implemented + pending drift away from the
 tracked upstream rule list.
-
-## Stylistic Rules
-
-`corsa-oxlint/stylistic` is a separate path for Rust-backed style rules that do
-not need type information. The rules scan the full source text in native code
-and the JS plugin caches diagnostics per source/config so enabled rules can
-share one N-API call.
-
-```ts
-import { corsaStylisticPlugin } from "corsa-oxlint/stylistic";
-
-export default [
-  {
-    settings: {
-      corsaStylistic: {
-        rules: {
-          "eol-last": ["always"],
-          "linebreak-style": ["unix"],
-          "no-multiple-empty-lines": [{ max: 1, maxBOF: 0, maxEOF: 1 }],
-          "no-tabs": [{ allowIndentationTabs: false }],
-          "no-trailing-spaces": [{ skipBlankLines: false }],
-          quotes: ["single", { avoidEscape: true }],
-          "unicode-bom": ["never"],
-        },
-      },
-    },
-    plugins: {
-      stylistic: corsaStylisticPlugin,
-    },
-    rules: {
-      "stylistic/eol-last": "error",
-      "stylistic/linebreak-style": "error",
-      "stylistic/no-multiple-empty-lines": "error",
-      "stylistic/no-tabs": "error",
-      "stylistic/no-trailing-spaces": "error",
-      "stylistic/quotes": "error",
-      "stylistic/unicode-bom": "error",
-    },
-  },
-];
-```
-
-Rule options can also be supplied directly in `rules`, for example
-`"stylistic/quotes": ["error", "single"]`. For the fastest multi-rule path,
-put the same option payloads in `settings.corsaStylistic.rules`; that lets the
-bridge batch all configured stylistic rules into a single Rust source scan.
 
 ## Rust-Authored Rule Lane
 

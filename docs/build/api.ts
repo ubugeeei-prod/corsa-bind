@@ -16,7 +16,6 @@ const ENTRYPOINTS = [
   ["@corsa-bind/napi", "src/bindings/nodejs/corsa_node/ts/index.ts"],
   ["corsa-oxlint", "src/bindings/nodejs/corsa_oxlint/ts/index.ts"],
   ["corsa-oxlint/rules", "src/bindings/nodejs/corsa_oxlint/ts/rules/index.ts"],
-  ["corsa-oxlint/stylistic", "src/bindings/nodejs/corsa_oxlint/ts/stylistic.ts"],
 ] as const;
 
 const PUBLIC_API_KINDS: ReadonlySet<SyntaxKind> = new Set([

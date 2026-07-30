@@ -229,9 +229,8 @@ export const noStringPlusNumber = createRule({
 });
 ```
 
-Type-aware settings live under `settings.corsaOxlint`. The full authoring model,
-native rule set, and stylistic rules are covered in the
-[Oxlint guide](./oxlint_guide.md).
+Type-aware settings live under `settings.corsaOxlint`. The full authoring model
+and native rule set are covered in the [Oxlint guide](./oxlint_guide.md).
 
 ## 5. Explore the examples
 

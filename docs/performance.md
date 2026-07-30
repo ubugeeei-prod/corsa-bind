@@ -10,7 +10,6 @@
 - Node binding benchmark: `vp run -w bench_ts`
 - Combined benchmark + budget guard: `vp run -w bench_verify`
 - Combined all-in benchmark entrypoint: `vp run -w bench`
-- Stylistic vs upstream `@stylistic` throughput: `node bench/stylistic/compare.mjs` (see [Stylistic benchmark](./stylistic_benchmark.md))
 
 For day-to-day formatting, linting, and testing, prefer `vp fmt`, `vp lint`,
 and `vp check`. Those go through Vite+'s `oxfmt` / `oxlint` toolchain. The
@@ -24,13 +23,6 @@ The tooling benchmark writes its report to `.cache/bench_tooling_compare.json`.
 The binding benchmark writes its report to `.cache/bench_bindings.json`.
 
 The native runner is still the main source of truth for transport-level speed because it measures the Rust client directly against the pinned upstream worker.
-
-The `corsa-oxlint/stylistic` entrypoint uses a different performance model from
-type-aware rules: it sends the full source text to Rust once per source/config,
-scans bytes directly, and shares the resulting diagnostics across enabled
-stylistic rules through a JS-side cache. Configure
-`settings.corsaStylistic.rules` when several stylistic rules are active so the
-plugin can keep that single native scan path.
 
 For the reasoning behind these benchmark layers, implementation notes, and extension tips, see [benchmarking_guide.md](./benchmarking_guide.md).
 

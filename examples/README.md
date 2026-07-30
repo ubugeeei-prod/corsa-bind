@@ -146,6 +146,5 @@ cargo run -p corsa --features experimental-distributed --example distributed_orc
 - `examples/corsa_oxlint/custom_plugin.ts`: plugin wrapper around the custom rule
 - `examples/corsa_oxlint/custom_rules_config.ts`: flat config using the custom plugin
 - `examples/corsa_oxlint/native_rules_config.ts`: flat config using the built-in native rules
-- `examples/corsa_oxlint/stylistic_config.ts`: flat config using the Rust-backed stylistic plugin through `corsa-oxlint/stylistic`
 - `examples/corsa_oxlint/rule_tester.ts`: executable `RuleTester` example against the real pinned Corsa binary
 - `examples/corsa_oxlint/native_rule_tester.ts`: executable `RuleTester` example for the built-in Rust-backed and TS-native rules
