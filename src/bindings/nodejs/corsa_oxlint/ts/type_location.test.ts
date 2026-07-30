@@ -125,6 +125,65 @@ describe("corsa oxlint type locations", () => {
     expect(seen).toEqual({ Base: "Base", Derived: "Derived" });
   });
 
+  integrationCase("exposes symbols for class body types and their bases", () => {
+    const seen: Record<
+      string,
+      {
+        readonly text: string;
+        readonly symbol: string | null;
+        readonly bases: readonly { readonly text: string; readonly symbol: string | null }[];
+      }
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "class-body-type-symbols",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise class body type and base symbol lookup",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          ClassBody(node: any) {
+            const name = node.parent?.id?.name;
+            const type = services.getTypeAtLocation(node);
+            if (name && type) {
+              seen[name] = {
+                text: checker.typeToString(type),
+                symbol: checker.getSymbolOfType(type)?.name ?? null,
+                bases: checker.getBaseTypes(type).map((base: any) => ({
+                  text: checker.typeToString(base),
+                  symbol: checker.getSymbolOfType(base)?.name ?? null,
+                })),
+              };
+            }
+          },
+        };
+      },
+    });
+
+    new RuleTester().run("class-body-type-symbols", rule as any, {
+      valid: [{ code: "class Base {}\nclass Derived extends Base {}\n" }],
+      invalid: [],
+    });
+
+    expect(seen).toEqual({
+      Base: { text: "Base", symbol: "Base", bases: [] },
+      Derived: {
+        text: "Derived",
+        symbol: "Derived",
+        bases: [{ text: "Base", symbol: "Base" }],
+      },
+    });
+  });
+
   integrationCase("resolves declared types for type reference nodes", () => {
     const seen: {
       readonly name: string;
