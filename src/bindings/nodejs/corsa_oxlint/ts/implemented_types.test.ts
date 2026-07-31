@@ -855,7 +855,7 @@ describe("corsa oxlint implemented types", () => {
     });
   });
 
-  stableTypeScript7Case("resolves symbols for first-touch class field and new expression types", () => {
+  stableTypeScript7Case("resolves first-touch class field and new expression type symbols", () => {
     const seen: Record<string, string | null> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
     const runSelector = (label: string, selectorName: string) => {
