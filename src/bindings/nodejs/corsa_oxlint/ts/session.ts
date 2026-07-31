@@ -563,7 +563,10 @@ export class CorsaProjectSession {
     return this.#classDeclarationByTypeId.get(type.id);
   }
 
-  rememberTypeLookupFromType(type: CorsaType | undefined, relatedType: CorsaType | undefined): void {
+  rememberTypeLookupFromType(
+    type: CorsaType | undefined,
+    relatedType: CorsaType | undefined,
+  ): void {
     if (!type || !relatedType || type.id === relatedType.id) {
       return;
     }
