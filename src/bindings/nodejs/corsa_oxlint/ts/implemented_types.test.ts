@@ -855,6 +855,81 @@ describe("corsa oxlint implemented types", () => {
     });
   });
 
+  stableTypeScript7Case("resolves symbols for first-touch class field and new expression types", () => {
+    const seen: Record<string, string | null> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const runSelector = (label: string, selectorName: string) => {
+      const rule = createRule({
+        name: `first-touch-type-symbol-${label}`,
+        meta: {
+          type: "problem",
+          docs: {
+            description: "exercise symbol lookup on isolated getTypeAtLocation queries",
+            requiresTypeChecking: true,
+          },
+          messages: { unexpected: "unexpected" },
+          schema: [],
+        },
+        defaultOptions: [],
+        create(context: any) {
+          const services = OxlintUtils.getParserServices(context);
+          const checker = services.program.getTypeChecker();
+          return {
+            [selectorName](node: any) {
+              const type = services.getTypeAtLocation(node);
+              if (!type || checker.typeToString(type) !== "Derived") {
+                return;
+              }
+              seen[label] = checker.getSymbolOfType(type)?.name ?? null;
+            },
+          };
+        },
+      });
+
+      new RuleTester({ languageOptions: { sourceType: "module" } }).run(label, rule as any, {
+        valid: [
+          {
+            code: [
+              "class Base {}",
+              "class Derived extends Base {}",
+              "class Holder { public h: Derived; }",
+              "interface Props { d: Derived; }",
+              "const inst = new Derived();",
+            ].join("\n"),
+            settings: {
+              corsaOxlint: {
+                parserOptions: {
+                  corsa: {
+                    executable: stableTypeScript7Binary,
+                  },
+                },
+              },
+            },
+          },
+        ],
+        invalid: [],
+      });
+    };
+
+    for (const [label, selectorName] of [
+      ["ClassDeclaration", "ClassDeclaration"],
+      ["ClassBody", "ClassBody"],
+      ["TSPropertySignature", "TSPropertySignature"],
+      ["PropertyDefinition", "PropertyDefinition"],
+      ["NewExpression", "NewExpression"],
+    ] as const) {
+      runSelector(label, selectorName);
+    }
+
+    expect(seen).toEqual({
+      ClassDeclaration: "Derived",
+      ClassBody: "Derived",
+      TSPropertySignature: "Derived",
+      PropertyDefinition: "Derived",
+      NewExpression: "Derived",
+    });
+  });
+
   stableTypeScript7Case("preserves terminal base symbols for namespace-scoped leaves", () => {
     const seen: { text: string; symbol: string | null }[] = [];
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

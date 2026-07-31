@@ -63,7 +63,7 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
   return {
     getTypeAtLocation(node) {
       if ((node as { readonly type?: string }).type === "NewExpression") {
-        return typeOfNewExpression(node as Node, this);
+        return typeOfNewExpression(context, node as Node, this);
       }
       const lookupNode = nodeForTypeLookup(node);
       const type = sessionForContext(context).session.getTypeAtSourceRange(
@@ -272,7 +272,11 @@ function pathsReferToSameFile(left: string, right: string): boolean {
   );
 }
 
-function typeOfNewExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaType | undefined {
+function typeOfNewExpression(
+  context: ContextWithParserOptions,
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
   const callee = childNode(node, "callee");
   if (!callee) {
     return undefined;
@@ -282,9 +286,11 @@ function typeOfNewExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaT
     return undefined;
   }
   const constructSignature = checker.getSignaturesOfType(calleeType, SignatureKind.Construct)[0];
-  return constructSignature
+  const type = constructSignature
     ? (checker.getReturnTypeOfSignature(constructSignature) ?? calleeType)
     : calleeType;
+  sessionForContext(context).session.rememberTypeLookupFromType(type, calleeType);
+  return type;
 }
 
 function nodeForTypeLookup(node: Node | CorsaNode): Node | CorsaNode {
@@ -308,6 +314,9 @@ function nodeForTypeLookup(node: Node | CorsaNode): Node | CorsaNode {
       return childNode(node, "id") ?? node;
     case "TSPropertySignature":
       return childNode(node, "key") ?? node;
+    case "PropertyDefinition":
+    case "TSAbstractPropertyDefinition":
+      return childNode(node, "typeAnnotation") ?? childNode(node, "key") ?? node;
     default:
       return node;
   }

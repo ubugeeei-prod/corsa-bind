@@ -563,6 +563,24 @@ export class CorsaProjectSession {
     return this.#classDeclarationByTypeId.get(type.id);
   }
 
+  rememberTypeLookupFromType(type: CorsaType | undefined, relatedType: CorsaType | undefined): void {
+    if (!type || !relatedType || type.id === relatedType.id) {
+      return;
+    }
+    const lookup = this.#typeLookupById.get(relatedType.id);
+    if (lookup && !this.#typeLookupById.has(type.id)) {
+      this.#typeLookupById.set(type.id, lookup);
+    }
+    const source = this.#typeSourceById.get(relatedType.id);
+    if (source && !this.#typeSourceById.has(type.id)) {
+      this.#typeSourceById.set(type.id, source);
+    }
+    const symbolSearchRange = this.#symbolSearchRangeByTypeId.get(relatedType.id);
+    if (symbolSearchRange && !this.#symbolSearchRangeByTypeId.has(type.id)) {
+      this.#symbolSearchRangeByTypeId.set(type.id, symbolSearchRange);
+    }
+  }
+
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined {
     const type = this.rememberType(this.tryGetSymbolType(symbol, "getTypeOfSymbol"));
     this.rememberTypeSource(type, symbol.valueDeclaration);
