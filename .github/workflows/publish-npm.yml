@@ -48,25 +48,25 @@ jobs:
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@e4caf36dbef5c9efe92762742b31167b00005ca7 # v1.4.0
+        uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount corsa_ref target sticky disk
-        uses: useblacksmith/stickydisk@e4caf36dbef5c9efe92762742b31167b00005ca7 # v1.4.0
+        uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
           path: .cache/corsa-ref-target
 
       - name: Mount Go build sticky disk
-        uses: useblacksmith/stickydisk@e4caf36dbef5c9efe92762742b31167b00005ca7 # v1.4.0
+        uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
           path: .cache/go-build
 
       - name: Mount pnpm store sticky disk
-        uses: useblacksmith/stickydisk@e4caf36dbef5c9efe92762742b31167b00005ca7 # v1.4.0
+        uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-release-gates-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -172,14 +172,14 @@ jobs:
 
       - name: Mount Cargo target sticky disk
         if: ${{ runner.os == 'Linux' }}
-        uses: useblacksmith/stickydisk@e4caf36dbef5c9efe92762742b31167b00005ca7 # v1.4.0
+        uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-native-${{ matrix.target }}-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount pnpm store sticky disk
         if: ${{ runner.os == 'Linux' }}
-        uses: useblacksmith/stickydisk@e4caf36dbef5c9efe92762742b31167b00005ca7 # v1.4.0
+        uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-npm-native-${{ matrix.target }}-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
