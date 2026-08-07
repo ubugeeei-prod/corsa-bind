@@ -40,6 +40,8 @@ type SourceRange = {
 type TypeLookup = {
   fileName: string;
   position: number;
+  /** Project that owns the file the type handle came from. */
+  projectId?: string;
   sourceText?: string;
   symbolSearchRange?: SourceRange;
 };
@@ -77,6 +79,7 @@ export class CorsaProjectSession {
   #ownImplementedTypesById = new Map<string, readonly CorsaType[]>();
   #typeLookupById = new Map<string, TypeLookup>();
   #typeSourceById = new Map<string, SourceSlice>();
+  #typeDeclarationFileById = new Map<string, string>();
   #classDeclarationByTypeId = new Map<string, CorsaNode>();
   #symbolSearchRangeByTypeId = new Map<string, SourceRange>();
   #sourceLengthByPath = new Map<string, number>();
@@ -139,7 +142,12 @@ export class CorsaProjectSession {
     }
     const type = this.rememberType(state.typeByPosition.get(position));
     if (type) {
-      this.#typeLookupById.set(type.id, { fileName, position, sourceText });
+      this.#typeLookupById.set(type.id, {
+        fileName,
+        position,
+        projectId: state.projectId,
+        sourceText,
+      });
     }
     return type;
   }
@@ -185,7 +193,12 @@ export class CorsaProjectSession {
     }
     const type = this.rememberType(state.typeBySourceRange.get(key));
     if (type) {
-      this.#typeLookupById.set(type.id, { fileName, position: start, sourceText });
+      this.#typeLookupById.set(type.id, {
+        fileName,
+        position: start,
+        projectId: state.projectId,
+        sourceText,
+      });
       if (kind !== "Identifier") {
         this.rememberTypeSourceRange(type, fileName, start, end, sourceText);
       }
@@ -569,7 +582,10 @@ export class CorsaProjectSession {
         this.client().getSymbolOfType(
           this.#snapshot,
           typeId,
-          this.#projects[0]?.id,
+          // Stable runtimes resolve object handles per project, so the lookup
+          // must name the project that produced the type rather than the first
+          // project in the snapshot.
+          this.#typeLookupById.get(typeId)?.projectId ?? this.#projects[0]?.id,
         ) as CorsaSymbol | null,
       );
     } catch (error) {
@@ -609,6 +625,10 @@ export class CorsaProjectSession {
     const source = this.#typeSourceById.get(relatedType.id);
     if (source && !this.#typeSourceById.has(type.id)) {
       this.#typeSourceById.set(type.id, source);
+    }
+    const declarationFile = this.#typeDeclarationFileById.get(relatedType.id);
+    if (declarationFile && !this.#typeDeclarationFileById.has(type.id)) {
+      this.#typeDeclarationFileById.set(type.id, declarationFile);
     }
     const symbolSearchRange = this.#symbolSearchRangeByTypeId.get(relatedType.id);
     if (symbolSearchRange && !this.#symbolSearchRangeByTypeId.has(type.id)) {
@@ -1050,6 +1070,13 @@ export class CorsaProjectSession {
     const source = this.sourceSliceForHandle(handle);
     if (source) {
       this.#typeSourceById.set(type.id, source);
+      return;
+    }
+    // A compact TypeScript 7 declaration handle carries no source range, but
+    // its path still identifies the declaring file for file-scoped requests.
+    const node = this.getNode(handle);
+    if (node?.positionless) {
+      this.#typeDeclarationFileById.set(type.id, node.fileName);
     }
   }
 
@@ -1112,6 +1139,11 @@ export class CorsaProjectSession {
     if (source) {
       const sourceText = this.sourceTextForPath(source.node.fileName);
       return sourceText ? { file: source.node.fileName, sourceText } : {};
+    }
+    const declarationFile = this.#typeDeclarationFileById.get(type.id);
+    if (declarationFile) {
+      const sourceText = this.sourceTextForPath(declarationFile);
+      return sourceText ? { file: declarationFile, sourceText } : {};
     }
     return {};
   }
@@ -1177,6 +1209,7 @@ export class CorsaProjectSession {
     this.#ownImplementedTypesById.clear();
     this.#typeLookupById.clear();
     this.#typeSourceById.clear();
+    this.#typeDeclarationFileById.clear();
     this.#classDeclarationByTypeId.clear();
     this.#symbolSearchRangeByTypeId.clear();
     this.#sourceLengthByPath.clear();
@@ -1197,7 +1230,9 @@ export class CorsaProjectSession {
 
   private sourceSliceForHandle(handle: string): SourceSlice | undefined {
     const node = this.getNode(handle);
-    if (!node) {
+    // A compact TypeScript 7 handle carries a node id and a syntax kind instead
+    // of source offsets, so its parsed range must never become a source range.
+    if (!node || node.positionless) {
       return undefined;
     }
     const sourceText = this.sourceTextForPath(node.fileName);
@@ -1514,17 +1549,53 @@ function classDeclarationStartAtIdentifier(
   return match ? prefixStart + match.index : undefined;
 }
 
+/**
+ * Returns the offset of the only `class <className>` declaration in the source,
+ * or `undefined` when the file has none or more than one.
+ *
+ * Matches inside comments and string literals are ignored, so text such as
+ * `// class Descendant` neither shadows nor duplicates a real declaration.
+ */
 export function uniqueClassDeclarationPosition(
   sourceText: string,
   className: string,
 ): number | undefined {
   const escapedName = className.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const declarationPattern = new RegExp(`\\bclass\\s+${escapedName}\\b`, "gu");
-  const declaration = declarationPattern.exec(sourceText);
-  if (!declaration || declarationPattern.exec(sourceText)) {
-    return undefined;
+  const codePositions = codePositionMask(sourceText);
+  let unique: number | undefined;
+  for (
+    let declaration = declarationPattern.exec(sourceText);
+    declaration;
+    declaration = declarationPattern.exec(sourceText)
+  ) {
+    if (codePositions[declaration.index] !== 1) {
+      continue;
+    }
+    if (unique !== undefined) {
+      return undefined;
+    }
+    unique = declaration.index;
   }
-  return declaration.index;
+  return unique;
+}
+
+/**
+ * Marks each offset that is executable code rather than comment or string
+ * literal content, using the same scanner as the namespace range helpers.
+ */
+function codePositionMask(sourceText: string): Uint8Array {
+  const mask = new Uint8Array(sourceText.length);
+  const scanner = createSourceScanner();
+  for (let index = 0; index < sourceText.length; index += 1) {
+    const nextIndex = scanner.skip(sourceText, index);
+    if (nextIndex > index) {
+      index = nextIndex - 1;
+      continue;
+    }
+    mask[index] = 1;
+  }
+  return mask;
 }
 
 function qualifiedNamespaceRangeAtIdentifier(

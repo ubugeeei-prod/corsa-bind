@@ -49,7 +49,7 @@ vi.mock("@corsa-bind/napi", () => ({
   },
 }));
 
-const { CorsaProjectSession } = await import("./session");
+const { CorsaProjectSession, uniqueClassDeclarationPosition } = await import("./session");
 
 describe("CorsaProjectSession", () => {
   beforeEach(() => {
@@ -586,5 +586,84 @@ describe("CorsaProjectSession", () => {
     });
 
     expect(() => session.close()).not.toThrow();
+  });
+
+  it("resolves a type symbol in the project that owns the type handle", () => {
+    clients.length = 0;
+    clientSetups.push((client) => {
+      client.callJson.mockImplementation((method: string) => {
+        if (method === "describeCapabilities") {
+          return { overlay: { updateSnapshotOverlayChanges: false } };
+        }
+        if (method === "getDefaultProjectForFile") {
+          return { id: "project-2" };
+        }
+        return undefined;
+      });
+    });
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    const type = session.getTypeAtPosition("/tmp/two.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+
+    expect(session.getSymbolOfType(type as never)?.name).toBe("value");
+    expect(client.getSymbolOfType).toHaveBeenCalledWith(expect.any(String), "type-1", "project-2");
+  });
+});
+
+describe("uniqueClassDeclarationPosition", () => {
+  it("returns the position of the only class declaration", () => {
+    const sourceText = "interface I {}\nclass Descendant implements I {}";
+
+    expect(uniqueClassDeclarationPosition(sourceText, "Descendant")).toBe(
+      sourceText.indexOf("class Descendant"),
+    );
+  });
+
+  it("ignores the same declaration text inside comments", () => {
+    const sourceText =
+      "interface I {}\n// class Descendant\n/* class Descendant */\nclass Descendant implements I {}";
+
+    expect(uniqueClassDeclarationPosition(sourceText, "Descendant")).toBe(
+      sourceText.lastIndexOf("class Descendant"),
+    );
+  });
+
+  it("ignores the same declaration text inside string literals", () => {
+    const sourceText =
+      'interface I {}\nconst s = "class Descendant";\nclass Descendant implements I {}';
+
+    expect(uniqueClassDeclarationPosition(sourceText, "Descendant")).toBe(
+      sourceText.lastIndexOf("class Descendant"),
+    );
+  });
+
+  it("returns undefined when only comments or strings mention the declaration", () => {
+    const sourceText = '// class Descendant\nconst s = "class Descendant";\nnew Descendant();';
+
+    expect(uniqueClassDeclarationPosition(sourceText, "Descendant")).toBeUndefined();
+  });
+
+  it("returns undefined when the file declares the class twice", () => {
+    const sourceText = "class Descendant {}\nnamespace N {\n  export class Descendant {}\n}";
+
+    expect(uniqueClassDeclarationPosition(sourceText, "Descendant")).toBeUndefined();
   });
 });
