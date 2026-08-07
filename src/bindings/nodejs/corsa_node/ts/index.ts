@@ -79,8 +79,12 @@ export interface CorsaApiClient {
     file: string,
     position: number,
   ): Promise<SymbolResponse | null>;
-  getSymbolOfType(snapshot: string, typeHandle: string): SymbolResponse | null;
-  getSymbolOfTypeAsync(snapshot: string, typeHandle: string): Promise<SymbolResponse | null>;
+  getSymbolOfType(snapshot: string, typeHandle: string, project?: string): SymbolResponse | null;
+  getSymbolOfTypeAsync(
+    snapshot: string,
+    typeHandle: string,
+    project?: string,
+  ): Promise<SymbolResponse | null>;
   getTypeArguments(
     snapshot: string,
     project: string,

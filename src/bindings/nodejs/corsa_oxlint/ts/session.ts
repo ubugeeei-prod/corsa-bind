@@ -256,12 +256,14 @@ export class CorsaProjectSession {
     if (type.symbol) {
       const symbol = this.getSymbol(type.symbol);
       if (isUsableSymbol(symbol)) {
+        this.recoverDeclarationPositionsForSymbol(type, symbol);
         this.#symbolsByTypeId.set(type.id, symbol);
         return symbol;
       }
     }
     const symbol = this.getSymbolOfTypeById(type.id);
     if (symbol) {
+      this.recoverDeclarationPositionsForSymbol(type, symbol);
       this.#symbolsByTypeId.set(type.id, symbol);
       return symbol;
     }
@@ -272,6 +274,32 @@ export class CorsaProjectSession {
     }
     this.#symbolsByTypeId.set(type.id, null);
     return undefined;
+  }
+
+  /**
+   * Runs the source-position lookup for a natively resolved symbol whose
+   * declaration handles are compact TypeScript 7 handles without offsets.
+   *
+   * When the native `getSymbolOfType` lookup succeeds, the position-recovery
+   * path in `getSymbolOfTypeAtLookup` no longer runs, yet it is what records
+   * the class-declaration range and namespace search scope that disambiguate
+   * same-named declarations. The native symbol stays the source of truth;
+   * this only restores those positional caches.
+   */
+  private recoverDeclarationPositionsForSymbol(type: CorsaType, symbol: CorsaSymbol): void {
+    if (this.#classDeclarationByTypeId.has(type.id)) {
+      return;
+    }
+    const declarations = [symbol.valueDeclaration, ...(symbol.declarations ?? [])].filter(
+      (handle): handle is string => handle !== undefined,
+    );
+    if (declarations.length === 0 || !declarations.every(isPositionlessNodeHandle)) {
+      return;
+    }
+    if (!this.#typeLookupById.has(type.id)) {
+      return;
+    }
+    this.getSymbolOfTypeAtLookup(type);
   }
 
   private getSymbolOfTypeAtLookup(type: CorsaType): CorsaSymbol | undefined {
@@ -538,7 +566,11 @@ export class CorsaProjectSession {
     }
     try {
       return this.rememberUsableSymbol(
-        this.client().getSymbolOfType(this.#snapshot, typeId) as CorsaSymbol | null,
+        this.client().getSymbolOfType(
+          this.#snapshot,
+          typeId,
+          this.#projects[0]?.id,
+        ) as CorsaSymbol | null,
       );
     } catch (error) {
       if (isMissingTypeHandleError(error)) {
@@ -1482,7 +1514,10 @@ function classDeclarationStartAtIdentifier(
   return match ? prefixStart + match.index : undefined;
 }
 
-function uniqueClassDeclarationPosition(sourceText: string, className: string): number | undefined {
+export function uniqueClassDeclarationPosition(
+  sourceText: string,
+  className: string,
+): number | undefined {
   const escapedName = className.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const declarationPattern = new RegExp(`\\bclass\\s+${escapedName}\\b`, "gu");
   const declaration = declarationPattern.exec(sourceText);
@@ -1792,11 +1827,10 @@ function parseNodeHandle(
   const [posText, secondText, thirdText, ...remainingParts] = value.split(".");
   const pos = Number(posText);
   const second = Number(secondText);
-  const third = Number(thirdText);
   if (!Number.isFinite(pos) || !Number.isFinite(second)) {
     return undefined;
   }
-  const hasEndPosition = Number.isFinite(third);
+  const hasEndPosition = isFiniteNumberText(thirdText);
   const fileName = (hasEndPosition ? remainingParts : [thirdText, ...remainingParts]).join(".");
   if (!fileName) {
     return undefined;
@@ -1805,7 +1839,27 @@ function parseNodeHandle(
   if (end < pos) {
     return undefined;
   }
+  if (!hasEndPosition) {
+    // Compact TypeScript 7 handle: `<node id>.<syntax kind>.<path>`. The
+    // parsed numbers identify the node but are not source offsets.
+    return { id: value, fileName, pos, end, range: [pos, end], positionless: true };
+  }
   return { id: value, fileName, pos, end, range: [pos, end] };
+}
+
+/**
+ * Reports whether a node handle uses the compact TypeScript 7 wire format
+ * `<node id>.<syntax kind>.<path>`, which carries no source offsets.
+ */
+function isPositionlessNodeHandle(value: string): boolean {
+  const [posText, secondText, thirdText] = value.split(".");
+  return (
+    isFiniteNumberText(posText) && isFiniteNumberText(secondText) && !isFiniteNumberText(thirdText)
+  );
+}
+
+function isFiniteNumberText(text: string | undefined): boolean {
+  return text !== undefined && text !== "" && Number.isFinite(Number(text));
 }
 
 function isRecoverableTransportError(error: unknown): boolean {

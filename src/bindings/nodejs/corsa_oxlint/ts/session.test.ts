@@ -483,6 +483,7 @@ describe("CorsaProjectSession", () => {
       pos: 0,
       end: sourceText.length,
       range: [0, sourceText.length],
+      positionless: true,
     });
     expect(session.getNode("0.18.264./tmp/one.ts")?.range).toEqual([0, 18]);
   });

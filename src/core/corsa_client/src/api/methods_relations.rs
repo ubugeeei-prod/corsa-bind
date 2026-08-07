@@ -13,6 +13,11 @@ use corsa_core::utils::split_top_level_type_text;
 
 impl ApiClient {
     /// Returns the symbol attached to a type, if one exists.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_symbol_of_type_in_project`] when a project handle is
+    /// available.
     pub async fn get_symbol_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -20,6 +25,27 @@ impl ApiClient {
     ) -> Result<Option<super::SymbolResponse>> {
         self.call_optional("getSymbolOfType", TypeOnlyRequest { snapshot, r#type })
             .await
+    }
+
+    /// Returns the symbol attached to a type, resolved inside a project.
+    ///
+    /// This is the project-scoped variant of [`ApiClient::get_symbol_of_type`]
+    /// that TypeScript 7 stable runtimes require.
+    pub async fn get_symbol_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<super::SymbolResponse>> {
+        self.call_optional(
+            "getSymbolOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
     }
 
     /// Returns the return type of a signature.
@@ -106,7 +132,7 @@ impl ApiClient {
         }
 
         if let Some(target) = self
-            .get_target_of_type_or_none(snapshot.clone(), r#type.clone())
+            .get_target_of_type_or_none(snapshot.clone(), project.clone(), r#type.clone())
             .await?
             .filter(|target| target.id != r#type)
         {
@@ -140,7 +166,11 @@ impl ApiClient {
                 .await?;
             if return_bases.is_empty() {
                 if let Some(target) = self
-                    .get_target_of_type_or_none(snapshot.clone(), return_type.id.clone())
+                    .get_target_of_type_or_none(
+                        snapshot.clone(),
+                        project.clone(),
+                        return_type.id.clone(),
+                    )
                     .await?
                     .filter(|target| target.id != return_type.id)
                 {
@@ -151,7 +181,7 @@ impl ApiClient {
             }
             if return_bases.is_empty() {
                 return_bases = self
-                    .get_types_of_type(snapshot.clone(), return_type.id)
+                    .get_types_of_type_in_project(snapshot.clone(), project.clone(), return_type.id)
                     .await?;
             }
             append_unique_types(&mut construct_return_bases, return_bases);
@@ -161,7 +191,7 @@ impl ApiClient {
         }
 
         let intersection_parts = self
-            .get_types_of_type(snapshot.clone(), r#type.clone())
+            .get_types_of_type_in_project(snapshot.clone(), project.clone(), r#type.clone())
             .await?;
         if !intersection_parts.is_empty() {
             return Ok(intersection_parts);
@@ -213,9 +243,13 @@ impl ApiClient {
     async fn get_target_of_type_or_none(
         &self,
         snapshot: SnapshotHandle,
+        project: ProjectHandle,
         r#type: TypeHandle,
     ) -> Result<Option<TypeResponse>> {
-        match self.get_target_of_type(snapshot, r#type).await {
+        match self
+            .get_target_of_type_in_project(snapshot, project, r#type)
+            .await
+        {
             Ok(target) => Ok(target),
             Err(error)
                 if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
@@ -485,6 +519,10 @@ impl ApiClient {
     }
 
     /// Returns the target type underlying an instantiated or mapped type.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project; prefer [`ApiClient::get_target_of_type_in_project`] when a
+    /// project handle is available.
     pub async fn get_target_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -494,9 +532,31 @@ impl ApiClient {
             .await
     }
 
+    /// Returns the target type underlying an instantiated or mapped type,
+    /// resolved inside a project.
+    pub async fn get_target_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getTargetOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+    }
+
     /// Returns nested or constituent types associated with a type.
     ///
-    /// Missing server data is normalized to an empty vector.
+    /// Missing server data is normalized to an empty vector. TypeScript 7
+    /// stable runtimes resolve this request inside a specific project; prefer
+    /// [`ApiClient::get_types_of_type_in_project`] when a project handle is
+    /// available.
     pub async fn get_types_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -506,6 +566,37 @@ impl ApiClient {
             .call::<Option<Vec<TypeResponse>>, _>(
                 "getTypesOfType",
                 TypeOnlyRequest { snapshot, r#type },
+            )
+            .await
+        {
+            Ok(items) => Ok(items.unwrap_or_default()),
+            Err(error)
+                if Self::is_stale_handle_error(&error) || Self::is_protocol_panic_error(&error) =>
+            {
+                Ok(Vec::new())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Returns nested or constituent types associated with a type, resolved
+    /// inside a project.
+    ///
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_types_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        match self
+            .call::<Option<Vec<TypeResponse>>, _>(
+                "getTypesOfType",
+                TypeProjectRequest {
+                    snapshot,
+                    project,
+                    r#type,
+                },
             )
             .await
         {
@@ -625,21 +716,30 @@ impl ApiClient {
         r#type: TypeHandle,
     ) -> Result<Option<TypeResponse>> {
         if let Some(constraint) = self
-            .get_constraint_of_type_parameter(snapshot.clone(), project, r#type.clone())
+            .get_constraint_of_type_parameter(snapshot.clone(), project.clone(), r#type.clone())
             .await?
         {
             return Ok(Some(constraint));
         }
-        self.get_constraint_of_type_direct(snapshot, r#type).await
+        self.get_constraint_of_type_direct(snapshot, project, r#type)
+            .await
     }
 
     async fn get_constraint_of_type_direct(
         &self,
         snapshot: SnapshotHandle,
+        project: ProjectHandle,
         r#type: TypeHandle,
     ) -> Result<Option<TypeResponse>> {
         match self
-            .call_optional("getConstraintOfType", TypeOnlyRequest { snapshot, r#type })
+            .call_optional(
+                "getConstraintOfType",
+                TypeProjectRequest {
+                    snapshot,
+                    project,
+                    r#type,
+                },
+            )
             .await
         {
             Ok(constraint) => Ok(constraint),

@@ -1085,6 +1085,82 @@ describe("corsa oxlint implemented types", () => {
     expect(seen.b?.map((base) => base.implemented)).toEqual([[]]);
   });
 
+  stableTypeScript7Case(
+    "preserves base symbols and implemented types for imported class types",
+    () => {
+      const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-cross-file-implements-"));
+      writeFileSync(
+        resolve(workspace, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: { target: "ES2020", module: "commonjs", strict: true },
+          include: ["**/*.ts"],
+        }),
+      );
+      writeFileSync(
+        resolve(workspace, "base.ts"),
+        [
+          "export class Ancestor {}",
+          "export interface IAncestor {}",
+          "export class Descendant extends Ancestor implements IAncestor {}",
+        ].join("\n"),
+      );
+      const holderText = [
+        'import { Descendant } from "./base";',
+        "",
+        "export class Holder {",
+        "  public readonly value: Descendant;",
+        "  constructor(v: Descendant) { this.value = v; }",
+        "}",
+      ].join("\n");
+      const holderFile = resolve(workspace, "holder.ts");
+      writeFileSync(holderFile, holderText);
+
+      const checker = createTypeChecker({
+        cwd: workspace,
+        filename: holderFile,
+        sourceCode: { text: holderText },
+        settings: {
+          corsaOxlint: {
+            parserOptions: {
+              project: "tsconfig.json",
+              corsa: {
+                executable: stableTypeScript7Binary,
+                cwd: workspace,
+                mode: "jsonrpc",
+              },
+            },
+          },
+        },
+      } as any);
+
+      const propertyStart = holderText.indexOf("public readonly value");
+      const propertyEnd = holderText.indexOf(";", propertyStart) + 1;
+      const type = checker.getTypeAtLocation({
+        type: "PropertyDefinition",
+        range: [propertyStart, propertyEnd] as const,
+      } as any);
+
+      expect(type).toBeDefined();
+      const bases = type ? checker.getBaseTypes(type) : [];
+
+      // The imported class must behave exactly like a same-file class: its
+      // symbol resolves, base entries keep their symbols, and the implements
+      // clause declared in the other file stays visible.
+      expect(type ? checker.getSymbolOfType(type)?.name : undefined).toBe("Descendant");
+      expect(
+        bases.map((base) => ({
+          text: checker.typeToString(base),
+          symbol: checker.getSymbolOfType(base)?.name ?? null,
+        })),
+      ).toEqual([{ text: "Ancestor", symbol: "Ancestor" }]);
+      expect(
+        type
+          ? checker.getImplementedTypesOfType(type).map((impl) => checker.typeToString(impl))
+          : undefined,
+      ).toEqual(["IAncestor"]);
+    },
+  );
+
   integrationCase("returns implemented interfaces from external declaration class types", () => {
     const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-external-implements-"));
     const depDir = resolve(workspace, "node_modules", "external-dep");

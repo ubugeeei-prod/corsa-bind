@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- type, signature, and symbol relation requests now mirror numeric handles into the `objectId` field that TypeScript 7 stable runtimes expect, so `getSymbolOfType`, `getBaseTypes` metadata, and `getImplementedTypesOfType` keep working for class types imported from other files ([#427](https://github.com/ubugeeei-prod/corsa-bind/issues/427)).
+- `corsa-oxlint` recovers class-declaration positions for compact TypeScript 7 declaration handles instead of misreading node ids as source offsets, keeping same-named classes in different scopes distinct.
+- the default runtime discovery now resolves the `@typescript/native-preview` platform executable (`lib/tsgo`, `tsgo.exe` on Windows) instead of the meta package's Node bin script, which Windows cannot spawn ([#428](https://github.com/ubugeeei-prod/corsa-bind/issues/428)).
 - `corsa-oxlint` now resolves nominal type symbols for interface and class property annotations.
 - `corsa-oxlint` now returns direct and inherited implemented interfaces after symbol, base-type, and generic-argument traversal while accepting compact TypeScript 7 declaration handles.
 - `corsa-oxlint` now discovers the native Corsa runtime shipped with TypeScript 7 or newer before falling back to `@typescript/native-preview`.

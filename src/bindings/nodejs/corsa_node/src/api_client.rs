@@ -207,6 +207,7 @@ enum JsonTaskKind {
     GetSymbolOfType {
         snapshot: String,
         type_handle: String,
+        project: Option<String>,
     },
     GetTypeArguments {
         snapshot: String,
@@ -353,10 +354,13 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
             JsonTaskKind::GetSymbolOfType {
                 snapshot,
                 type_handle,
+                project,
             } => {
-                let response = block_on(self.client.get_symbol_of_type(
-                    SnapshotHandle::from(snapshot.as_str()),
-                    TypeHandle::from(type_handle.as_str()),
+                let response = block_on(get_symbol_of_type_with_optional_project(
+                    &self.client,
+                    snapshot,
+                    type_handle,
+                    project.as_deref(),
                 ))
                 .map_err(into_napi_error)?;
                 to_value(&response)
@@ -865,11 +869,21 @@ impl CorsaApiClient {
     }
 
     /// Resolves the symbol attached to a checker type.
+    ///
+    /// Passing the owning project keeps the lookup working on TypeScript 7
+    /// stable runtimes, which resolve type symbols inside a project.
     #[napi]
-    pub fn get_symbol_of_type(&self, snapshot: String, type_handle: String) -> Result<Value> {
-        let response = block_on(self.inner.get_symbol_of_type(
-            SnapshotHandle::from(snapshot.as_str()),
-            TypeHandle::from(type_handle.as_str()),
+    pub fn get_symbol_of_type(
+        &self,
+        snapshot: String,
+        type_handle: String,
+        project: Option<String>,
+    ) -> Result<Value> {
+        let response = block_on(get_symbol_of_type_with_optional_project(
+            &self.inner,
+            &snapshot,
+            &type_handle,
+            project.as_deref(),
         ))
         .map_err(into_napi_error)?;
         to_value(&response)
@@ -880,12 +894,14 @@ impl CorsaApiClient {
         &self,
         snapshot: String,
         type_handle: String,
+        project: Option<String>,
     ) -> AsyncTask<JsonApiTask> {
         AsyncTask::new(JsonApiTask {
             client: self.inner.clone(),
             kind: JsonTaskKind::GetSymbolOfType {
                 snapshot,
                 type_handle,
+                project,
             },
         })
     }
@@ -1217,6 +1233,33 @@ impl CorsaApiClient {
                 snapshots: self.snapshots.clone(),
             },
         })
+    }
+}
+
+async fn get_symbol_of_type_with_optional_project(
+    client: &ApiClient,
+    snapshot: &str,
+    type_handle: &str,
+    project: Option<&str>,
+) -> corsa::Result<Option<corsa::api::SymbolResponse>> {
+    match project {
+        Some(project) => {
+            client
+                .get_symbol_of_type_in_project(
+                    SnapshotHandle::from(snapshot),
+                    ProjectHandle::from(project),
+                    TypeHandle::from(type_handle),
+                )
+                .await
+        }
+        None => {
+            client
+                .get_symbol_of_type(
+                    SnapshotHandle::from(snapshot),
+                    TypeHandle::from(type_handle),
+                )
+                .await
+        }
     }
 }
 

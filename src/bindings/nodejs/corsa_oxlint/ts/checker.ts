@@ -2,6 +2,7 @@ import type { Node } from "@oxlint/plugins";
 
 import { createNodeMaps, toPosition } from "./node_map";
 import { sessionForContext } from "./registry";
+import { uniqueClassDeclarationPosition } from "./session";
 import type { CorsaProjectSession } from "./session";
 import { SignatureKind } from "./types";
 import type {
@@ -463,19 +464,24 @@ function implementedTypesFromTypeDeclaration(
   if (cached) {
     return cached;
   }
+  // Resolve through the session's type-symbol lookup first: it primes the
+  // declaration-position caches for compact TypeScript 7 handles before the
+  // source scans below run, while a direct `getSymbol(type.symbol)` cache hit
+  // would skip that recovery.
   const symbol =
-    (type.symbol ? session.getSymbol(type.symbol) : undefined) ?? checker.getSymbolOfType(type);
+    checker.getSymbolOfType(type) ?? (type.symbol ? session.getSymbol(type.symbol) : undefined);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   const declarationNode = declaration ? session.getNode(declaration) : undefined;
+  const scanDeclarationNode = declarationNodeForImplementsScan(context, symbol, declarationNode);
   const matchedDeclarationNode = session.getClassDeclarationForType(type);
   const localImplementingDeclaration =
-    declarationNode && pathsReferToSameFile(declarationNode.fileName, context.filename)
-      ? implementingClassDeclaration(context, type, symbol, declarationNode)
+    scanDeclarationNode && pathsReferToSameFile(scanDeclarationNode.fileName, context.filename)
+      ? implementingClassDeclaration(context, type, symbol, scanDeclarationNode)
       : undefined;
   const resolvedDeclarationNode =
     matchedDeclarationNode ??
     localImplementingDeclaration ??
-    declarationNode ??
+    scanDeclarationNode ??
     implementingClassDeclaration(context, type, symbol);
   const sourceText = resolvedDeclarationNode
     ? sourceTextForPath(context, resolvedDeclarationNode.fileName)
@@ -485,6 +491,44 @@ function implementedTypesFromTypeDeclaration(
       ? implementedTypesFromSourceText(context, resolvedDeclarationNode, sourceText, checker)
       : [];
   return session.cacheOwnImplementedTypes(type.id, implemented);
+}
+
+/**
+ * Returns a declaration node whose range can anchor an `implements` source
+ * scan.
+ *
+ * Positional handles are used as-is. A compact TypeScript 7 declaration handle
+ * carries a node id instead of source offsets, so its parsed range cannot
+ * anchor a scan; the declaring file is searched for the symbol's unique class
+ * declaration instead. An ambiguous name yields no node rather than a
+ * same-named declaration from another scope.
+ */
+function declarationNodeForImplementsScan(
+  context: ContextWithParserOptions,
+  symbol: CorsaSymbol | undefined,
+  declarationNode: CorsaNode | undefined,
+): CorsaNode | undefined {
+  if (!declarationNode?.positionless) {
+    return declarationNode;
+  }
+  const name = symbol?.name;
+  if (!name) {
+    return undefined;
+  }
+  const sourceText = sourceTextForPath(context, declarationNode.fileName);
+  if (!sourceText) {
+    return undefined;
+  }
+  const pos = uniqueClassDeclarationPosition(sourceText, name);
+  if (pos === undefined) {
+    return undefined;
+  }
+  return {
+    fileName: declarationNode.fileName,
+    pos,
+    end: sourceText.length,
+    range: [pos, sourceText.length] as const,
+  };
 }
 
 function implementingClassDeclaration(

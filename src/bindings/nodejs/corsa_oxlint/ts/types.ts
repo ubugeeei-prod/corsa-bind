@@ -48,6 +48,12 @@ export interface CorsaNode {
   readonly pos: number;
   readonly end: number;
   readonly range: readonly [number, number];
+  /**
+   * Set when the node was parsed from a compact TypeScript 7 declaration
+   * handle, whose leading number is a node id rather than a source offset. The
+   * range of such a node cannot anchor source-text scans.
+   */
+  readonly positionless?: boolean;
 }
 
 export interface CorsaSymbol {
