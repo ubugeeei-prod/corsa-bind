@@ -222,6 +222,78 @@ describe("context", () => {
     expect(defaultCorsaExecutable(workspace)).toBe(realpathSync(binPath));
   });
 
+  it("resolves the native-preview platform executable on Windows", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const packageDir = resolve(workspace, "node_modules/@typescript/native-preview");
+    const binPath = resolve(packageDir, "bin/tsgo.js");
+    const platformDir = resolve(
+      workspace,
+      `node_modules/@typescript/native-preview-win32-${process.arch}`,
+    );
+    const platformBin = resolve(platformDir, "lib/tsgo.exe");
+    mkdirSync(dirname(binPath), { recursive: true });
+    mkdirSync(dirname(platformBin), { recursive: true });
+    writeFileSync(
+      resolve(packageDir, "package.json"),
+      JSON.stringify({ name: "@typescript/native-preview", bin: { tsgo: "bin/tsgo.js" } }),
+    );
+    writeFileSync(binPath, "#!/usr/bin/env node\n");
+    writeFileSync(
+      resolve(platformDir, "package.json"),
+      JSON.stringify({ name: `@typescript/native-preview-win32-${process.arch}` }),
+    );
+    writeFileSync(platformBin, "");
+
+    expect(defaultCorsaExecutable(workspace, "win32")).toBe(realpathSync(platformBin));
+  });
+
+  it("never resolves the native-preview Node bin script on Windows", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const packageDir = resolve(workspace, "node_modules/@typescript/native-preview");
+    const binPath = resolve(packageDir, "bin/tsgo.js");
+    const fallback = resolve(workspace, ".cache/corsa.exe");
+    mkdirSync(dirname(binPath), { recursive: true });
+    mkdirSync(dirname(fallback), { recursive: true });
+    writeFileSync(
+      resolve(packageDir, "package.json"),
+      JSON.stringify({ name: "@typescript/native-preview", bin: { tsgo: "bin/tsgo.js" } }),
+    );
+    writeFileSync(binPath, "#!/usr/bin/env node\n");
+    writeFileSync(fallback, "");
+
+    // A Node script behind a shebang cannot be spawned on Windows
+    // (`os error 193`), so resolution must skip it.
+    expect(defaultCorsaExecutable(workspace, "win32")).toBe(fallback);
+  });
+
+  it("prefers the native-preview platform executable over the bin script", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const packageDir = resolve(workspace, "node_modules/@typescript/native-preview");
+    const binPath = resolve(packageDir, "bin/tsgo.js");
+    const platformDir = resolve(
+      workspace,
+      `node_modules/@typescript/native-preview-linux-${process.arch}`,
+    );
+    const platformBin = resolve(platformDir, "lib/tsgo");
+    mkdirSync(dirname(binPath), { recursive: true });
+    mkdirSync(dirname(platformBin), { recursive: true });
+    writeFileSync(
+      resolve(packageDir, "package.json"),
+      JSON.stringify({ name: "@typescript/native-preview", bin: { tsgo: "bin/tsgo.js" } }),
+    );
+    writeFileSync(binPath, "#!/usr/bin/env node\n");
+    writeFileSync(
+      resolve(platformDir, "package.json"),
+      JSON.stringify({ name: `@typescript/native-preview-linux-${process.arch}` }),
+    );
+    writeFileSync(platformBin, "");
+
+    expect(defaultCorsaExecutable(workspace, "linux")).toBe(realpathSync(platformBin));
+  });
+
   it("falls back to a plugin anchor when native-preview is only installed next to the plugin", () => {
     const consumerRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-consumer-"));
     const pluginRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-plugin-"));
