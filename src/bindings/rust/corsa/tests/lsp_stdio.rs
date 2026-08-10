@@ -196,3 +196,56 @@ fn lsp_overlay_close_of_missing_document_is_a_noop() {
         client.close().await.unwrap();
     });
 }
+
+#[test]
+fn lsp_graceful_close_omits_params_and_is_idempotent_across_clones() {
+    run_async_test(async {
+        let directory = tempfile::tempdir().unwrap();
+        let state_path = directory.path().join("shutdown-state.txt");
+        let client = LspClient::spawn(
+            support::lsp_config()
+                .with_arg(format!("--strict-lsp-shutdown={}", state_path.display())),
+        )
+        .await
+        .unwrap();
+        let clone = client.clone();
+        let repeated_close = thread::spawn(move || block_on(clone.graceful_close()));
+
+        client.graceful_close().await.unwrap();
+        repeated_close.join().unwrap().unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(state_path).unwrap(),
+            "shutdown\nexit\n"
+        );
+    });
+}
+
+#[test]
+fn lsp_graceful_close_reaps_the_process_after_shutdown_timeout() {
+    run_async_test(async {
+        let directory = tempfile::tempdir().unwrap();
+        let state_path = directory.path().join("shutdown-state.txt");
+        let client = LspClient::spawn(
+            support::lsp_config()
+                .with_arg(format!("--strict-lsp-shutdown={}", state_path.display()))
+                .with_arg("--ignore-lsp-shutdown")
+                .with_request_timeout(Some(Duration::from_secs(1)))
+                .with_shutdown_timeout(Duration::from_millis(300)),
+        )
+        .await
+        .unwrap();
+        let clone = client.clone();
+        let started = std::time::Instant::now();
+
+        let error = client.graceful_close().await.unwrap_err();
+        assert!(matches!(error, corsa::CorsaError::Timeout(_)));
+        let repeated_error = clone.graceful_close().await.unwrap_err();
+        assert!(matches!(repeated_error, corsa::CorsaError::Timeout(_)));
+        assert!(started.elapsed() < Duration::from_secs(3));
+        assert_eq!(
+            std::fs::read_to_string(state_path).unwrap(),
+            "shutdown\ncontext canceled\n"
+        );
+    });
+}

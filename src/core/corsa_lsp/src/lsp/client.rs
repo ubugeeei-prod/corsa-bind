@@ -8,9 +8,17 @@ use corsa_core::{
     fast::{CompactString, SmallVec},
 };
 use corsa_runtime::BroadcastReceiver;
-use lsp_types::{notification::Notification, request::Request};
+use lsp_types::{
+    notification::{Exit, Notification},
+    request::{Request, Shutdown},
+};
 use serde::{Serialize, de::DeserializeOwned};
-use std::{io::BufReader, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    io::BufReader,
+    path::PathBuf,
+    sync::{Arc, Condvar, Mutex},
+    time::Duration,
+};
 
 use super::{
     InitializeApiSessionParams, InitializeApiSessionRequest, InitializeApiSessionResult, LspOverlay,
@@ -27,6 +35,55 @@ pub struct LspClient {
     rpc: JsonRpcConnection,
     process: Arc<AsyncChildGuard>,
     shutdown_timeout: Duration,
+    shutdown: Arc<ShutdownCoordinator>,
+}
+
+#[derive(Default)]
+struct ShutdownCoordinator {
+    phase: Mutex<ShutdownPhase>,
+    completed: Condvar,
+}
+
+#[derive(Default)]
+enum ShutdownPhase {
+    #[default]
+    Open,
+    Closing,
+    Closed(Result<()>),
+}
+
+impl ShutdownCoordinator {
+    fn begin(&self) -> Option<Result<()>> {
+        let mut phase = self.phase.lock().unwrap_or_else(|error| error.into_inner());
+        loop {
+            match &*phase {
+                ShutdownPhase::Open => {
+                    *phase = ShutdownPhase::Closing;
+                    return None;
+                }
+                ShutdownPhase::Closing => {
+                    phase = self
+                        .completed
+                        .wait(phase)
+                        .unwrap_or_else(|error| error.into_inner());
+                }
+                ShutdownPhase::Closed(result) => return Some(clone_result(result)),
+            }
+        }
+    }
+
+    fn finish(&self, result: &Result<()>) {
+        let mut phase = self.phase.lock().unwrap_or_else(|error| error.into_inner());
+        *phase = ShutdownPhase::Closed(clone_result(result));
+        self.completed.notify_all();
+    }
+}
+
+fn clone_result(result: &Result<()>) -> Result<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => Err(error.clone_for_pending()),
+    }
 }
 
 /// Spawn-time options for [`LspClient`].
@@ -152,6 +209,7 @@ impl LspClient {
             )?,
             process: Arc::new(AsyncChildGuard::new(child)),
             shutdown_timeout: config.shutdown_timeout,
+            shutdown: Arc::new(ShutdownCoordinator::default()),
         })
     }
 
@@ -183,6 +241,18 @@ impl LspClient {
         self.rpc.request(R::METHOD, params).await
     }
 
+    /// Sends a typed LSP request with the `params` member omitted.
+    ///
+    /// Use this for protocol methods such as [`Shutdown`] whose wire envelope
+    /// must not conflate an absent member with `"params": null`.
+    pub async fn request_without_params<R>(&self) -> Result<R::Result>
+    where
+        R: Request,
+        R::Result: DeserializeOwned,
+    {
+        self.rpc.request_without_params(R::METHOD).await
+    }
+
     /// Sends a typed LSP notification.
     ///
     /// This is the preferred way to emit standard protocol notifications such
@@ -193,6 +263,14 @@ impl LspClient {
         N::Params: Serialize,
     {
         self.rpc.notify(N::METHOD, params)
+    }
+
+    /// Sends a typed LSP notification with the `params` member omitted.
+    pub fn notify_without_params<N>(&self) -> Result<()>
+    where
+        N: Notification,
+    {
+        self.rpc.notify_without_params(N::METHOD)
     }
 
     /// Responds to an inbound request.
@@ -222,7 +300,43 @@ impl LspClient {
     /// The underlying process is shut down safely through [`AsyncChildGuard`],
     /// which ensures the child is reaped even if it needs to be killed.
     pub async fn close(&self) -> Result<()> {
-        self.rpc.close().await?;
-        self.process.shutdown(self.shutdown_timeout).await
+        if let Some(result) = self.shutdown.begin() {
+            return result;
+        }
+        let result = self.close_transport_and_process(Ok(())).await;
+        self.shutdown.finish(&result);
+        result
+    }
+
+    /// Gracefully closes the LSP session with the protocol `shutdown` / `exit` sequence.
+    ///
+    /// The params-less `shutdown` request is answered before the params-less
+    /// `exit` notification is sent. The transport is then drained and closed,
+    /// and the child is reaped or force-killed within `shutdown_timeout`.
+    /// Concurrent or repeated calls across cloned clients share one shutdown
+    /// attempt and return the same outcome.
+    pub async fn graceful_close(&self) -> Result<()> {
+        if let Some(result) = self.shutdown.begin() {
+            return result;
+        }
+
+        let protocol_result = match self.request_without_params::<Shutdown>().await {
+            Ok(()) => self.notify_without_params::<Exit>(),
+            Err(error) => Err(error),
+        };
+        let result = self.close_transport_and_process(protocol_result).await;
+        self.shutdown.finish(&result);
+        result
+    }
+
+    async fn close_transport_and_process(&self, protocol_result: Result<()>) -> Result<()> {
+        let transport_result = self.rpc.begin_close();
+        let process_result = self.process.shutdown(self.shutdown_timeout).await;
+        let reader_result = self.rpc.join_reader(self.shutdown_timeout);
+
+        protocol_result
+            .and(transport_result)
+            .and(process_result)
+            .and(reader_result)
     }
 }

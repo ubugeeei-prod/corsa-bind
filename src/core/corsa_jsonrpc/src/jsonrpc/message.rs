@@ -69,6 +69,18 @@ impl RawMessage {
         }
     }
 
+    /// Builds a JSON-RPC request without a `params` member.
+    pub fn request_without_params(id: RequestId, method: impl Into<CompactString>) -> Self {
+        Self {
+            jsonrpc: jsonrpc_version(),
+            id: Some(id),
+            method: Some(method.into()),
+            params: None,
+            result: None,
+            error: None,
+        }
+    }
+
     /// Builds a JSON-RPC notification message.
     pub fn notification(method: impl Into<CompactString>, params: Value) -> Self {
         Self {
@@ -76,6 +88,18 @@ impl RawMessage {
             id: None,
             method: Some(method.into()),
             params: Some(params),
+            result: None,
+            error: None,
+        }
+    }
+
+    /// Builds a JSON-RPC notification without a `params` member.
+    pub fn notification_without_params(method: impl Into<CompactString>) -> Self {
+        Self {
+            jsonrpc: jsonrpc_version(),
+            id: None,
+            method: Some(method.into()),
+            params: None,
             result: None,
             error: None,
         }
@@ -244,6 +268,18 @@ mod tests {
                 error: None,
             } if id == RequestId::integer(1)
         ));
+    }
+
+    #[test]
+    fn params_less_messages_omit_params_instead_of_serializing_null() {
+        let request = RawMessage::request_without_params(RequestId::integer(1), "shutdown");
+        let notification = RawMessage::notification_without_params("exit");
+
+        let request = serde_json::to_value(request).unwrap();
+        let notification = serde_json::to_value(notification).unwrap();
+
+        assert!(!request.as_object().unwrap().contains_key("params"));
+        assert!(!notification.as_object().unwrap().contains_key("params"));
     }
 
     #[test]
