@@ -8,6 +8,8 @@ use corsa::{
 use serde_json::{Value, json};
 use std::{future::Future, str::FromStr, thread, time::Duration};
 
+use lsp_types::request::Shutdown;
+
 struct OverlayStateRequest;
 
 impl lsp_types::request::Request for OverlayStateRequest {
@@ -246,6 +248,31 @@ fn lsp_graceful_close_reaps_the_process_after_shutdown_timeout() {
         assert_eq!(
             std::fs::read_to_string(state_path).unwrap(),
             "shutdown\ncontext canceled\n"
+        );
+    });
+}
+
+#[test]
+fn lsp_strict_shutdown_rejects_explicit_null_params() {
+    run_async_test(async {
+        let directory = tempfile::tempdir().unwrap();
+        let state_path = directory.path().join("shutdown-state.txt");
+        let client = LspClient::spawn(
+            support::lsp_config()
+                .with_arg(format!("--strict-lsp-shutdown={}", state_path.display())),
+        )
+        .await
+        .unwrap();
+
+        let error = client.request::<Shutdown>(()).await.unwrap_err();
+        assert!(matches!(
+            error,
+            corsa::CorsaError::Rpc(error) if error.code == -32602
+        ));
+        client.close().await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(state_path).unwrap(),
+            "invalid params\ncontext canceled\n"
         );
     });
 }

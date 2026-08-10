@@ -30,6 +30,7 @@ pub struct RawMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<CompactString>,
     /// Request or notification parameters.
+    #[serde(default, deserialize_with = "deserialize_present_value")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<Value>,
     /// Successful response body.
@@ -280,6 +281,26 @@ mod tests {
 
         assert!(!request.as_object().unwrap().contains_key("params"));
         assert!(!notification.as_object().unwrap().contains_key("params"));
+    }
+
+    #[test]
+    fn deserialization_preserves_null_params_member_presence() {
+        let omitted: RawMessage = serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "shutdown"
+        }))
+        .unwrap();
+        let explicit_null: RawMessage = serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "shutdown",
+            "params": null
+        }))
+        .unwrap();
+
+        assert_eq!(omitted.params, None);
+        assert_eq!(explicit_null.params, Some(Value::Null));
     }
 
     #[test]
