@@ -1,25 +1,39 @@
 use crate::{Result, jsonrpc};
 use corsa::fast::{CompactString, FastMap};
-use corsa::jsonrpc::{RawMessage, RequestId};
+use corsa::jsonrpc::{RawMessage, RequestId, RpcResponseError};
 use corsa::lsp::{VirtualChange, VirtualDocument};
 use lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
 };
 use serde_json::{Value, json};
-use std::io::{BufReader, BufWriter};
+use std::{
+    fs::OpenOptions,
+    io::{BufReader, BufWriter, Write},
+    path::{Path, PathBuf},
+};
 
-pub fn run() -> Result<()> {
+pub fn run(args: &[String]) -> Result<()> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = BufWriter::new(stdout.lock());
     let mut last_configuration = Value::Null;
     let mut documents = FastMap::<CompactString, VirtualDocument>::default();
+    let strict_shutdown_state = args.iter().find_map(|arg| {
+        arg.strip_prefix("--strict-lsp-shutdown=")
+            .map(PathBuf::from)
+    });
+    let ignore_shutdown = args.iter().any(|arg| arg == "--ignore-lsp-shutdown");
+    let mut shutdown_received = false;
     loop {
         let Some(message) = jsonrpc::read_message(&mut reader)? else {
+            if let Some(path) = strict_shutdown_state.as_deref() {
+                append_shutdown_state(path, "context canceled")?;
+            }
             return Ok(());
         };
         let method = message.method.unwrap_or_default();
+        let has_params = message.params.is_some();
         let params = message.params.unwrap_or(Value::Null);
         match (message.id, method.as_str()) {
             (Some(id), "initialize") => {
@@ -73,6 +87,30 @@ pub fn run() -> Result<()> {
                     ),
                 )?;
             }
+            (Some(id), "shutdown") => {
+                if let Some(path) = strict_shutdown_state.as_deref() {
+                    if has_params {
+                        append_shutdown_state(path, "invalid params")?;
+                        jsonrpc::write_message(
+                            &mut writer,
+                            &RawMessage::error(
+                                id,
+                                RpcResponseError {
+                                    code: -32602,
+                                    message: "expected no params, got null".into(),
+                                    data: None,
+                                },
+                            ),
+                        )?;
+                        continue;
+                    }
+                    append_shutdown_state(path, "shutdown")?;
+                }
+                shutdown_received = true;
+                if !ignore_shutdown {
+                    jsonrpc::write_message(&mut writer, &RawMessage::response(id, Value::Null))?;
+                }
+            }
             (Some(id), _) => {
                 jsonrpc::write_message(&mut writer, &RawMessage::response(id, Value::Null))?;
             }
@@ -105,10 +143,29 @@ pub fn run() -> Result<()> {
                 let params: DidCloseTextDocumentParams = serde_json::from_value(params)?;
                 documents.remove(params.text_document.uri.as_str());
             }
-            (None, "exit") => return Ok(()),
+            (None, "exit") => {
+                if let Some(path) = strict_shutdown_state.as_deref() {
+                    if has_params {
+                        append_shutdown_state(path, "invalid exit params")?;
+                        return Err("expected exit without params".into());
+                    }
+                    if !shutdown_received {
+                        append_shutdown_state(path, "exit before shutdown")?;
+                        return Err("expected shutdown before exit".into());
+                    }
+                    append_shutdown_state(path, "exit")?;
+                }
+                return Ok(());
+            }
             (None, _) => {
                 let _ = params;
             }
         }
     }
+}
+
+fn append_shutdown_state(path: &Path, state: &str) -> Result<()> {
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(file, "{state}")?;
+    Ok(())
 }

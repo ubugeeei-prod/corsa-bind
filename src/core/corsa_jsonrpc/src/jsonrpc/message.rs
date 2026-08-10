@@ -30,6 +30,7 @@ pub struct RawMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<CompactString>,
     /// Request or notification parameters.
+    #[serde(default, deserialize_with = "deserialize_present_value")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<Value>,
     /// Successful response body.
@@ -69,6 +70,18 @@ impl RawMessage {
         }
     }
 
+    /// Builds a JSON-RPC request without a `params` member.
+    pub fn request_without_params(id: RequestId, method: impl Into<CompactString>) -> Self {
+        Self {
+            jsonrpc: jsonrpc_version(),
+            id: Some(id),
+            method: Some(method.into()),
+            params: None,
+            result: None,
+            error: None,
+        }
+    }
+
     /// Builds a JSON-RPC notification message.
     pub fn notification(method: impl Into<CompactString>, params: Value) -> Self {
         Self {
@@ -76,6 +89,18 @@ impl RawMessage {
             id: None,
             method: Some(method.into()),
             params: Some(params),
+            result: None,
+            error: None,
+        }
+    }
+
+    /// Builds a JSON-RPC notification without a `params` member.
+    pub fn notification_without_params(method: impl Into<CompactString>) -> Self {
+        Self {
+            jsonrpc: jsonrpc_version(),
+            id: None,
+            method: Some(method.into()),
+            params: None,
             result: None,
             error: None,
         }
@@ -244,6 +269,38 @@ mod tests {
                 error: None,
             } if id == RequestId::integer(1)
         ));
+    }
+
+    #[test]
+    fn params_less_messages_omit_params_instead_of_serializing_null() {
+        let request = RawMessage::request_without_params(RequestId::integer(1), "shutdown");
+        let notification = RawMessage::notification_without_params("exit");
+
+        let request = serde_json::to_value(request).unwrap();
+        let notification = serde_json::to_value(notification).unwrap();
+
+        assert!(!request.as_object().unwrap().contains_key("params"));
+        assert!(!notification.as_object().unwrap().contains_key("params"));
+    }
+
+    #[test]
+    fn deserialization_preserves_null_params_member_presence() {
+        let omitted: RawMessage = serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "shutdown"
+        }))
+        .unwrap();
+        let explicit_null: RawMessage = serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "shutdown",
+            "params": null
+        }))
+        .unwrap();
+
+        assert_eq!(omitted.params, None);
+        assert_eq!(explicit_null.params, Some(Value::Null));
     }
 
     #[test]

@@ -1,6 +1,9 @@
 #![cfg(unix)]
 
-use super::{InboundEvent, JsonRpcConnection, JsonRpcConnectionOptions, RpcHandlerMap};
+use super::{
+    InboundEvent, JsonRpcConnection, JsonRpcConnectionOptions, RawMessage, RpcHandlerMap,
+    read_frame, write_frame,
+};
 use corsa_core::{CorsaEvent, CorsaObserver};
 use serde_json::json;
 use std::sync::{Arc, Mutex};
@@ -46,6 +49,44 @@ fn routes_request_and_response() {
         corsa_runtime::block_on(client.request("ping", json!({"value": 1}))).unwrap();
     waiter.join().unwrap();
     assert_eq!(response, json!({"pong": true}));
+}
+
+#[test]
+fn params_less_send_apis_omit_params_on_the_wire() {
+    let (client_socket, mut server_socket) = UnixStream::pair().unwrap();
+    let client = JsonRpcConnection::try_spawn(
+        BufReader::new(client_socket.try_clone().unwrap()),
+        client_socket,
+        RpcHandlerMap::default(),
+    )
+    .unwrap();
+    let server_reader = server_socket.try_clone().unwrap();
+    let server = thread::spawn(move || {
+        let mut reader = BufReader::new(server_reader);
+        let request_payload = read_frame(&mut reader).unwrap();
+        let request: serde_json::Value = serde_json::from_slice(&request_payload).unwrap();
+        assert_eq!(request["method"], json!("shutdown"));
+        assert!(!request.as_object().unwrap().contains_key("params"));
+
+        let response = RawMessage::response(
+            serde_json::from_value(request["id"].clone()).unwrap(),
+            json!({"ok": true}),
+        );
+        write_frame(&mut server_socket, &serde_json::to_vec(&response).unwrap()).unwrap();
+
+        let notification_payload = read_frame(&mut reader).unwrap();
+        let notification: serde_json::Value =
+            serde_json::from_slice(&notification_payload).unwrap();
+        assert_eq!(notification["method"], json!("exit"));
+        assert!(!notification.as_object().unwrap().contains_key("params"));
+    });
+
+    let response: serde_json::Value =
+        corsa_runtime::block_on(client.request_without_params("shutdown")).unwrap();
+    assert_eq!(response, json!({"ok": true}));
+    client.notify_without_params("exit").unwrap();
+    server.join().unwrap();
+    corsa_runtime::block_on(client.close()).unwrap();
 }
 
 #[test]

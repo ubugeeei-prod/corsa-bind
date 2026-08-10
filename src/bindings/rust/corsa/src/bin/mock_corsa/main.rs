@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         .map(|list| list.split(',').map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_default();
     if args.iter().any(|arg| arg == "--lsp") {
-        return lsp::run();
+        return lsp::run(&args);
     }
     if args.iter().any(|arg| arg == "--api") && args.iter().any(|arg| arg == "--async") {
         return api_async::run(cwd, callbacks);

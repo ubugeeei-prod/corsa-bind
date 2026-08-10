@@ -290,21 +290,37 @@ impl JsonRpcConnection {
         Ok(serde_json::from_value(value)?)
     }
 
+    /// Sends a JSON-RPC request with the `params` member omitted.
+    ///
+    /// This is distinct from passing `()` or [`Value::Null`], both of which
+    /// serialize as `"params": null`.
+    pub async fn request_without_params<Response>(&self, method: &str) -> Result<Response>
+    where
+        Response: DeserializeOwned,
+    {
+        let value = self.request_optional_value(method, None).await?;
+        Ok(serde_json::from_value(value)?)
+    }
+
     /// Sends a JSON-RPC request and returns the raw JSON value.
     ///
     /// Use this when a typed response model is not available yet.
     pub async fn request_value(&self, method: &str, params: Value) -> Result<Value> {
+        self.request_optional_value(method, Some(params)).await
+    }
+
+    async fn request_optional_value(&self, method: &str, params: Option<Value>) -> Result<Value> {
         if self.inner.closed.load(Ordering::SeqCst) {
             return Err(CorsaError::Closed("jsonrpc connection"));
         }
         let id = RequestId::integer(self.inner.next_id.fetch_add(1, Ordering::SeqCst) + 1);
         let (tx, rx) = mpsc::sync_channel(1);
         self.inner.pending.lock().insert(id.clone(), tx);
-        if let Err(error) = self.inner.send_outbound(RawMessage::request(
-            id.clone(),
-            CompactString::from(method),
-            params,
-        )) {
+        let message = match params {
+            Some(params) => RawMessage::request(id.clone(), CompactString::from(method), params),
+            None => RawMessage::request_without_params(id.clone(), CompactString::from(method)),
+        };
+        if let Err(error) = self.inner.send_outbound(message) {
             self.inner.pending.lock().remove(&id);
             return Err(error);
         }
@@ -338,6 +354,18 @@ impl JsonRpcConnection {
             CompactString::from(method),
             params,
         ))?;
+        Ok(())
+    }
+
+    /// Sends a JSON-RPC notification with the `params` member omitted.
+    ///
+    /// This is distinct from passing `()` or [`Value::Null`], both of which
+    /// serialize as `"params": null`.
+    pub fn notify_without_params(&self, method: &str) -> Result<()> {
+        self.inner
+            .send_outbound(RawMessage::notification_without_params(
+                CompactString::from(method),
+            ))?;
         Ok(())
     }
 
