@@ -30,7 +30,8 @@ fn reads_headers_with_small_reader_buffers() {
 fn reads_header_terminators_split_across_bufread_chunks() {
     let payload = br#"{"jsonrpc":"2.0","method":"ping"}"#;
     let header = format!("Content-Length: {}\r\n\r", payload.len());
-    let mut reader = ChunkedReader::new(vec![header.as_bytes(), b"\n", payload]);
+    let body_chunk = [b"\n".as_slice(), payload].concat();
+    let mut reader = ChunkedReader::new(vec![header.as_bytes(), body_chunk.as_slice()]);
 
     assert_eq!(read_frame(&mut reader).unwrap(), payload);
 }
