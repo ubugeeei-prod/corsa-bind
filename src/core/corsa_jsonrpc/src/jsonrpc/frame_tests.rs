@@ -1,6 +1,6 @@
 use super::{MAX_BODY_BYTES, MAX_HEADER_BYTES, read_frame, write_frame};
 use crate::CorsaError;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 #[cfg(unix)]
 use std::{os::unix::net::UnixStream, thread};
 
@@ -23,6 +23,15 @@ fn reads_headers_with_small_reader_buffers() {
     let payload = br#"{"jsonrpc":"2.0","method":"ping"}"#;
     let frame = frame_with_length(payload, b"X-Test: 1\r\n");
     let mut reader = BufReader::with_capacity(7, frame.as_slice());
+    assert_eq!(read_frame(&mut reader).unwrap(), payload);
+}
+
+#[test]
+fn reads_header_terminators_split_across_bufread_chunks() {
+    let payload = br#"{"jsonrpc":"2.0","method":"ping"}"#;
+    let header = format!("Content-Length: {}\r\n\r", payload.len());
+    let mut reader = ChunkedReader::new(vec![header.as_bytes(), b"\n", payload]);
+
     assert_eq!(read_frame(&mut reader).unwrap(), payload);
 }
 
@@ -99,4 +108,50 @@ fn assert_protocol(frame: Vec<u8>, needle: &str) {
     let mut reader = BufReader::new(frame.as_slice());
     let err = read_frame(&mut reader).unwrap_err();
     assert!(matches!(err, CorsaError::Protocol(message) if message.contains(needle)));
+}
+
+struct ChunkedReader<'a> {
+    chunks: Vec<&'a [u8]>,
+    chunk: usize,
+    offset: usize,
+}
+
+impl<'a> ChunkedReader<'a> {
+    fn new(chunks: Vec<&'a [u8]>) -> Self {
+        Self {
+            chunks,
+            chunk: 0,
+            offset: 0,
+        }
+    }
+}
+
+impl std::io::Read for ChunkedReader<'_> {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        let available = self.fill_buf()?;
+        if available.is_empty() {
+            return Ok(0);
+        }
+        let written = available.len().min(output.len());
+        output[..written].copy_from_slice(&available[..written]);
+        self.consume(written);
+        Ok(written)
+    }
+}
+
+impl BufRead for ChunkedReader<'_> {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        while self.chunk < self.chunks.len() && self.offset == self.chunks[self.chunk].len() {
+            self.chunk += 1;
+            self.offset = 0;
+        }
+        Ok(self
+            .chunks
+            .get(self.chunk)
+            .map_or(&[], |chunk| &chunk[self.offset..]))
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.offset += amount;
+    }
 }
