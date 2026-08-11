@@ -107,14 +107,19 @@ where
         if chunk.is_empty() {
             return Err(CorsaError::Closed("jsonrpc reader"));
         }
-        if let Some(index) = memmem::find(chunk, HEADER_END) {
-            // Copy only the current frame's header bytes so downstream parsing
-            // sees a contiguous header even when the reader buffer is chunked.
-            header.extend_from_slice(&chunk[..index + HEADER_END.len()]);
-            reader.consume(index + HEADER_END.len());
+        let previous_len = header.len();
+        header.extend_from_slice(chunk);
+        if let Some(index) = memmem::find(&header, HEADER_END) {
+            // Search the accumulated header rather than only the latest
+            // `fill_buf` slice: stdio transports may split `\r\n\r\n` across
+            // reads. Consume only bytes that belong to this frame's header so
+            // any already-buffered body bytes remain available to `read_exact`.
+            let header_len = index + HEADER_END.len();
+            let consumed = header_len.saturating_sub(previous_len);
+            reader.consume(consumed);
+            header.truncate(header_len);
             return parse_content_length(&header);
         }
-        header.extend_from_slice(chunk);
         if header.len() > MAX_HEADER_BYTES {
             return Err(CorsaError::Protocol("jsonrpc header is too large".into()));
         }
