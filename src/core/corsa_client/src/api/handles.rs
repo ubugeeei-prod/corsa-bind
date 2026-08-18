@@ -1,8 +1,8 @@
 use crate::{CorsaError, Result};
 use corsa_core::fast::CompactString;
 use serde::{
-    de::{Unexpected, Visitor},
     Deserialize, Deserializer, Serialize,
+    de::{Unexpected, Visitor},
 };
 use std::fmt;
 

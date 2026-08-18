@@ -3,7 +3,7 @@ use base64::Engine as _;
 use corsa::jsonrpc::{RawMessage, RequestId, RpcResponseError};
 use serde_json::{Value, json};
 use std::{
-    fs::{create_dir_all, OpenOptions},
+    fs::{OpenOptions, create_dir_all},
     io::{BufReader, BufWriter, Write as _},
     path::Path,
     sync::atomic::{AtomicBool, Ordering},

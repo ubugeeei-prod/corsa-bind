@@ -127,7 +127,9 @@ fn declaring_path_reads_both_node_handle_wire_formats() {
 #[test]
 fn parse_still_rejects_compact_handles() {
     // `parse` reports source offsets, which a compact handle does not carry.
-    assert!(NodeHandle::from("42.176./workspace/ctor.ts")
-        .parse()
-        .is_err());
+    assert!(
+        NodeHandle::from("42.176./workspace/ctor.ts")
+            .parse()
+            .is_err()
+    );
 }
