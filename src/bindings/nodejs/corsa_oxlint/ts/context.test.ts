@@ -202,7 +202,9 @@ describe("context", () => {
     expect(defaultCorsaExecutable(workspace, "linux")).toBe(fallback);
   });
 
-  it("prefers the installed native-preview tsgo binary when available", () => {
+  // The meta package's bin entry is a Node script behind a shebang, so it is
+  // only a usable runtime on platforms that honor shebang lines.
+  it("prefers the installed native-preview tsgo bin script on shebang platforms", () => {
     const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
     cleanupDirs.add(workspace);
     const packageDir = resolve(workspace, "node_modules/@typescript/native-preview");
@@ -219,7 +221,7 @@ describe("context", () => {
     );
     writeFileSync(binPath, "#!/usr/bin/env node\n");
 
-    expect(defaultCorsaExecutable(workspace)).toBe(realpathSync(binPath));
+    expect(defaultCorsaExecutable(workspace, "linux")).toBe(realpathSync(binPath));
   });
 
   it("resolves the native-preview platform executable on Windows", () => {
