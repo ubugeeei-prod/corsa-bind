@@ -52,9 +52,7 @@ const TRAVERSAL_ACCESSORS = [
  * `getAliasTypeArgumentsOfType`, because upstream `getTypeArguments` panics on
  * one.
  */
-const TRAVERSAL_ALTERNATIVES = [
-  ["getTypeArguments", "getAliasTypeArgumentsOfType"],
-] as const;
+const TRAVERSAL_ALTERNATIVES = [["getTypeArguments", "getAliasTypeArgumentsOfType"]] as const;
 
 interface RecordedRequest {
   readonly method: string;

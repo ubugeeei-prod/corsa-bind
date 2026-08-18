@@ -361,7 +361,7 @@ function callFactsOfNode(context: ContextWithParserOptions, node: any): Record<s
   if (signatureFacts.explicitTypeArgumentsRequired !== undefined) {
     facts.explicitTypeArgumentsRequired = signatureFacts.explicitTypeArgumentsRequired;
   }
-  const typeArgumentFacts = typeArgumentFactsOfCall(node, signatureFacts);
+  const typeArgumentFacts = typeArgumentFactsOfCall(context, node, signatureFacts);
   for (const [key, value] of Object.entries(typeArgumentFacts)) {
     facts[key] = value;
   }
@@ -514,7 +514,71 @@ function typeArgumentNodes(node: any): readonly any[] {
   return candidates.find(Array.isArray) ?? [];
 }
 
+/**
+ * Returns the defaults declared on the type parameters of the callee, when the
+ * callee is declared in the file being linted.
+ *
+ * Each entry is the rendered default text, or an empty string for a type
+ * parameter without one, so the result aligns with the type parameter list.
+ * Returns `undefined` when the declaration is not visible here, which keeps a
+ * caller from mistaking "no defaults" for "not found".
+ */
+function declaredTypeParameterDefaults(
+  context: ContextWithParserOptions,
+  node: any,
+): readonly string[] | undefined {
+  const name = identifierName(stripChainExpression(node.callee));
+  if (!name) {
+    return undefined;
+  }
+  const declaration = findTypeParameterOwner((context.sourceCode as any)?.ast, name);
+  const params = declaration?.typeParameters?.params;
+  if (!Array.isArray(params)) {
+    return undefined;
+  }
+  return params.map((param: any) =>
+    param?.default ? context.sourceCode.getText(param.default).trim() : "",
+  );
+}
+
+/**
+ * Finds the declaration of `name` that carries a type parameter list.
+ *
+ * Walks the whole tree rather than a scope chain because the oxlint context
+ * does not expose scope analysis.
+ */
+function findTypeParameterOwner(root: any, name: string): any {
+  if (!root || typeof root !== "object") {
+    return undefined;
+  }
+  const stack: any[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+    if (Array.isArray(current)) {
+      stack.push(...current);
+      continue;
+    }
+    if (current.id?.name === name && current.typeParameters?.params) {
+      return current;
+    }
+    for (const key of Object.keys(current)) {
+      if (key === "parent") {
+        continue;
+      }
+      const value = current[key];
+      if (value && typeof value === "object") {
+        stack.push(value);
+      }
+    }
+  }
+  return undefined;
+}
+
 function typeArgumentFactsOfCall(
+  context: ContextWithParserOptions,
   node: any,
   signatureFacts: CorsaCallSignatureFacts,
 ): Record<string, unknown> {
@@ -531,26 +595,76 @@ function typeArgumentFactsOfCall(
   if (listRange) {
     facts.typeArgumentListRange = listRange;
   }
+  const declaredDefaults = declaredTypeParameterDefaults(context, node);
   const parameterCount =
     signatureFacts.signature?.typeParameters?.length ??
+    declaredDefaults?.length ??
     signatureFacts.signature?.typeParameterDefaultTexts?.length ??
     0;
   if (parameterCount > 0) {
     facts.typeParameterCount = parameterCount;
   }
-  const defaultTexts = signatureFacts.signature?.typeParameterDefaultTexts ?? [];
+  // Upstream exposes no endpoint for a type parameter's default, and a stable
+  // TypeScript 7 declaration handle carries no source range to read it from.
+  // The declaration is in the AST being linted whenever it is in this file, so
+  // read it from there and only fall back to the signature's rendered texts.
+  const defaultTexts =
+    declaredDefaults ?? signatureFacts.signature?.typeParameterDefaultTexts ?? [];
   const lastIndex = typeArguments.length - 1;
   const lastDefaultText = defaultTexts[lastIndex];
   if (lastDefaultText !== undefined) {
     const hasDefault = lastDefaultText.trim().length > 0;
     facts.lastTypeParameterHasDefault = hasDefault;
-    if (hasDefault && signatureFacts.explicitTypeArgumentsRequired === false) {
-      facts.lastTypeArgumentEqualsDefault = true;
-      facts.lastTypeArgumentSameTypeFlagsAsDefault = true;
-      facts.lastTypeArgumentIdenticalToDefault = true;
+    if (hasDefault) {
+      const identical =
+        declaredDefaults !== undefined
+          ? typeNodesResolveToSameType(
+              context,
+              typeArguments[lastIndex],
+              declaredDefaultNode(context, node, lastIndex),
+            )
+          : signatureFacts.explicitTypeArgumentsRequired === false;
+      if (identical) {
+        facts.lastTypeArgumentEqualsDefault = true;
+        facts.lastTypeArgumentSameTypeFlagsAsDefault = true;
+        facts.lastTypeArgumentIdenticalToDefault = true;
+      }
     }
   }
   return facts;
+}
+
+/**
+ * Returns the AST node of the default declared on the callee's type parameter
+ * at `index`, when the callee is declared in the file being linted.
+ */
+function declaredDefaultNode(context: ContextWithParserOptions, node: any, index: number): any {
+  const name = identifierName(stripChainExpression(node.callee));
+  if (!name) {
+    return undefined;
+  }
+  const declaration = findTypeParameterOwner((context.sourceCode as any)?.ast, name);
+  return declaration?.typeParameters?.params?.[index]?.default;
+}
+
+/**
+ * Reports whether two type nodes denote the same checker type.
+ *
+ * Comparing the checker's own type identity keeps this from depending on how
+ * either type happens to be spelled.
+ */
+function typeNodesResolveToSameType(
+  context: ContextWithParserOptions,
+  left: any,
+  right: any,
+): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  const checker = checkerFor(context);
+  const leftType = checker.getTypeAtLocation(left);
+  const rightType = checker.getTypeAtLocation(right);
+  return leftType !== undefined && rightType !== undefined && leftType.id === rightType.id;
 }
 
 function typeArgumentListRange(
