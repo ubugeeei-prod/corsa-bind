@@ -49,6 +49,18 @@ pub fn symbol(name: &str) -> Value {
     })
 }
 
+/// A symbol response with a caller-chosen handle and name.
+pub fn named_symbol(id: &str, name: &str) -> Value {
+    json!({
+        "id": id,
+        "name": name,
+        "flags": 1,
+        "checkFlags": 0,
+        "declarations": ["1.3.80./workspace/src/index.ts"],
+        "valueDeclaration": "1.3.80./workspace/src/index.ts",
+    })
+}
+
 /// Every `TypeFlags` bit the client guards a type-relation request on, so one
 /// probe type can drive the whole traversal surface.
 const ALL_TRAVERSAL_TYPE_FLAGS: u32 = 0b1_1111_1111 << 20;
