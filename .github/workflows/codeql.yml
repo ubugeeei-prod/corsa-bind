@@ -1,0 +1,85 @@
+name: CodeQL
+
+# The `Analyze (...)` checks are required on `main`, but GitHub's managed Code
+# Quality analysis only starts when a pull request touches analyzable source.
+# Dependency bumps, workflow edits, and pull requests that do not target the
+# default branch therefore never reported those contexts, and auto-merge sat
+# waiting on checks that were never going to arrive. Owning the workflow makes
+# the three contexts run on every pull request.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: blacksmith-32vcpu-ubuntu-2404
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: none
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # The Go binding is cgo and links against the Rust C ABI, so `libcorsa_ffi`
+      # has to exist before the extractor can build the package. This mirrors the
+      # Non-Node Bindings job in ci.yml.
+      - name: Install Rust
+        if: matrix.language == 'go'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Setup Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: src/bindings/go/corsa_utils/go.mod
+          cache: false
+
+      - name: Build the Go binding
+        if: matrix.language == 'go'
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target/debug
+        run: |
+          cargo build -p corsa_ffi
+          cd src/bindings/go/corsa_utils
+          go build ./...
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          category: "/language:${{ matrix.language }}"
