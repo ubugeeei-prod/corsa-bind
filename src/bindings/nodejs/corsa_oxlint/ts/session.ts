@@ -64,6 +64,11 @@ const objectFlags = {
   mapped: 1 << 5,
 } as const;
 
+const symbolFlags = {
+  /** `SymbolFlags.TypeLiteral` — the checker's anonymous `__type` symbol. */
+  typeLiteral: 1 << 11,
+} as const;
+
 export class CorsaProjectSession {
   #client?: CorsaApiClient;
   #config?: { options: unknown; fileNames: string[] };
@@ -268,6 +273,19 @@ export class CorsaProjectSession {
     }
     if (type.symbol) {
       const symbol = this.getSymbol(type.symbol);
+      if (isUsableSymbol(symbol) && !isAnonymousTypeLiteralSymbol(symbol)) {
+        this.recoverDeclarationPositionsForSymbol(type, symbol);
+        this.#symbolsByTypeId.set(type.id, symbol);
+        return symbol;
+      }
+      // The checker names an anonymous type `__type`, which tells a rule
+      // nothing. A mapped utility type like `Readonly<Dog>` still carries the
+      // alias the source actually wrote, so prefer that.
+      const alias = this.aliasSymbol(type);
+      if (alias) {
+        this.#symbolsByTypeId.set(type.id, alias);
+        return alias;
+      }
       if (isUsableSymbol(symbol)) {
         this.recoverDeclarationPositionsForSymbol(type, symbol);
         this.#symbolsByTypeId.set(type.id, symbol);
@@ -872,6 +890,15 @@ export class CorsaProjectSession {
 
   getTypeArguments(type: CorsaType): readonly CorsaType[] {
     return this.withMissingTypeHandleFallback<readonly CorsaType[]>(type, [], () => {
+      // A mapped utility type such as `Readonly<Dog>` writes its argument
+      // through an alias, and upstream `getTypeArguments` panics on it. The
+      // checker still knows the alias arguments, and unlike the source-range
+      // fallback below it answers with real type handles, so the result stays
+      // usable for follow-up lookups like `getBaseTypes`.
+      const aliasArguments = this.aliasTypeArguments(type);
+      if (aliasArguments.length > 0) {
+        return aliasArguments;
+      }
       const source = this.sourceSliceForType(type);
       return this.rememberTypes(
         source
@@ -893,6 +920,48 @@ export class CorsaProjectSession {
             ) as unknown as readonly CorsaType[]),
       );
     });
+  }
+
+  /**
+   * Returns the type arguments a type was written with through a type alias.
+   *
+   * Empty when the type is not aliased, which is the common case.
+   */
+  private aliasTypeArguments(type: CorsaType): readonly CorsaType[] {
+    if (((type.objectFlags ?? 0) & objectFlags.mapped) === 0) {
+      return [];
+    }
+    try {
+      return this.rememberTypes(
+        this.client().callJson<readonly CorsaType[] | null>("getAliasTypeArgumentsOfType", {
+          snapshot: this.#snapshot,
+          project: this.projectIdForType(type),
+          type: type.id,
+        }) ?? [],
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Returns the alias symbol a type was written through, if any.
+   *
+   * The checker names an anonymous mapped type `__type`; the alias is what the
+   * source actually said, so it is the symbol a rule wants to see.
+   */
+  private aliasSymbol(type: CorsaType): CorsaSymbol | undefined {
+    try {
+      return this.rememberUsableSymbol(
+        this.client().callJson<CorsaSymbol | null>("getAliasSymbolOfType", {
+          snapshot: this.#snapshot,
+          project: this.projectIdForType(type),
+          type: type.id,
+        }),
+      );
+    } catch {
+      return undefined;
+    }
   }
 
   getTypesOfType(type: CorsaType): readonly CorsaType[] {
@@ -1503,6 +1572,15 @@ function isArrayOrTupleLikeType(session: CorsaProjectSession, type: CorsaType): 
 
 function isUsableSymbol(symbol: CorsaSymbol | null | undefined): symbol is CorsaSymbol {
   return symbol != null && !symbol.name.includes("\ufffd");
+}
+
+/**
+ * Reports whether a symbol is the checker's anonymous type-literal symbol.
+ *
+ * These are reported as `__type` and carry no information a rule can act on.
+ */
+function isAnonymousTypeLiteralSymbol(symbol: CorsaSymbol | undefined): boolean {
+  return symbol !== undefined && (symbol.flags & symbolFlags.typeLiteral) !== 0;
 }
 
 function isSyntheticTypeHandle(handle: string): boolean {
