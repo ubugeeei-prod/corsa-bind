@@ -93,3 +93,43 @@ fn parse_rejects_inverted_offsets() {
         matches!(err, CorsaError::InvalidHandle(handle) if handle == "5.1.123./workspace/main.ts")
     );
 }
+
+#[test]
+fn declaring_path_reads_both_node_handle_wire_formats() {
+    // Development runtimes: `<pos>.<end>.<kind>.<path>`.
+    assert_eq!(
+        NodeHandle::from("1.5.123./workspace/main.ts")
+            .declaring_path()
+            .as_deref(),
+        Some("/workspace/main.ts")
+    );
+    // Stable TypeScript 7 runtimes: `<node id>.<syntax kind>.<path>`. Rejecting
+    // this shape is what left construct signatures without parameter symbols
+    // (issue #441), so it has to resolve to the declaring file.
+    assert_eq!(
+        NodeHandle::from("42.176./workspace/ctor.ts")
+            .declaring_path()
+            .as_deref(),
+        Some("/workspace/ctor.ts")
+    );
+    // Dots inside the path survive both forms.
+    assert_eq!(
+        NodeHandle::from("42.176./workspace/a.b/ctor.d.ts")
+            .declaring_path()
+            .as_deref(),
+        Some("/workspace/a.b/ctor.d.ts")
+    );
+    assert_eq!(NodeHandle::from("not-a-handle").declaring_path(), None);
+    assert_eq!(NodeHandle::from("1.5").declaring_path(), None);
+    assert_eq!(NodeHandle::from("1.5.123.").declaring_path(), None);
+}
+
+#[test]
+fn parse_still_rejects_compact_handles() {
+    // `parse` reports source offsets, which a compact handle does not carry.
+    assert!(
+        NodeHandle::from("42.176./workspace/ctor.ts")
+            .parse()
+            .is_err()
+    );
+}

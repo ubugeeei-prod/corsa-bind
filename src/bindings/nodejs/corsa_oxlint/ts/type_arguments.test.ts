@@ -1,13 +1,11 @@
-import { existsSync } from "node:fs";
-
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 
 import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
-import { resolvedRealCorsaBinary } from "./test_support";
+import { integrationCase as resolveIntegrationCase, resolvedRealCorsaBinary } from "./test_support";
 
 const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
-const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+const integrationCase = resolveIntegrationCase();
 
 describe("corsa oxlint type arguments", () => {
   integrationCase("returns empty type arguments for non-generic types", () => {

@@ -36,6 +36,14 @@ pub(crate) struct SymbolOnlyRequest {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct SymbolProjectRequest {
+    pub snapshot: SnapshotHandle,
+    pub project: ProjectHandle,
+    pub symbol: SymbolHandle,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct TypeOnlyRequest {
     pub snapshot: SnapshotHandle,
     pub r#type: TypeHandle,

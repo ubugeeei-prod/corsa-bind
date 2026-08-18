@@ -161,6 +161,9 @@ impl NodeHandle {
     /// assert_eq!(parsed.path.as_str(), "/workspace/main.ts");
     /// # Ok::<(), corsa_client::CorsaError>(())
     /// ```
+    ///
+    /// Compact stable-runtime handles carry no offsets and are rejected here;
+    /// use [`Self::declaring_path`] when only the declaring file is needed.
     pub fn parse(&self) -> Result<ParsedNodeHandle> {
         let mut parts = self.0.splitn(4, '.');
         let invalid = || CorsaError::InvalidHandle(self.0.clone());
@@ -189,6 +192,51 @@ impl NodeHandle {
             kind,
             path: path.into(),
         })
+    }
+
+    /// Returns the file path a node handle declares, in either wire format.
+    ///
+    /// Corsa emits two node handle shapes. Development runtimes use the full
+    /// `<pos>.<end>.<kind>.<path>` form that [`Self::parse`] understands, while
+    /// stable TypeScript 7 runtimes use a compact `<node id>.<kind>.<path>`
+    /// form that carries no source offsets and so cannot be parsed into a
+    /// range. Both still name the declaring file, which is enough for
+    /// file-scoped work such as recovering parameter names from source.
+    ///
+    /// Returns `None` when the handle matches neither shape.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use corsa_client::NodeHandle;
+    ///
+    /// let full = NodeHandle::from("1.5.123./workspace/main.ts");
+    /// assert_eq!(full.declaring_path().as_deref(), Some("/workspace/main.ts"));
+    ///
+    /// let compact = NodeHandle::from("42.176./workspace/main.ts");
+    /// assert_eq!(compact.declaring_path().as_deref(), Some("/workspace/main.ts"));
+    /// ```
+    pub fn declaring_path(&self) -> Option<CompactString> {
+        let parts = self.0.split('.').collect::<Vec<_>>();
+        let [first, second, third, rest @ ..] = parts.as_slice() else {
+            return None;
+        };
+        if first.parse::<u32>().is_err() || second.parse::<u32>().is_err() {
+            return None;
+        }
+        // A numeric third field is the syntax kind of a full handle, so the
+        // path starts after it. Otherwise the handle is the compact form and
+        // the path starts at the third field itself.
+        let path = if third.parse::<u32>().is_ok() {
+            rest.join(".")
+        } else {
+            std::iter::once(third)
+                .chain(rest)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(".")
+        };
+        (!path.is_empty()).then(|| CompactString::from(path))
     }
 }
 

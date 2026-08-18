@@ -346,6 +346,7 @@ jobs:
       - test
       - public-facade
       - non-node-bindings
+      - real-corsa-smoke
     if: ${{ always() }}
     steps:
       - name: Verify focused quality checks
@@ -359,6 +360,7 @@ jobs:
           TEST: ${{ needs.test.result }}
           PUBLIC_FACADE: ${{ needs['public-facade'].result }}
           NON_NODE_BINDINGS: ${{ needs['non-node-bindings'].result }}
+          REAL_CORSA_SMOKE: ${{ needs['real-corsa-smoke'].result }}
         run: |
           failed=0
           for check in \
@@ -370,7 +372,8 @@ jobs:
             "BUILD=$BUILD" \
             "TEST=$TEST" \
             "PUBLIC_FACADE=$PUBLIC_FACADE" \
-            "NON_NODE_BINDINGS=$NON_NODE_BINDINGS"; do
+            "NON_NODE_BINDINGS=$NON_NODE_BINDINGS" \
+            "REAL_CORSA_SMOKE=$REAL_CORSA_SMOKE"; do
             name="${check%%=*}"
             result="${check#*=}"
             echo "$name: $result"
@@ -386,14 +389,16 @@ jobs:
     name: Real Corsa Smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    if: ${{ github.event_name != 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - blacksmith-32vcpu-ubuntu-2404
-          - macos-15
-          - blacksmith-32vcpu-windows-2025
+        # 型ハンドル系のプロトコル退行は実ランタイムでしか観測できず、統合
+        # テストは実バイナリが無いと skip に落ちる。PR でも ubuntu レグだけは
+        # 実ランタイムで回して、マージ前に弾く。
+        os: >-
+          ${{ fromJSON(github.event_name == 'pull_request'
+          && '["blacksmith-32vcpu-ubuntu-2404"]'
+          || '["blacksmith-32vcpu-ubuntu-2404","macos-15","blacksmith-32vcpu-windows-2025"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -441,6 +446,16 @@ jobs:
 
       - name: Real Corsa smoke tests
         run: cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck
+
+      # `vp run -w test` runs on a machine with no Corsa binary, so every
+      # `integrationCase` in the TypeScript suites degrades to `it.skip` there.
+      # This is the only job that has a real runtime, so it is the only place
+      # those cases can actually execute. CORSA_REQUIRE_INTEGRATION turns a
+      # missing runtime into a failure so the suite can never go quiet again.
+      - name: Real Corsa TypeScript integration tests
+        env:
+          CORSA_REQUIRE_INTEGRATION: "1"
+        run: vp run -w test_ts
 
       - name: Real examples
         run: vp run -w examples_real

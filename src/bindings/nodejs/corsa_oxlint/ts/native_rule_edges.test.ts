@@ -1,13 +1,11 @@
-import { existsSync } from "node:fs";
-
-import { describe, it } from "vitest";
+import { describe } from "vitest";
 
 import { RuleTester } from "./rule_tester";
-import { resolvedRealCorsaBinary } from "./test_support";
+import { integrationCase as resolveIntegrationCase, resolvedRealCorsaBinary } from "./test_support";
 import { corsaOxlintRules } from "./rules";
 
 const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
-const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+const integrationCase = resolveIntegrationCase();
 
 describe("corsa oxlint native rule edges", () => {
   integrationCase("covers array and enum edge cases", () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -6,14 +6,15 @@ import { describe, expect, it } from "vitest";
 
 import { createTypeChecker } from "./checker";
 import { OxlintUtils } from "./oxlint_utils";
+import { SignatureKind } from "./types";
 import { RuleTester } from "./rule_tester";
-import { resolvedRealCorsaBinary } from "./test_support";
+import { integrationCase as resolveIntegrationCase, resolvedRealCorsaBinary } from "./test_support";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
-const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+const integrationCase = resolveIntegrationCase();
 
 describe("corsa oxlint type locations", () => {
   integrationCase("resolves types from declaration wrapper nodes", () => {
@@ -1319,6 +1320,144 @@ describe("corsa oxlint type locations", () => {
 
     expect(seen.atLocation).toBe("MyPropType");
     expect(seen.ofSymbol).toBe("MyPropType");
+  });
+
+  /**
+   * Issue #440: on a stable TypeScript 7 runtime `getTypesOfType` threw
+   * `empty project ID for type handle <n>` for every union shape, because the
+   * request never named the project that issued the type handle. An escaping
+   * throw also dropped every diagnostic for the file, including ones from
+   * unrelated AST-only rules.
+   */
+  integrationCase("enumerates union members for every union shape", () => {
+    const seen: Record<string, readonly string[]> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "union-members",
+      meta: {
+        type: "problem",
+        docs: { description: "exercise union member enumeration", requiresTypeChecking: true },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          TSPropertySignature(node: any) {
+            const type = checker.getTypeAtLocation(node);
+            if (!type || !checker.isUnionType(type)) {
+              return;
+            }
+            seen[node.key.name] = checker
+              .getTypesOfType(type)
+              .map((member) => checker.typeToString(member));
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("union-members", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Alpha {}",
+            "export interface Shapes {",
+            "  readonly optional?: Alpha;",
+            "  readonly withNull: Alpha | null;",
+            "  readonly primitives: string | number;",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.optional).toEqual(expect.arrayContaining(["undefined", "Alpha"]));
+    expect(seen.withNull).toEqual(expect.arrayContaining(["null", "Alpha"]));
+    expect(seen.primitives).toEqual(expect.arrayContaining(["string", "number"]));
+  });
+
+  /**
+   * Issue #441: on a stable TypeScript 7 runtime the construct signature of a
+   * class with an explicit constructor came back with `parameterSymbols`
+   * undefined, because that runtime's compact declaration handle carries no
+   * source range and the parameter names were only ever recovered by slicing
+   * the declaration out of the source.
+   */
+  integrationCase("exposes parameter symbols on explicit construct signatures", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "construct-signature-parameters",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise construct signature parameter symbols",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          NewExpression(node: any) {
+            const calleeType = checker.getTypeAtLocation(node.callee);
+            if (!calleeType) {
+              return;
+            }
+            const signature = checker.getSignaturesOfType(calleeType, SignatureKind.Construct)[0];
+            if (!signature) {
+              return;
+            }
+            seen[node.callee.name] = signature.parameterSymbols?.map((symbol) => symbol.name);
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("construct-signature-parameters", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Beta {",
+            "  constructor(first: number, second: string) {}",
+            "}",
+            "",
+            'export const b = new Beta(1, "x");',
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.Beta).toEqual(["first", "second"]);
   });
 
   integrationCase("exposes constituent and mapped type traversal helpers", () => {
