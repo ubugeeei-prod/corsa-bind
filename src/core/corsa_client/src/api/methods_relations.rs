@@ -613,6 +613,11 @@ impl ApiClient {
     /// Returns the direct type parameters declared on a type.
     ///
     /// Missing server data is normalized to an empty vector.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_type_parameters_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_type_parameters_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -626,9 +631,36 @@ impl ApiClient {
         .map(|items| items.unwrap_or_default())
     }
 
+    /// Returns the direct type parameters declared on a type.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_type_parameters_of_type`].
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_type_parameters_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        self.call::<Option<Vec<TypeResponse>>, _>(
+            "getTypeParametersOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
     /// Returns outer type parameters captured by a type.
     ///
     /// Missing server data is normalized to an empty vector.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_outer_type_parameters_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_outer_type_parameters_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -642,9 +674,36 @@ impl ApiClient {
         .map(|items| items.unwrap_or_default())
     }
 
+    /// Returns outer type parameters captured by a type.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_outer_type_parameters_of_type`].
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_outer_type_parameters_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        self.call::<Option<Vec<TypeResponse>>, _>(
+            "getOuterTypeParametersOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
     /// Returns local type parameters introduced while resolving a type.
     ///
     /// Missing server data is normalized to an empty vector.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_local_type_parameters_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_local_type_parameters_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -658,7 +717,34 @@ impl ApiClient {
         .map(|items| items.unwrap_or_default())
     }
 
+    /// Returns local type parameters introduced while resolving a type.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_local_type_parameters_of_type`].
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_local_type_parameters_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        self.call::<Option<Vec<TypeResponse>>, _>(
+            "getLocalTypeParametersOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
     /// Returns the object side of a wrapper type, if one exists.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_object_type_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_object_type_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -668,7 +754,32 @@ impl ApiClient {
             .await
     }
 
+    /// Returns the object side of a wrapper type, if one exists.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_object_type_of_type`].
+    pub async fn get_object_type_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getObjectTypeOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+    }
+
     /// Returns the index side of a wrapper type, if one exists.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_index_type_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_index_type_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -678,7 +789,32 @@ impl ApiClient {
             .await
     }
 
+    /// Returns the index side of a wrapper type, if one exists.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_index_type_of_type`].
+    pub async fn get_index_type_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getIndexTypeOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+    }
+
     /// Returns the check side of a wrapper or conditional type, if one exists.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_check_type_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_check_type_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -688,7 +824,32 @@ impl ApiClient {
             .await
     }
 
+    /// Returns the check side of a wrapper or conditional type, if one exists.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_check_type_of_type`].
+    pub async fn get_check_type_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getCheckTypeOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+    }
+
     /// Returns the `extends` side of a conditional type, if one exists.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_extends_type_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_extends_type_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -698,7 +859,32 @@ impl ApiClient {
             .await
     }
 
+    /// Returns the `extends` side of a conditional type, if one exists.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_extends_type_of_type`].
+    pub async fn get_extends_type_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getExtendsTypeOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+    }
+
     /// Returns the base type recorded directly on a type, if one exists.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_base_type_of_type_in_project`] when a project
+    /// handle is available.
     pub async fn get_base_type_of_type(
         &self,
         snapshot: SnapshotHandle,
@@ -706,6 +892,26 @@ impl ApiClient {
     ) -> Result<Option<TypeResponse>> {
         self.call_optional("getBaseTypeOfType", TypeOnlyRequest { snapshot, r#type })
             .await
+    }
+
+    /// Returns the base type recorded directly on a type, if one exists.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_base_type_of_type`].
+    pub async fn get_base_type_of_type_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getBaseTypeOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
     }
 
     /// Returns the constraint recorded directly on a type, if one exists.

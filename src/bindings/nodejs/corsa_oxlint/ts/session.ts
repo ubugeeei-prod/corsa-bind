@@ -660,7 +660,7 @@ export class CorsaProjectSession {
     try {
       const text = this.client().typeToString(
         this.#snapshot!,
-        this.projectId(),
+        this.projectIdForType(type),
         type.id,
         undefined,
         flags,
@@ -683,7 +683,7 @@ export class CorsaProjectSession {
       this.rememberType(
         this.client().callJson("getBaseTypeOfLiteralType", {
           snapshot: this.#snapshot,
-          project: this.projectId(),
+          project: this.projectIdForType(type),
           type: type.id,
         }),
       ),
@@ -695,7 +695,7 @@ export class CorsaProjectSession {
       this.rememberSymbols(
         this.client().callJson("getPropertiesOfType", {
           snapshot: this.#snapshot,
-          project: this.projectId(),
+          project: this.projectIdForType(type),
           type: type.id,
         }) ?? [],
       ),
@@ -708,7 +708,7 @@ export class CorsaProjectSession {
       return this.rememberSignatures(
         this.client().callJson("getSignaturesOfType", {
           snapshot: this.#snapshot,
-          project: this.projectId(),
+          project: this.projectIdForType(type),
           type: type.id,
           kind,
           ...source,
@@ -741,7 +741,7 @@ export class CorsaProjectSession {
       const source = this.sourceContextForType(type);
       const facts = this.client().callJson<CorsaCallSignatureFacts>("getCallSignatureFacts", {
         snapshot: this.#snapshot,
-        project: this.projectId(),
+        project: this.projectIdForType(type),
         type: type.id,
         kind,
         ...source,
@@ -794,7 +794,7 @@ export class CorsaProjectSession {
       const baseTypes = this.rememberTypes(
         this.client().callJson<readonly CorsaType[]>("getBaseTypes", {
           snapshot: this.#snapshot,
-          project: this.projectId(),
+          project: this.projectIdForType(type),
           type: type.id,
           texts: this.typeTexts(type),
         }) ?? [],
@@ -877,7 +877,7 @@ export class CorsaProjectSession {
         source
           ? (this.client().getTypeArgumentsAtSourceRange(
               this.#snapshot!,
-              this.projectId(),
+              this.projectIdForType(type),
               type.id,
               type.objectFlags,
               source.node.fileName,
@@ -887,7 +887,7 @@ export class CorsaProjectSession {
             ) as unknown as readonly CorsaType[])
           : (this.client().getTypeArguments(
               this.#snapshot!,
-              this.projectId(),
+              this.projectIdForType(type),
               type.id,
               type.objectFlags,
             ) as unknown as readonly CorsaType[]),
@@ -974,7 +974,7 @@ export class CorsaProjectSession {
   getConstraintOfType(type: CorsaType): CorsaType | undefined {
     return this.withMissingTypeHandleFallback<CorsaType | undefined>(type, undefined, () =>
       this.rememberType(
-        this.client().getConstraintOfType(this.#snapshot!, this.projectId(), type.id) as
+        this.client().getConstraintOfType(this.#snapshot!, this.projectIdForType(type), type.id) as
           | CorsaType
           | undefined,
       ),
@@ -986,6 +986,7 @@ export class CorsaProjectSession {
       this.rememberType(
         this.client().callJson<CorsaType | null>(method, {
           snapshot: this.#snapshot,
+          project: this.projectIdForType(type),
           type: type.id,
         }) ?? undefined,
       ),
@@ -997,6 +998,7 @@ export class CorsaProjectSession {
       this.rememberTypes(
         this.client().callJson<readonly CorsaType[] | null>(method, {
           snapshot: this.#snapshot,
+          project: this.projectIdForType(type),
           type: type.id,
         }) ?? [],
       ),
@@ -1412,6 +1414,19 @@ export class CorsaProjectSession {
       );
     }
     return id;
+  }
+
+  /**
+   * Resolves the project a type handle must be looked up in.
+   *
+   * Stable TypeScript 7 runtimes resolve object handles per project and reject
+   * project-less lookups with `empty project ID for type handle <n>`, so every
+   * request that carries a type handle has to name a project. Prefer the
+   * project that issued the handle over the first project in the snapshot: a
+   * handle minted by one project is not resolvable in another.
+   */
+  private projectIdForType(type: CorsaType): string {
+    return this.#typeLookupById.get(type.id)?.projectId ?? this.projectId();
   }
 
   private supportedOverlayText(

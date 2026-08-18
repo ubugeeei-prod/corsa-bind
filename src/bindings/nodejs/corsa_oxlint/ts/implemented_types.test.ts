@@ -8,11 +8,11 @@ import { describe, expect, it } from "vitest";
 import { createTypeChecker } from "./checker";
 import { OxlintUtils } from "./oxlint_utils";
 import { RuleTester } from "./rule_tester";
-import { resolvedRealCorsaBinary } from "./test_support";
+import { integrationCase as resolveIntegrationCase, resolvedRealCorsaBinary } from "./test_support";
 
 const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const stableTypeScript7Binary = optionalStableTypeScript7Executable() ?? "";
-const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+const integrationCase = resolveIntegrationCase();
 const stableTypeScript7Case = existsSync(stableTypeScript7Binary) ? it : it.skip;
 
 /**

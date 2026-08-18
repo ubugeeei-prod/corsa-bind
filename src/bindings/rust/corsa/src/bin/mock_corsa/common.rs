@@ -49,14 +49,36 @@ pub fn symbol(name: &str) -> Value {
     })
 }
 
+/// Every `TypeFlags` bit the client guards a type-relation request on, so one
+/// probe type can drive the whole traversal surface.
+const ALL_TRAVERSAL_TYPE_FLAGS: u32 = 0b1_1111_1111 << 20;
+/// `classOrInterface | reference | mapped`.
+const ALL_TRAVERSAL_OBJECT_FLAGS: u32 = 0b11 | (1 << 2) | (1 << 5);
+
 pub fn type_response(id: &str) -> Value {
+    let (flags, object_flags) = if all_traversal_flags_enabled() {
+        (ALL_TRAVERSAL_TYPE_FLAGS, ALL_TRAVERSAL_OBJECT_FLAGS)
+    } else {
+        (262144, 16)
+    };
     json!({
         "id": id,
-        "flags": 262144,
-        "objectFlags": 16,
+        "flags": flags,
+        "objectFlags": object_flags,
         "symbol": "s0000000000000001",
         "texts": ["type-text"],
     })
+}
+
+/// Whether the mock should report a type that satisfies every client-side
+/// traversal guard.
+///
+/// Clients skip most type-relation requests unless the type carries the
+/// matching `TypeFlags` bit, so protocol-contract tests would otherwise only
+/// ever observe a handful of endpoints. `CORSA_MOCK_ALL_TYPE_FLAGS` lets such a
+/// test drive the full surface from a single type.
+fn all_traversal_flags_enabled() -> bool {
+    std::env::var_os("CORSA_MOCK_ALL_TYPE_FLAGS").is_some()
 }
 
 pub fn signature() -> Value {
@@ -267,4 +289,49 @@ fn range() -> Value {
         "start": { "line": 0, "character": 0 },
         "end": { "line": 0, "character": 5 }
     })
+}
+
+/// Handle-carrying request fields that upstream can only resolve inside a
+/// project, in the order upstream validates them.
+const PROJECT_SCOPED_HANDLE_FIELDS: [(&str, &str); 3] = [
+    ("type", "type"),
+    ("symbol", "symbol"),
+    ("signature", "signature"),
+];
+
+/// Rejects requests that reference an object handle without naming the project
+/// that issued it.
+///
+/// TypeScript 7 stable runtimes resolve type, symbol, and signature handles per
+/// project and answer project-less lookups with
+/// `empty project ID for <kind> handle <n>`. The mock enforces the same
+/// contract so a binding that forgets to forward the project handle fails in
+/// the normal test suite instead of only against a real runtime.
+///
+/// Every regression in this family — issues #384, #389, #390, #392, #393, #395,
+/// #410, #413, #416, #418, #427, and #440 — reached a release because the mock
+/// answered project-less requests that upstream rejects.
+pub fn missing_project_message(params: &Value) -> Option<String> {
+    let params = params.as_object()?;
+    if params
+        .get("project")
+        .and_then(Value::as_str)
+        .is_some_and(|project| !project.trim().is_empty())
+    {
+        return None;
+    }
+    PROJECT_SCOPED_HANDLE_FIELDS
+        .iter()
+        .find_map(|(field, kind)| {
+            let handle = handle_text(params.get(*field)?)?;
+            Some(format!("empty project ID for {kind} handle {handle}"))
+        })
+}
+
+fn handle_text(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) if !text.trim().is_empty() => Some(text.clone()),
+        Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    }
 }

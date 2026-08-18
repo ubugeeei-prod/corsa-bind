@@ -3,7 +3,7 @@ use base64::Engine as _;
 use corsa::jsonrpc::{RawMessage, RequestId, RpcResponseError};
 use serde_json::{Value, json};
 use std::{
-    fs::{OpenOptions, create_dir_all},
+    fs::{create_dir_all, OpenOptions},
     io::{BufReader, BufWriter, Write as _},
     path::Path,
     sync::atomic::{AtomicBool, Ordering},
@@ -40,6 +40,10 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             continue;
         }
         if let (Some(id), Some(error)) = (id.clone(), release_error(method.as_str())) {
+            jsonrpc::write_message(&mut writer, &RawMessage::error(id, error))?;
+            continue;
+        }
+        if let (Some(id), Some(error)) = (id.clone(), missing_project_error(&params)) {
             jsonrpc::write_message(&mut writer, &RawMessage::error(id, error))?;
             continue;
         }
@@ -164,6 +168,16 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             jsonrpc::write_message(&mut writer, &RawMessage::response(id, response))?;
         }
     }
+}
+
+/// Mirrors upstream's per-project handle resolution so project-less lookups
+/// fail here exactly as they do against a real TypeScript 7 stable runtime.
+fn missing_project_error(params: &Value) -> Option<RpcResponseError> {
+    common::missing_project_message(params).map(|message| RpcResponseError {
+        code: -32000,
+        message: message.into(),
+        data: None,
+    })
 }
 
 fn release_error(method: &str) -> Option<RpcResponseError> {

@@ -4,6 +4,8 @@
 
 ### Added
 
+- `ApiClient` gained project-scoped variants for every relation endpoint that previously only had a project-less form: `get_type_parameters_of_type_in_project`, `get_outer_type_parameters_of_type_in_project`, `get_local_type_parameters_of_type_in_project`, `get_object_type_of_type_in_project`, `get_index_type_of_type_in_project`, `get_check_type_of_type_in_project`, `get_extends_type_of_type_in_project`, `get_base_type_of_type_in_project`, `get_parent_of_symbol_in_project`, `get_members_of_symbol_in_project`, `get_exports_of_symbol_in_project`, and `get_export_symbol_of_symbol_in_project`. Stable TypeScript 7 runtimes reject the project-less forms.
+- `NodeHandle::declaring_path` reads the declaring file out of both node handle wire formats, including the compact stable-runtime form that `NodeHandle::parse` rejects.
 - `corsa-oxlint` now exposes a `RuleContext<MessageId, Options>` type and generic `defineRule` wrapper for narrowing rule options and report message IDs.
 - `corsa-oxlint` now exposes per-node-type `ESTree.*` aliases from the root entrypoint.
 
@@ -13,6 +15,9 @@
 
 ### Fixed
 
+- type relation requests that carry a type handle now always name the project that issued it, so `getTypesOfType` returns union members instead of throwing `empty project ID for type handle <n>` ([#440](https://github.com/ubugeeei-prod/corsa-bind/issues/440)). The same omission silently affected `getTargetOfType`, `getTypeParametersOfType`, `getOuterTypeParametersOfType`, `getLocalTypeParametersOfType`, `getObjectTypeOfType`, `getIndexTypeOfType`, `getCheckTypeOfType`, `getExtendsTypeOfType`, and `getBaseTypeOfType`, which are fixed with it.
+- construct signatures of classes with an explicit constructor now expose `parameterSymbols` on stable TypeScript 7 runtimes, whose compact declaration handles carry no source range and so previously defeated parameter-name recovery ([#441](https://github.com/ubugeeei-prod/corsa-bind/issues/441)).
+- type-handle requests now resolve in the project that issued the handle rather than the snapshot's first project, which matters once a snapshot spans several projects.
 - type, signature, and symbol relation requests now mirror numeric handles into the `objectId` field that TypeScript 7 stable runtimes expect, so `getSymbolOfType`, `getBaseTypes` metadata, and `getImplementedTypesOfType` keep working for class types imported from other files ([#427](https://github.com/ubugeeei-prod/corsa-bind/issues/427)).
 - `corsa-oxlint` recovers class-declaration positions for compact TypeScript 7 declaration handles instead of misreading node ids as source offsets, keeping same-named classes in different scopes distinct.
 - `corsa-oxlint` no longer treats a compact TypeScript 7 declaration handle as a source range, resolves type symbols in the project that owns the type handle, and ignores `class` text inside comments and string literals when recovering a declaration position.

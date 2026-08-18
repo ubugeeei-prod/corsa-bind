@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,7 +9,7 @@ import { OxlintUtils } from "./oxlint_utils";
 import { getParserServices } from "./parser_services";
 import { decorateRule, definePlugin } from "./plugin";
 import { RuleTester } from "./rule_tester";
-import { resolvedRealCorsaBinary } from "./test_support";
+import { integrationCase as resolveIntegrationCase, resolvedRealCorsaBinary } from "./test_support";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
@@ -730,7 +730,7 @@ describe("corsa oxlint", () => {
     }
   });
 
-  const integrationCase = existsSync(realCorsaBinary) ? it : it.skip;
+  const integrationCase = resolveIntegrationCase();
 
   integrationCase("runs a type-aware custom rule through oxlint RuleTester", () => {
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

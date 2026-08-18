@@ -252,7 +252,9 @@ describe("CorsaApiClient", () => {
         client.getSymbolAtPosition(snapshot.snapshot, project.id, "/workspace/src/index.ts", 1)
           ?.name,
       ).toBe("value");
-      expect(client.getSymbolOfType(snapshot.snapshot, stringType.id)?.name).toBe("value");
+      expect(client.getSymbolOfType(snapshot.snapshot, stringType.id, project.id)?.name).toBe(
+        "value",
+      );
       expect(
         client.getTypeArguments(
           snapshot.snapshot,
@@ -326,9 +328,9 @@ describe("CorsaApiClient", () => {
         1,
       );
       expect(nodeType?.id).toBe("t0000000000000001");
-      await expect(client.getSymbolOfTypeAsync(snapshot.snapshot, stringType.id)).resolves.toEqual(
-        expect.objectContaining({ name: "value" }),
-      );
+      await expect(
+        client.getSymbolOfTypeAsync(snapshot.snapshot, stringType.id, project.id),
+      ).resolves.toEqual(expect.objectContaining({ name: "value" }));
       await expect(
         client.typeToStringAsync(snapshot.snapshot, project.id, stringType.id),
       ).resolves.toBe("type:string");

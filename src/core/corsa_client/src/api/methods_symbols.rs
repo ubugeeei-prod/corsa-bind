@@ -15,6 +15,7 @@ use super::{
     },
     requests_symbols::{
         NodeBatchRequest, PositionBatchRequest, SymbolBatchRequest, SymbolOnlyRequest,
+        SymbolProjectRequest,
     },
 };
 use crate::Result;
@@ -256,6 +257,11 @@ impl ApiClient {
     }
 
     /// Returns the parent symbol of `symbol`, if any.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_parent_of_symbol_in_project`] when a project
+    /// handle is available.
     pub async fn get_parent_of_symbol(
         &self,
         snapshot: SnapshotHandle,
@@ -265,9 +271,34 @@ impl ApiClient {
             .await
     }
 
+    /// Returns the parent symbol of `symbol`, if any.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_parent_of_symbol`].
+    pub async fn get_parent_of_symbol_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Option<SymbolResponse>> {
+        self.call_optional(
+            "getParentOfSymbol",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
+        )
+        .await
+    }
+
     /// Returns member symbols directly attached to `symbol`.
     ///
     /// Missing server data is normalized to an empty vector.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_members_of_symbol_in_project`] when a project
+    /// handle is available.
     pub async fn get_members_of_symbol(
         &self,
         snapshot: SnapshotHandle,
@@ -281,9 +312,37 @@ impl ApiClient {
         .map(|items| items.unwrap_or_default())
     }
 
+    /// Returns member symbols directly attached to `symbol`.
+    ///
+    /// Missing server data is normalized to an empty vector.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_members_of_symbol`].
+    pub async fn get_members_of_symbol_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Vec<SymbolResponse>> {
+        self.call::<Option<Vec<SymbolResponse>>, _>(
+            "getMembersOfSymbol",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
     /// Returns exported symbols directly attached to `symbol`.
     ///
     /// Missing server data is normalized to an empty vector.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_exports_of_symbol_in_project`] when a project
+    /// handle is available.
     pub async fn get_exports_of_symbol(
         &self,
         snapshot: SnapshotHandle,
@@ -297,10 +356,38 @@ impl ApiClient {
         .map(|items| items.unwrap_or_default())
     }
 
+    /// Returns exported symbols directly attached to `symbol`.
+    ///
+    /// Missing server data is normalized to an empty vector.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_exports_of_symbol`].
+    pub async fn get_exports_of_symbol_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Vec<SymbolResponse>> {
+        self.call::<Option<Vec<SymbolResponse>>, _>(
+            "getExportsOfSymbol",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
     /// Returns the export-facing symbol associated with `symbol`.
     ///
     /// Unlike many other helpers in this group, this endpoint is expected to
     /// succeed with a concrete symbol response.
+    ///
+    /// TypeScript 7 stable runtimes resolve this request inside a specific
+    /// project and reject project-less lookups; prefer
+    /// [`ApiClient::get_export_symbol_of_symbol_in_project`] when a project
+    /// handle is available.
     pub async fn get_export_symbol_of_symbol(
         &self,
         snapshot: SnapshotHandle,
@@ -309,6 +396,29 @@ impl ApiClient {
         self.call(
             "getExportSymbolOfSymbol",
             SymbolOnlyRequest { snapshot, symbol },
+        )
+        .await
+    }
+
+    /// Returns the export-facing symbol associated with `symbol`.
+    ///
+    /// Unlike many other helpers in this group, this endpoint is expected to
+    /// succeed with a concrete symbol response.
+    ///
+    /// Project-scoped variant of [`ApiClient::get_export_symbol_of_symbol`].
+    pub async fn get_export_symbol_of_symbol_in_project(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<SymbolResponse> {
+        self.call(
+            "getExportSymbolOfSymbol",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
         )
         .await
     }

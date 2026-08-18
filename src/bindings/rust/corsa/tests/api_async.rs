@@ -327,14 +327,22 @@ fn async_api_full_surface_methods() {
         );
         assert!(
             client
-                .get_parent_of_symbol(snapshot.handle.clone(), symbol.id.clone())
+                .get_parent_of_symbol_in_project(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    symbol.id.clone(),
+                )
                 .await
                 .unwrap()
                 .is_some()
         );
         assert_eq!(
             client
-                .get_members_of_symbol(snapshot.handle.clone(), symbol.id.clone())
+                .get_members_of_symbol_in_project(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    symbol.id.clone(),
+                )
                 .await
                 .unwrap()
                 .len(),
@@ -342,14 +350,22 @@ fn async_api_full_surface_methods() {
         );
         assert_eq!(
             client
-                .get_exports_of_symbol(snapshot.handle.clone(), symbol.id.clone())
+                .get_exports_of_symbol_in_project(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    symbol.id.clone(),
+                )
                 .await
                 .unwrap()
                 .len(),
             1
         );
         let exported = client
-            .get_export_symbol_of_symbol(snapshot.handle.clone(), symbol.id.clone())
+            .get_export_symbol_of_symbol_in_project(
+                snapshot.handle.clone(),
+                project.clone(),
+                symbol.id.clone(),
+            )
             .await
             .unwrap();
         assert_eq!(exported.name, "exported");
