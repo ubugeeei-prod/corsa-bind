@@ -32,12 +32,6 @@ export function defaultCorsaExecutable(
   if (stableTypeScript) {
     return stableTypeScript;
   }
-  const nativePreview =
-    resolveNativePreviewExecutableFrom(resolve(rootDir, "package.json"), platform) ??
-    (resolveFrom ? resolveNativePreviewExecutableFrom(resolveFrom, platform) : undefined);
-  if (nativePreview) {
-    return nativePreview;
-  }
   const fallback = resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa");
   if (existsSync(fallback)) {
     return fallback;
@@ -45,7 +39,7 @@ export function defaultCorsaExecutable(
   throw new Error(
     [
       "corsa-oxlint could not locate a Corsa runtime executable.",
-      "Install `typescript` 7 or `@typescript/native-preview`, set `CORSA_EXECUTABLE`, configure `parserOptions.corsa.executable`, or pass `resolveFrom` to `definePlugin`.",
+      "Install `typescript` 7, set `CORSA_EXECUTABLE`, configure `parserOptions.corsa.executable`, or pass `resolveFrom` to `definePlugin`.",
     ].join(" "),
   );
 }
@@ -232,81 +226,9 @@ function isTypeScriptVersionSevenOrNewer(packageJsonPath: string): boolean {
   }
 }
 
-function resolveNativePreviewExecutableFrom(
-  anchor: string,
-  platform: NodeJS.Platform,
-): string | undefined {
-  const requireFromRoot = createRequire(anchor);
-  const packageJsonPath = resolveOptional(
-    requireFromRoot,
-    "@typescript/native-preview/package.json",
-  );
-  if (packageJsonPath) {
-    const platformExecutable = nativePreviewPlatformExecutable(packageJsonPath, platform);
-    if (platformExecutable) {
-      return platformExecutable;
-    }
-    // The meta package's `bin` entry is a Node script behind a shebang.
-    // Windows cannot spawn it (`os error 193`), so the script is only a
-    // usable runtime on platforms that honor shebang lines.
-    if (platform === "win32") {
-      return undefined;
-    }
-    const binPath = nativePreviewBinPath(packageJsonPath);
-    if (binPath && existsSync(binPath)) {
-      return binPath;
-    }
-  }
-  if (platform === "win32") {
-    return undefined;
-  }
-  const packageEntry = resolveOptional(requireFromRoot, "@typescript/native-preview");
-  return packageEntry && existsSync(packageEntry) ? packageEntry : undefined;
-}
-
-/**
- * Resolves the platform-specific `tsgo` executable that the
- * `@typescript/native-preview` meta package installs as an optional
- * dependency, mirroring how the stable `typescript` runtime is resolved.
- */
-function nativePreviewPlatformExecutable(
-  packageJsonPath: string,
-  platform: NodeJS.Platform,
-): string | undefined {
-  const requireFromPreview = createRequire(packageJsonPath);
-  const platformPackageJsonPath = resolveOptional(
-    requireFromPreview,
-    `@typescript/native-preview-${platform}-${process.arch}/package.json`,
-  );
-  if (!platformPackageJsonPath) {
-    return undefined;
-  }
-  const executable = resolve(
-    dirname(platformPackageJsonPath),
-    "lib",
-    platform === "win32" ? "tsgo.exe" : "tsgo",
-  );
-  return existsSync(executable) ? executable : undefined;
-}
-
 function resolveOptional(requireFromRoot: NodeJS.Require, specifier: string): string | undefined {
   try {
     return requireFromRoot.resolve(specifier);
-  } catch {
-    return undefined;
-  }
-}
-
-function nativePreviewBinPath(packageJsonPath: string): string | undefined {
-  try {
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
-      readonly bin?: string | Record<string, string>;
-    };
-    const bin =
-      typeof packageJson.bin === "string"
-        ? packageJson.bin
-        : (packageJson.bin?.tsgo ?? Object.values(packageJson.bin ?? {})[0]);
-    return bin ? resolve(dirname(packageJsonPath), bin) : undefined;
   } catch {
     return undefined;
   }

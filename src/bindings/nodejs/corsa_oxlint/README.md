@@ -25,11 +25,11 @@ custom rules in plain JS/TS.
 
 ## Plugin-Owned Runtime Resolution
 
-By default, `corsa-oxlint` first uses the native runtime shipped with
-`typescript` 7 or newer, then falls back to `@typescript/native-preview` and
-finally `.cache/corsa`. If a plugin ships either runtime dependency, pass a
-module anchor to `definePlugin()` so `corsa-oxlint` can resolve it even when
-package managers like pnpm do not hoist it to the consumer root.
+By default, `corsa-oxlint` uses the native runtime shipped with `typescript` 7
+or newer, then falls back to `.cache/corsa`. If a plugin ships the runtime
+dependency, pass a module anchor to `definePlugin()` so `corsa-oxlint` can
+resolve it even when package managers like pnpm do not hoist it to the consumer
+root.
 
 ```ts
 import { definePlugin } from "corsa-oxlint";

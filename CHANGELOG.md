@@ -13,6 +13,7 @@
 ### Removed
 
 - The `corsa-oxlint/stylistic` entrypoint, native stylistic lint engine, and stylistic benchmarks have moved to [`ubugeeei-prod/oxlint-plugins`](https://github.com/ubugeeei-prod/oxlint-plugins).
+- default runtime discovery no longer looks for `@typescript/native-preview`. TypeScript 7 ships the same native binary through the same mechanism — `typescript` declares `@typescript/typescript-<platform>-<arch>` as an optional dependency and reads `lib/tsc` out of it, exactly as the preview channel did with `lib/tsgo` — so the preview lookup only ever won on machines with no TypeScript 7 installed. Resolution is now `typescript` 7 or newer, then `.cache/corsa`. Consumers still on the preview package can point at it with `CORSA_EXECUTABLE`, `parserOptions.corsa.executable`, or `resolveFrom`. This supersedes the two `@typescript/native-preview` entries under Fixed below.
 
 ### Fixed
 
