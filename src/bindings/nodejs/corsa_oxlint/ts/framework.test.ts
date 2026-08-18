@@ -171,19 +171,7 @@ describe("corsa oxlint", () => {
     cleanupDirs.add(consumerRoot);
     cleanupDirs.add(pluginRoot);
 
-    const packageDir = resolve(pluginRoot, "node_modules/@typescript/native-preview");
-    const binPath = resolve(packageDir, "bin/tsgo.js");
-    mkdirSync(dirname(binPath), { recursive: true });
-    writeFileSync(
-      resolve(packageDir, "package.json"),
-      JSON.stringify({
-        name: "@typescript/native-preview",
-        bin: {
-          tsgo: "bin/tsgo.js",
-        },
-      }),
-    );
-    writeFileSync(binPath, "#!/usr/bin/env node\n");
+    const expectedExecutable = writeNativePreviewInstall(pluginRoot);
 
     const pluginEntry = resolve(pluginRoot, "dist/plugin.js");
     mkdirSync(dirname(pluginEntry), { recursive: true });
@@ -226,7 +214,7 @@ describe("corsa oxlint", () => {
         },
       } as any);
 
-      expect(seen).toBe(realpathSync(binPath));
+      expect(seen).toBe(expectedExecutable);
     } finally {
       if (previousExecutable == null) {
         delete process.env.CORSA_EXECUTABLE;
@@ -625,10 +613,7 @@ describe("corsa oxlint", () => {
     delete process.env.CORSA_EXECUTABLE;
     let seen: Record<string, unknown> | undefined;
     try {
-      const packageRoot = createNativePreviewPackage();
-      const expectedExecutable = realpathSync(
-        resolve(packageRoot, "node_modules/@typescript/native-preview/bin/tsgo.js"),
-      );
+      const { packageRoot, executable: expectedExecutable } = createNativePreviewPackage();
       const tester = new RuleTester({
         cwd: packageRoot,
       });
@@ -677,10 +662,7 @@ describe("corsa oxlint", () => {
     delete process.env.CORSA_EXECUTABLE;
     let seen: Record<string, unknown> | undefined;
     try {
-      const packageRoot = createNativePreviewPackage();
-      const expectedExecutable = realpathSync(
-        resolve(packageRoot, "node_modules/@typescript/native-preview/bin/tsgo.js"),
-      );
+      const { packageRoot, executable: expectedExecutable } = createNativePreviewPackage();
       const rule = decorateRule({
         meta: {
           docs: {
@@ -944,10 +926,24 @@ describe("corsa oxlint", () => {
   });
 });
 
-function createNativePreviewPackage(): string {
+function createNativePreviewPackage(): { packageRoot: string; executable: string } {
   const packageRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-runtime-"));
   cleanupDirs.add(packageRoot);
-  const packageDir = resolve(packageRoot, "node_modules/@typescript/native-preview");
+  return { packageRoot, executable: writeNativePreviewInstall(packageRoot) };
+}
+
+/**
+ * Writes a `@typescript/native-preview` install under `root` — the meta package
+ * plus the platform package npm pulls in as an optional dependency — and
+ * returns the executable resolution is expected to pick.
+ *
+ * These tests exercise the host platform, so the platform package is what keeps
+ * them meaningful on Windows: the meta package's `bin` entry is a Node script
+ * behind a shebang that Windows cannot spawn (`os error 193`), so resolution
+ * deliberately skips it there.
+ */
+function writeNativePreviewInstall(root: string): string {
+  const packageDir = resolve(root, "node_modules/@typescript/native-preview");
   const binPath = resolve(packageDir, "bin/tsgo.js");
   mkdirSync(dirname(binPath), { recursive: true });
   writeFileSync(
@@ -960,5 +956,16 @@ function createNativePreviewPackage(): string {
     }),
   );
   writeFileSync(binPath, "#!/usr/bin/env node\n");
-  return packageRoot;
+
+  const platformPackage = `@typescript/native-preview-${process.platform}-${process.arch}`;
+  const platformDir = resolve(root, "node_modules", platformPackage);
+  const platformBin = resolve(
+    platformDir,
+    "lib",
+    process.platform === "win32" ? "tsgo.exe" : "tsgo",
+  );
+  mkdirSync(dirname(platformBin), { recursive: true });
+  writeFileSync(resolve(platformDir, "package.json"), JSON.stringify({ name: platformPackage }));
+  writeFileSync(platformBin, "");
+  return realpathSync(platformBin);
 }
