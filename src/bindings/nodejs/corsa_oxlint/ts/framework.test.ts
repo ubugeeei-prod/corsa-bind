@@ -171,7 +171,7 @@ describe("corsa oxlint", () => {
     cleanupDirs.add(consumerRoot);
     cleanupDirs.add(pluginRoot);
 
-    const expectedExecutable = writeNativePreviewInstall(pluginRoot);
+    const expectedExecutable = writeTypeScriptInstall(pluginRoot);
 
     const pluginEntry = resolve(pluginRoot, "dist/plugin.js");
     mkdirSync(dirname(pluginEntry), { recursive: true });
@@ -613,7 +613,7 @@ describe("corsa oxlint", () => {
     delete process.env.CORSA_EXECUTABLE;
     let seen: Record<string, unknown> | undefined;
     try {
-      const { packageRoot, executable: expectedExecutable } = createNativePreviewPackage();
+      const { packageRoot, executable: expectedExecutable } = createTypeScriptPackage();
       const tester = new RuleTester({
         cwd: packageRoot,
       });
@@ -662,7 +662,7 @@ describe("corsa oxlint", () => {
     delete process.env.CORSA_EXECUTABLE;
     let seen: Record<string, unknown> | undefined;
     try {
-      const { packageRoot, executable: expectedExecutable } = createNativePreviewPackage();
+      const { packageRoot, executable: expectedExecutable } = createTypeScriptPackage();
       const rule = decorateRule({
         meta: {
           docs: {
@@ -926,46 +926,37 @@ describe("corsa oxlint", () => {
   });
 });
 
-function createNativePreviewPackage(): { packageRoot: string; executable: string } {
+function createTypeScriptPackage(): { packageRoot: string; executable: string } {
   const packageRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-runtime-"));
   cleanupDirs.add(packageRoot);
-  return { packageRoot, executable: writeNativePreviewInstall(packageRoot) };
+  return { packageRoot, executable: writeTypeScriptInstall(packageRoot) };
 }
 
 /**
- * Writes a `@typescript/native-preview` install under `root` — the meta package
- * plus the platform package npm pulls in as an optional dependency — and
- * returns the executable resolution is expected to pick.
+ * Writes a `typescript` 7 install under `root` — the meta package plus the
+ * platform package npm pulls in as an optional dependency — and returns the
+ * executable resolution is expected to pick.
  *
- * These tests exercise the host platform, so the platform package is what keeps
- * them meaningful on Windows: the meta package's `bin` entry is a Node script
- * behind a shebang that Windows cannot spawn (`os error 193`), so resolution
- * deliberately skips it there.
+ * These tests exercise the host platform, so the platform package has to be
+ * there: it is the native runtime, and the meta package on its own carries
+ * only the Node entrypoints.
  */
-function writeNativePreviewInstall(root: string): string {
-  const packageDir = resolve(root, "node_modules/@typescript/native-preview");
-  const binPath = resolve(packageDir, "bin/tsgo.js");
-  mkdirSync(dirname(binPath), { recursive: true });
+function writeTypeScriptInstall(root: string): string {
+  const packageDir = resolve(root, "node_modules/typescript");
+  mkdirSync(packageDir, { recursive: true });
   writeFileSync(
     resolve(packageDir, "package.json"),
-    JSON.stringify({
-      name: "@typescript/native-preview",
-      bin: {
-        tsgo: "bin/tsgo.js",
-      },
-    }),
+    JSON.stringify({ name: "typescript", version: "7.0.2" }),
   );
-  writeFileSync(binPath, "#!/usr/bin/env node\n");
 
-  const platformPackage = `@typescript/native-preview-${process.platform}-${process.arch}`;
+  const platformPackage = `@typescript/typescript-${process.platform}-${process.arch}`;
   const platformDir = resolve(root, "node_modules", platformPackage);
-  const platformBin = resolve(
-    platformDir,
-    "lib",
-    process.platform === "win32" ? "tsgo.exe" : "tsgo",
-  );
+  const platformBin = resolve(platformDir, "lib", process.platform === "win32" ? "tsc.exe" : "tsc");
   mkdirSync(dirname(platformBin), { recursive: true });
-  writeFileSync(resolve(platformDir, "package.json"), JSON.stringify({ name: platformPackage }));
+  writeFileSync(
+    resolve(platformDir, "package.json"),
+    JSON.stringify({ name: platformPackage, version: "7.0.2" }),
+  );
   writeFileSync(platformBin, "");
   return realpathSync(platformBin);
 }
