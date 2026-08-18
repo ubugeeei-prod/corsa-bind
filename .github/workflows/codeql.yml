@@ -50,15 +50,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
-        with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-
-      # The Go binding is cgo and links against the Rust C ABI, so `libcorsa_ffi`
-      # has to exist before the extractor can build the package. This mirrors the
-      # Non-Node Bindings job in ci.yml.
+      # Both toolchains have to be installed before `init`: CodeQL traces the Go
+      # build through a `go` shim it places on PATH there, and actions/setup-go
+      # would shadow that shim if it ran afterwards, leaving the extractor with
+      # nothing to process.
       - name: Install Rust
         if: matrix.language == 'go'
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
@@ -70,6 +65,15 @@ jobs:
           go-version-file: src/bindings/go/corsa_utils/go.mod
           cache: false
 
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # The binding is cgo and links `libcorsa_ffi` out of target/debug, so the
+      # Rust crate has to be built before `go build` can succeed. This mirrors the
+      # Non-Node Bindings job in ci.yml.
       - name: Build the Go binding
         if: matrix.language == 'go'
         env:
