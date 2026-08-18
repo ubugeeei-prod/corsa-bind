@@ -17,6 +17,7 @@ use super::{
         NodeBatchRequest, PositionBatchRequest, SymbolBatchRequest, SymbolOnlyRequest,
         SymbolProjectRequest,
     },
+    requests_types::{MemberInModuleExportsRequest, TypeLocationRequest},
 };
 use crate::Result;
 
@@ -414,6 +415,177 @@ impl ApiClient {
     ) -> Result<SymbolResponse> {
         self.call(
             "getExportSymbolOfSymbol",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
+        )
+        .await
+    }
+
+    /// Returns the symbol an alias resolves to, following the whole chain.
+    pub async fn get_aliased_symbol(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Option<SymbolResponse>> {
+        self.call_symbol_property("getAliasedSymbol", snapshot, project, symbol)
+            .await
+    }
+
+    /// Returns the symbol an alias resolves to, following one step only.
+    pub async fn get_immediate_aliased_symbol(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Option<SymbolResponse>> {
+        self.call_symbol_property("getImmediateAliasedSymbol", snapshot, project, symbol)
+            .await
+    }
+
+    /// Returns the exported symbols of a module symbol.
+    ///
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_exports_of_module(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Vec<SymbolResponse>> {
+        self.call::<Option<Vec<SymbolResponse>>, _>(
+            "getExportsOfModule",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
+    /// Returns a named export of a module symbol, if it has one.
+    pub async fn get_member_in_module_exports(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+        name: impl Into<String>,
+    ) -> Result<Option<SymbolResponse>> {
+        self.call_optional(
+            "getMemberInModuleExports",
+            MemberInModuleExportsRequest {
+                snapshot,
+                project,
+                symbol,
+                name: name.into(),
+            },
+        )
+        .await
+    }
+
+    /// Returns the local target symbol of an export specifier node.
+    pub async fn get_export_specifier_local_target_symbol(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        location: NodeHandle,
+    ) -> Result<Option<SymbolResponse>> {
+        self.call_optional(
+            "getExportSpecifierLocalTargetSymbol",
+            TypeLocationRequest {
+                snapshot,
+                project,
+                location,
+            },
+        )
+        .await
+    }
+
+    /// Returns the JSDoc tags attached to a symbol.
+    ///
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_js_doc_tags(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Vec<super::JsDocTagInfo>> {
+        self.call::<Option<Vec<super::JsDocTagInfo>>, _>(
+            "getJsDocTags",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
+    /// Returns the rendered documentation comment of a symbol.
+    pub async fn get_documentation_comment(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<String> {
+        self.call(
+            "getDocumentationComment",
+            SymbolProjectRequest {
+                snapshot,
+                project,
+                symbol,
+            },
+        )
+        .await
+    }
+
+    /// Returns the compile-time constant an enum member or literal node folds
+    /// to, if the checker can compute one.
+    pub async fn get_constant_value(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        location: NodeHandle,
+    ) -> Result<Option<serde_json::Value>> {
+        self.call_optional(
+            "getConstantValue",
+            TypeLocationRequest {
+                snapshot,
+                project,
+                location,
+            },
+        )
+        .await
+    }
+
+    /// Returns handles for the checker's intrinsic well-known symbols.
+    pub async fn get_well_known_symbols(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+    ) -> Result<super::WellKnownSymbolsResponse> {
+        self.call(
+            "getWellKnownSymbols",
+            super::requests_core::IntrinsicTypeRequest { snapshot, project },
+        )
+        .await
+    }
+
+    /// Shared helper for endpoints that map one symbol to another.
+    async fn call_symbol_property(
+        &self,
+        method: &str,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        symbol: SymbolHandle,
+    ) -> Result<Option<SymbolResponse>> {
+        self.call_optional(
+            method,
             SymbolProjectRequest {
                 snapshot,
                 project,

@@ -93,6 +93,43 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             {
                 Some(mapped_utility_argument(MAPPED_UTILITY_STRUCTURAL_ARGUMENT))
             }
+            // Checker endpoints that map one type to another.
+            "getApparentType"
+            | "getNonNullableType"
+            | "getWidenedType"
+            | "getBaseConstraintOfType"
+            | "getFreshTypeOfType"
+            | "getRegularTypeOfType"
+            | "getTrueTypeOfConditionalType"
+            | "getFalseTypeOfConditionalType"
+            | "getTypeFromTypeNode"
+            | "getParameterType" => Some(common::type_response("t0000000000000001")),
+            // Checker predicates. Answering these is what lets the binding stop
+            // deciding type shape by parsing rendered type text.
+            "isArrayType" | "isTupleType" | "isArrayLikeType" | "isTypeAssignableTo" => {
+                Some(json!(true))
+            }
+            "getAliasTypeArgumentsOfType" | "getTypeParametersOfSignature" => {
+                Some(json!([common::type_response("t0000000000000001")]))
+            }
+            "getResolvedSignature" | "getSignatureFromDeclaration" | "getTargetOfSignature" => {
+                Some(common::signature())
+            }
+            "getAliasSymbolOfType"
+            | "getAliasedSymbol"
+            | "getImmediateAliasedSymbol"
+            | "getPropertyOfType"
+            | "getMemberInModuleExports"
+            | "getExportSpecifierLocalTargetSymbol" => Some(common::symbol("value")),
+            "getExportsOfModule" => Some(json!([common::symbol("value")])),
+            "getJsDocTags" => Some(json!([{ "name": "deprecated", "text": "use other" }])),
+            "getDocumentationComment" => Some(json!("docs")),
+            "getConstantValue" => Some(json!(42)),
+            "getWellKnownSymbols" => Some(json!({
+                "unknown": "s0000000000000001",
+                "undefined": "s0000000000000002",
+                "arguments": "s0000000000000003",
+            })),
             "getTypeOfSymbol"
             | "getDeclaredTypeOfSymbol"
             | "getTypeAtLocation"

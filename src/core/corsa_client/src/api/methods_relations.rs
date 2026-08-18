@@ -7,6 +7,7 @@ use super::{
     ApiClient, IndexInfo, ProjectHandle, SignatureHandle, SnapshotHandle, SymbolHandle, TypeHandle,
     TypePredicateResponse, TypeResponse,
     requests_symbols::{SignatureOnlyRequest, TypeOnlyRequest, TypeProjectRequest},
+    requests_types::{ParameterTypeRequest, TypeLocationRequest},
 };
 use crate::Result;
 use corsa_core::utils::split_top_level_type_text;
@@ -64,6 +65,146 @@ impl ApiClient {
             },
         )
         .await
+    }
+
+    /// Returns the signature the checker resolves a call-like node to.
+    ///
+    /// This is the entry point for rules that reason about an actual call
+    /// rather than a type's declared signatures.
+    pub async fn get_resolved_signature(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        location: super::NodeHandle,
+    ) -> Result<Option<super::SignatureResponse>> {
+        self.call_optional(
+            "getResolvedSignature",
+            TypeLocationRequest {
+                snapshot,
+                project,
+                location,
+            },
+        )
+        .await
+    }
+
+    /// Returns the signature a declaration node produces.
+    pub async fn get_signature_from_declaration(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        location: super::NodeHandle,
+    ) -> Result<Option<super::SignatureResponse>> {
+        self.call_optional(
+            "getSignatureFromDeclaration",
+            TypeLocationRequest {
+                snapshot,
+                project,
+                location,
+            },
+        )
+        .await
+    }
+
+    /// Returns the generic type parameters declared on a signature.
+    ///
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_type_parameters_of_signature(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        signature: SignatureHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        self.call::<Option<Vec<TypeResponse>>, _>(
+            "getTypeParametersOfSignature",
+            SignatureOnlyRequest {
+                snapshot,
+                project,
+                signature,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
+    /// Returns the target signature an instantiated signature came from.
+    pub async fn get_target_of_signature(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        signature: SignatureHandle,
+    ) -> Result<Option<super::SignatureResponse>> {
+        self.call_optional(
+            "getTargetOfSignature",
+            SignatureOnlyRequest {
+                snapshot,
+                project,
+                signature,
+            },
+        )
+        .await
+    }
+
+    /// Returns the type of the parameter at `index` in a signature.
+    ///
+    /// Unlike resolving the parameter symbol and asking for its type, this
+    /// accounts for rest parameters expanded at the given position.
+    pub async fn get_parameter_type(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        signature: SignatureHandle,
+        index: i32,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getParameterType",
+            ParameterTypeRequest {
+                snapshot,
+                project,
+                signature,
+                index,
+            },
+        )
+        .await
+    }
+
+    /// Returns the alias symbol a type was written through, if any.
+    pub async fn get_alias_symbol_of_type(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<super::SymbolResponse>> {
+        self.call_optional(
+            "getAliasSymbolOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+    }
+
+    /// Returns the type arguments supplied to a type's alias, if any.
+    ///
+    /// Missing server data is normalized to an empty vector.
+    pub async fn get_alias_type_arguments_of_type(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Vec<TypeResponse>> {
+        self.call::<Option<Vec<TypeResponse>>, _>(
+            "getAliasTypeArgumentsOfType",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
     }
 
     /// Returns the parameter symbols of a signature, in declaration order.
