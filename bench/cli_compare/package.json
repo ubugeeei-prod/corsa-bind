@@ -4,8 +4,8 @@
   "type": "module",
   "dependencies": {
     "@types/node": "26.2.0",
-    "@typescript-eslint/eslint-plugin": "8.66.0",
-    "@typescript-eslint/parser": "8.66.0",
+    "@typescript-eslint/eslint-plugin": "8.67.0",
+    "@typescript-eslint/parser": "8.67.0",
     "eslint": "10.8.1",
     "oxlint-tsgolint": "7.0.2001",
     "typescript": "7.0.2"
