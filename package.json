@@ -12,14 +12,14 @@
   },
   "type": "module",
   "devDependencies": {
-    "@napi-rs/cli": "3.8.2",
+    "@napi-rs/cli": "3.8.6",
     "@types/node": "26.2.0",
-    "@typescript-eslint/utils": "8.66.0",
-    "@void/md": "0.10.11",
+    "@typescript-eslint/utils": "8.67.0",
+    "@void/md": "0.10.12",
     "eslint": "10.8.1",
     "typescript": "7.0.2",
     "vite": "8.2.1",
-    "vite-plus": "^0.2.8",
+    "vite-plus": "^0.2.9",
     "vitest": "4.1.10"
   },
   "engines": {
