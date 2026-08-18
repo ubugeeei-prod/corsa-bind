@@ -2577,5 +2577,4 @@ mod tests {
             Some((declaration_start, declaration_end))
         );
     }
-
 }

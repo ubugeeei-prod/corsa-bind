@@ -146,10 +146,18 @@ fn main() -> Result<(), corsa::CorsaError> {
             )
             .await?;
         let symbol_of_type = client
-            .get_symbol_of_type(snapshot.handle.clone(), type_at_position.id.clone())
+            .get_symbol_of_type_in_project(
+                snapshot.handle.clone(),
+                project.id.clone(),
+                type_at_position.id.clone(),
+            )
             .await?;
         let exported = client
-            .get_export_symbol_of_symbol(snapshot.handle.clone(), symbol.id.clone())
+            .get_export_symbol_of_symbol_in_project(
+                snapshot.handle.clone(),
+                project.id.clone(),
+                symbol.id.clone(),
+            )
             .await?;
 
         let result = json!({

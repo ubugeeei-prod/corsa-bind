@@ -142,6 +142,7 @@ export function runCheckerQueriesExample() {
     });
     const exported = client.callJson<SymbolResponse>("getExportSymbolOfSymbol", {
       snapshot: snapshot.snapshot,
+      project: project.id,
       symbol: symbol.id,
     });
 
