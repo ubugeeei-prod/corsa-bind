@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createTypeChecker } from "./checker";
+import type { CorsaSignature } from "./types";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
@@ -141,6 +142,72 @@ function driveTypeRelationSurface(paramsDir: string): readonly RecordedRequest[]
   }
   return recordedRequests(paramsDir);
 }
+
+function driveSignatureLookup(paramsDir: string): readonly CorsaSignature[] {
+  const workspace = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-signature-"));
+  const srcDir = resolve(workspace, "src");
+  mkdirSync(srcDir, { recursive: true });
+  const filename = resolve(srcDir, "fixture.ts");
+  writeFileSync(filename, "const value: number = 1;\n");
+  writeFileSync(
+    resolve(workspace, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*.ts"] }),
+  );
+
+  const previousParamsDir = process.env.CORSA_MOCK_PARAMS_DIR;
+  process.env.CORSA_MOCK_PARAMS_DIR = paramsDir;
+  try {
+    const checker = createTypeChecker({
+      cwd: workspace,
+      filename,
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            project: ["tsconfig.json"],
+            corsa: { executable: mockBinary, cwd: workspace, mode: "jsonrpc" },
+          },
+        },
+      },
+      sourceCode: { text: "const value: number = 1;\n" },
+    } as never);
+    const type = checker.getTypeAtLocation({ type: "Identifier", range: [6, 11] } as never);
+    return checker.getSignaturesOfType(type as never, 0);
+  } finally {
+    if (previousParamsDir === undefined) {
+      delete process.env.CORSA_MOCK_PARAMS_DIR;
+    } else {
+      process.env.CORSA_MOCK_PARAMS_DIR = previousParamsDir;
+    }
+  }
+}
+
+describe("signature parameter symbols", () => {
+  /**
+   * `SignatureResponse.parameters` carries opaque symbol handles, and upstream
+   * exposes `getParametersOfSignature` to resolve them. The binding used to
+   * reconstruct parameter names by scanning the declaration out of the source
+   * file instead, which produced nothing once stable TypeScript 7 runtimes
+   * switched to compact declaration handles that carry no source range
+   * (issue #441).
+   */
+  it("resolves parameter symbols through the checker", () => {
+    const paramsDir = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-signature-params-"));
+    const signatures = driveSignatureLookup(paramsDir);
+
+    expect(signatures[0]?.parameterSymbols?.map((symbol) => symbol.name)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  it("asks the checker instead of reading the declaration out of the source", () => {
+    const paramsDir = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-signature-source-"));
+    driveSignatureLookup(paramsDir);
+    const methods = new Set(recordedRequests(paramsDir).map((request) => request.method));
+
+    expect(methods.has("getParametersOfSignature")).toBe(true);
+  });
+});
 
 describe("project-scoped handle requests", () => {
   const paramsDir = mkdtempSync(resolve(tmpdir(), "corsa-oxlint-params-"));

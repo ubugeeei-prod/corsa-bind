@@ -6,8 +6,8 @@ use std::{
 use corsa::{
     CorsaError,
     api::{
-        ApiClient, ManagedSnapshot, NodeHandle, ProjectHandle, SignatureResponse, SnapshotHandle,
-        SymbolHandle, SymbolResponse, TypeHandle, TypeResponse, UpdateSnapshotParams,
+        ApiClient, ManagedSnapshot, ProjectHandle, SignatureResponse, SnapshotHandle, SymbolHandle,
+        TypeHandle, TypeResponse, UpdateSnapshotParams,
     },
     fast::{CompactString, FastMap},
     runtime::block_on,
@@ -1994,14 +1994,26 @@ async fn get_signatures_of_type_with_parameter_texts(
         .await?;
     for signature in &mut signatures {
         if signature.parameter_symbols.is_empty() && !signature.parameters.is_empty() {
-            signature.parameter_symbols = parameter_symbols_for_signature(
-                client,
-                snapshot.clone(),
-                project.clone(),
-                signature,
-                source_override,
-            )
-            .await?;
+            // Ask the checker for the parameter symbols rather than trying to
+            // recover names from source: `SignatureResponse.parameters` carries
+            // only opaque handles, and `getParametersOfSignature` is the
+            // endpoint that resolves them.
+            signature.parameter_symbols = client
+                .get_parameters_of_signature(
+                    snapshot.clone(),
+                    project.clone(),
+                    signature.id.clone(),
+                )
+                .await?;
+        }
+        if signature.this_parameter_symbol.is_none() && signature.this_parameter.is_some() {
+            signature.this_parameter_symbol = client
+                .get_this_parameter_of_signature(
+                    snapshot.clone(),
+                    project.clone(),
+                    signature.id.clone(),
+                )
+                .await?;
         }
         if signature.type_parameter_default_texts.is_empty()
             && !signature.type_parameters.is_empty()
@@ -2039,66 +2051,6 @@ async fn get_signatures_of_type_with_parameter_texts(
         }
     }
     Ok(signatures)
-}
-
-async fn parameter_symbols_for_signature(
-    client: &ApiClient,
-    snapshot: SnapshotHandle,
-    project: ProjectHandle,
-    signature: &SignatureResponse,
-    source_override: Option<&SignatureSourceOverride>,
-) -> corsa::Result<Vec<SymbolResponse>> {
-    let Some(declaration) = &signature.declaration else {
-        return Ok(Vec::new());
-    };
-    // A stable TypeScript 7 declaration handle is compact and carries no source
-    // range, so it cannot be parsed into offsets. It still names the declaring
-    // file, which is enough to recover parameter names (issue #441).
-    let ranged = declaration.parse().ok();
-    let Some(path) = ranged
-        .as_ref()
-        .map(|parsed| parsed.path.clone())
-        .or_else(|| declaration.declaring_path())
-    else {
-        return Ok(Vec::new());
-    };
-    let source_text = source_text_for_signature_declaration(
-        client,
-        snapshot,
-        project,
-        path.as_str(),
-        source_override,
-    )
-    .await?;
-    let parameters = match &ranged {
-        Some(parsed) => parameter_ranges_for_signature_declaration(
-            &source_text,
-            parsed.pos,
-            parsed.end,
-            signature.parameters.len(),
-        ),
-        None => unique_parameter_ranges_in_source(&source_text, signature.parameters.len()),
-    };
-    if parameters.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    Ok(signature
-        .parameters
-        .iter()
-        .zip(parameters)
-        .map(|(symbol, (name, pos, end))| {
-            let declaration = NodeHandle::from(format!("{}.{}.0.{}", pos, end, path.as_str()));
-            SymbolResponse {
-                id: symbol.clone(),
-                name,
-                flags: 1,
-                check_flags: 0,
-                declarations: vec![declaration.clone()],
-                value_declaration: Some(declaration),
-            }
-        })
-        .collect())
 }
 
 async fn type_parameter_default_texts_for_signature(
@@ -2180,141 +2132,6 @@ async fn source_text_for_signature_declaration(
     Ok(String::from_utf8(source.into_bytes()).unwrap_or_default())
 }
 
-struct ParameterSourceRange {
-    name: String,
-    start: usize,
-    end: usize,
-}
-
-fn parameter_ranges_in_signature_declaration(
-    declaration_text: &str,
-    declaration_start: usize,
-) -> Vec<ParameterSourceRange> {
-    let Some(open) = first_top_level_opening_paren(declaration_text) else {
-        return Vec::new();
-    };
-    parameter_ranges_from_open_paren(declaration_text, open, declaration_start)
-}
-
-/// Parses the parameter list opened by the parenthesis at `open`.
-///
-/// `text_start` is the byte offset of `text` inside the file, so the returned
-/// ranges are file-relative.
-fn parameter_ranges_from_open_paren(
-    text: &str,
-    open: usize,
-    text_start: usize,
-) -> Vec<ParameterSourceRange> {
-    let Some(close) = matching_paren_close(text, open) else {
-        return Vec::new();
-    };
-    let parameters_text = &text[open + 1..close];
-    split_top_level_ranges(parameters_text, ',')
-        .into_iter()
-        .filter_map(|range| {
-            let raw = &parameters_text[range.start..range.end];
-            let leading = first_non_whitespace(raw)?;
-            let trailing = raw
-                .char_indices()
-                .rev()
-                .find(|(_, ch)| !ch.is_whitespace())
-                .map(|(index, ch)| index + ch.len_utf8())?;
-            let name = parameter_name(raw)?;
-            Some(ParameterSourceRange {
-                name,
-                start: text_start + open + 1 + range.start + leading,
-                end: text_start + open + 1 + range.start + trailing,
-            })
-        })
-        .collect()
-}
-
-/// Recovers parameter ranges when the declaration handle carries no source
-/// range.
-///
-/// Stable TypeScript 7 runtimes hand back compact declaration handles
-/// (`<node id>.<syntax kind>.<path>`), which name the declaring file but no
-/// offsets, so the declaration cannot be sliced out of the source. Scan every
-/// parenthesised group in the file instead and accept the result only when
-/// exactly one group parses as `expected_count` named parameters.
-///
-/// Refusing ambiguous files keeps this from inventing parameter names: the
-/// caller then reports no parameter symbols, which is what it already did for
-/// every compact handle before this path existed (issue #441).
-fn unique_parameter_ranges_in_source(
-    source_text: &str,
-    expected_count: usize,
-) -> Vec<(String, u32, u32)> {
-    if expected_count == 0 {
-        return Vec::new();
-    }
-    let mut matches = Vec::new();
-    let mut index = 0usize;
-    let mut scanner = SourceScanner::default();
-    while index < source_text.len() {
-        let next = scanner.skip(source_text, index);
-        if next > index {
-            index = next;
-            continue;
-        }
-        let Some(ch) = char_at(source_text, index) else {
-            break;
-        };
-        if ch == '(' {
-            let parameters = parameter_ranges_from_open_paren(source_text, index, 0);
-            if parameters.len() == expected_count {
-                matches.push(parameters);
-                if matches.len() > 1 {
-                    return Vec::new();
-                }
-            }
-        }
-        index += ch.len_utf8();
-    }
-    let Some(parameters) = matches.pop() else {
-        return Vec::new();
-    };
-    parameters
-        .into_iter()
-        .filter_map(|parameter| {
-            let pos = utf16_index_from_byte(source_text, parameter.start)?;
-            let end = utf16_index_from_byte(source_text, parameter.end)?;
-            Some((parameter.name, pos, end))
-        })
-        .collect()
-}
-
-fn parameter_ranges_for_signature_declaration(
-    source_text: &str,
-    declaration_pos: u32,
-    declaration_end: u32,
-    expected_count: usize,
-) -> Vec<(String, u32, u32)> {
-    let mut fallback = Vec::new();
-    for (start, end) in
-        signature_declaration_byte_ranges(source_text, declaration_pos, declaration_end)
-    {
-        let Some(declaration_text) = source_text.get(start..end) else {
-            continue;
-        };
-        let parameters = parameter_ranges_in_signature_declaration(declaration_text, start)
-            .into_iter()
-            .filter_map(|parameter| {
-                let pos = utf16_index_from_byte(source_text, parameter.start)?;
-                let end = utf16_index_from_byte(source_text, parameter.end)?;
-                Some((parameter.name, pos, end))
-            })
-            .collect::<Vec<_>>();
-        if parameters.len() == expected_count {
-            return parameters;
-        }
-        if fallback.is_empty() && !parameters.is_empty() {
-            fallback = parameters;
-        }
-    }
-    fallback
-}
-
 fn type_parameter_default_texts_for_declaration_range(
     source_text: &str,
     declaration_pos: u32,
@@ -2368,22 +2185,6 @@ fn raw_byte_range(text: &str, start: u32, end: u32) -> Option<(usize, usize)> {
     Some((start, end))
 }
 
-fn parameter_name(text: &str) -> Option<String> {
-    let mut index = skip_whitespace(text, 0);
-    loop {
-        if text.get(index..)?.starts_with("...") {
-            index = skip_whitespace(text, index + 3);
-        }
-        let (start, end) = read_identifier(text, index)?;
-        let word = &text[start..end];
-        if is_modifier(word) {
-            index = skip_whitespace(text, end);
-            continue;
-        }
-        return Some(word.to_owned());
-    }
-}
-
 fn first_top_level_opening_paren(text: &str) -> Option<usize> {
     let mut angle_depth = 0usize;
     let mut bracket_depth = 0usize;
@@ -2408,30 +2209,6 @@ fn first_top_level_opening_paren(text: &str) -> Option<usize> {
                 return Some(index);
             }
             _ => {}
-        }
-        index += ch.len_utf8();
-    }
-    None
-}
-
-fn matching_paren_close(text: &str, open: usize) -> Option<usize> {
-    let mut depth = 0usize;
-    let mut index = open;
-    let mut scanner = SourceScanner::default();
-    while index < text.len() {
-        let next = scanner.skip(text, index);
-        if next > index {
-            index = next;
-            continue;
-        }
-        let ch = char_at(text, index)?;
-        if ch == '(' {
-            depth += 1;
-        } else if ch == ')' {
-            depth = depth.checked_sub(1)?;
-            if depth == 0 {
-                return Some(index);
-            }
         }
         index += ch.len_utf8();
     }
@@ -2771,10 +2548,7 @@ fn parse_numeric_snapshot_handle(handle: &str) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        parameter_ranges_for_signature_declaration, raw_byte_range,
-        signature_declaration_byte_ranges, unique_parameter_ranges_in_source,
-    };
+    use super::{raw_byte_range, signature_declaration_byte_ranges};
 
     #[test]
     fn falls_back_to_raw_byte_ranges_for_non_ascii_signature_handles() {
@@ -2802,131 +2576,5 @@ mod tests {
             ),
             Some((declaration_start, declaration_end))
         );
-    }
-
-    #[test]
-    fn resolves_parameter_names_from_raw_byte_declaration_ranges() {
-        let declaration = "constructor(scope: unknown, id: string, props?: ThingProps) {}";
-        let source_text =
-            format!("export class Thing {{\n  /** doesn’t “one” – */\n  {declaration}\n}}");
-        let declaration_start = source_text.find(declaration).unwrap();
-        let declaration_end = declaration_start + declaration.len();
-
-        let parameters = parameter_ranges_for_signature_declaration(
-            &source_text,
-            declaration_start as u32,
-            declaration_end as u32,
-            3,
-        );
-
-        assert_eq!(
-            parameters
-                .into_iter()
-                .map(|(name, _, _)| name)
-                .collect::<Vec<_>>(),
-            vec!["scope", "id", "props"]
-        );
-    }
-
-    #[test]
-    fn resolves_non_ascii_parameter_names_from_declaration_ranges() {
-        let declaration =
-            "constructor(public name: string, public 識別子: number, public other: boolean) {}";
-        let source_text = format!("class C {{\n  {declaration}\n}}");
-        let declaration_start = source_text.find(declaration).unwrap();
-        let declaration_end = declaration_start + declaration.len();
-
-        let parameters = parameter_ranges_for_signature_declaration(
-            &source_text,
-            declaration_start as u32,
-            declaration_end as u32,
-            3,
-        );
-
-        assert_eq!(
-            parameters
-                .into_iter()
-                .map(|(name, _, _)| name)
-                .collect::<Vec<_>>(),
-            vec!["name", "識別子", "other"]
-        );
-    }
-
-    /// Issue #441: a stable TypeScript 7 construct signature arrives with a
-    /// compact declaration handle that carries no source range, so the
-    /// declaration cannot be sliced out and parameter names have to be
-    /// recovered from the file as a whole.
-    #[test]
-    fn recovers_constructor_parameters_without_a_declaration_range() {
-        let source_text = [
-            "class Beta {",
-            "  constructor(first: number, second: string) {}",
-            "}",
-            "",
-            "export const b = new Beta(1, \"x\");",
-        ]
-        .join("\n");
-
-        let parameters = unique_parameter_ranges_in_source(&source_text, 2);
-
-        assert_eq!(
-            parameters
-                .iter()
-                .map(|(name, _, _)| name.as_str())
-                .collect::<Vec<_>>(),
-            ["first", "second"]
-        );
-        for (name, pos, end) in &parameters {
-            let slice = &source_text[*pos as usize..*end as usize];
-            assert!(slice.starts_with(name), "{slice} should start with {name}");
-        }
-    }
-
-    /// The recovery must not guess: two same-arity parameter lists in one file
-    /// leave no way to tell which one the signature came from.
-    #[test]
-    fn refuses_ambiguous_parameter_lists() {
-        let source_text = [
-            "class Beta {",
-            "  constructor(first: number, second: string) {}",
-            "}",
-            "class Gamma {",
-            "  constructor(third: number, fourth: string) {}",
-            "}",
-        ]
-        .join("\n");
-
-        assert!(unique_parameter_ranges_in_source(&source_text, 2).is_empty());
-    }
-
-    /// Call arguments are not parameter lists, so they must not be mistaken for
-    /// the declaration that produced the signature.
-    #[test]
-    fn ignores_call_arguments_when_recovering_parameters() {
-        let source_text = [
-            "class Beta {",
-            "  constructor(only: number) {}",
-            "}",
-            "export const b = new Beta(1);",
-            "export const c = new Beta(2);",
-        ]
-        .join("\n");
-
-        let parameters = unique_parameter_ranges_in_source(&source_text, 1);
-
-        assert_eq!(
-            parameters
-                .iter()
-                .map(|(name, _, _)| name.as_str())
-                .collect::<Vec<_>>(),
-            ["only"]
-        );
-    }
-
-    #[test]
-    fn recovers_no_parameters_for_a_parameterless_signature() {
-        let source_text = "class Beta {\n  constructor() {}\n}\n";
-
-        assert!(unique_parameter_ranges_in_source(source_text, 0).is_empty());
     }
 }

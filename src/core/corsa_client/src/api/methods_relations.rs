@@ -66,6 +66,46 @@ impl ApiClient {
         .await
     }
 
+    /// Returns the parameter symbols of a signature, in declaration order.
+    ///
+    /// This is the checker's own answer, including each parameter's name and
+    /// declarations. Missing server data is normalized to an empty vector.
+    pub async fn get_parameters_of_signature(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        signature: SignatureHandle,
+    ) -> Result<Vec<super::SymbolResponse>> {
+        self.call::<Option<Vec<super::SymbolResponse>>, _>(
+            "getParametersOfSignature",
+            SignatureOnlyRequest {
+                snapshot,
+                project,
+                signature,
+            },
+        )
+        .await
+        .map(|items| items.unwrap_or_default())
+    }
+
+    /// Returns the explicit `this` parameter symbol of a signature, if any.
+    pub async fn get_this_parameter_of_signature(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        signature: SignatureHandle,
+    ) -> Result<Option<super::SymbolResponse>> {
+        self.call_optional(
+            "getThisParameterOfSignature",
+            SignatureOnlyRequest {
+                snapshot,
+                project,
+                signature,
+            },
+        )
+        .await
+    }
+
     /// Returns the rest type of a signature, if any.
     pub async fn get_rest_type_of_signature(
         &self,

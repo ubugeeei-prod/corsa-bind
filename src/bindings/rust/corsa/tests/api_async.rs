@@ -191,8 +191,12 @@ fn dropping_many_snapshots_uses_bounded_release_queue() {
                     "CORSA_MOCK_COUNT_DIR",
                     count_dir.path().display().to_string(),
                 )
-                .with_request_timeout(Some(Duration::from_secs(1)))
-                .with_shutdown_timeout(Duration::from_secs(10))
+                // This case asserts the release queue drains all 64 snapshots;
+                // the request timeout only has to be long enough that spawning
+                // the mock under a loaded test runner does not trip it. A
+                // one-second budget made the case flake on `initialize`.
+                .with_request_timeout(Some(Duration::from_secs(30)))
+                .with_shutdown_timeout(Duration::from_secs(30))
                 .with_release_queue_capacity(1),
         )
         .await

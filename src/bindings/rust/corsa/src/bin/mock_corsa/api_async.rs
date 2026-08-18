@@ -146,6 +146,15 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             "getMembersOfSymbol" | "getExportsOfSymbol" | "getPropertiesOfType" => {
                 Some(json!([common::symbol("value")]))
             }
+            // The checker's own answer for a signature's parameters. The
+            // binding used to reconstruct these from source text instead.
+            "getParametersOfSignature" => Some(json!([
+                common::named_symbol("s0000000000000001", "first"),
+                common::named_symbol("s0000000000000002", "second"),
+            ])),
+            "getThisParameterOfSignature" => {
+                Some(common::named_symbol("s0000000000000003", "this"))
+            }
             "getExportSymbolOfSymbol" => Some(common::symbol("exported")),
             "getTypePredicateOfSignature" => Some(common::type_predicate()),
             "getIndexInfosOfType" => Some(json!([common::index_info()])),
