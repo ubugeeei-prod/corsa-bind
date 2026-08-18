@@ -80,8 +80,9 @@ pub use profiling::{ApiProfileEvent, ApiProfilePhase, ApiProfiler, SharedProfile
 pub use project_session::ProjectSession;
 /// Common response payloads returned by the API.
 pub use responses::{
-    ConfigResponse, IndexInfo, InitializeResponse, ProjectResponse, SignatureResponse,
-    SymbolResponse, TypePredicateResponse, TypeResponse,
+    ConfigResponse, IndexInfo, InitializeResponse, JsDocTagInfo, ProjectResponse,
+    SignatureResponse, SourceFileMetadata, SymbolResponse, TypePredicateResponse, TypeResponse,
+    WellKnownSymbolsResponse,
 };
 /// Auto-releasing snapshot wrapper.
 pub use snapshot::ManagedSnapshot;

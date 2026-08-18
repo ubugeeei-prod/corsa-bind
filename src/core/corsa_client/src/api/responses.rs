@@ -193,3 +193,47 @@ pub struct IndexInfo {
     #[serde(default)]
     pub is_readonly: bool,
 }
+
+/// A single JSDoc tag attached to a symbol.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsDocTagInfo {
+    /// Tag name without the leading `@`, such as `deprecated` or `param`.
+    pub name: String,
+    /// Rendered tag text, when the tag carries any.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+}
+
+/// Handles for the checker's intrinsic well-known symbols.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WellKnownSymbolsResponse {
+    /// The checker's `unknown` symbol.
+    pub unknown: SymbolHandle,
+    /// The checker's `undefined` symbol.
+    pub undefined: SymbolHandle,
+    /// The checker's `arguments` symbol.
+    pub arguments: SymbolHandle,
+}
+
+/// Program-stored metadata about a single source file.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceFileMetadata {
+    /// Whether the file is part of the default library (`lib.*.d.ts`).
+    #[serde(default)]
+    pub is_default_library: bool,
+    /// Whether the file came from an external library such as `node_modules`.
+    #[serde(default)]
+    pub is_from_external_library: bool,
+    /// `type` field of the nearest `package.json`, when one applies.
+    #[serde(default)]
+    pub package_json_type: String,
+    /// Directory of the nearest `package.json`, when one applies.
+    #[serde(default)]
+    pub package_json_directory: String,
+    /// Module resolution mode the program implied for this file.
+    #[serde(default)]
+    pub implied_node_format: i32,
+}

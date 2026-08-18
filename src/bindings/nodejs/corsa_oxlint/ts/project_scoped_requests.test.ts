@@ -44,8 +44,15 @@ const TRAVERSAL_ACCESSORS = [
   "getConstraintOfTypeParameter",
   "getPropertiesOfType",
   "getBaseTypes",
-  "getTypeArguments",
 ] as const;
+
+/**
+ * Endpoints where more than one wire call is a correct answer, so coverage is
+ * satisfied by any of them. A mapped type resolves its arguments through
+ * `getAliasTypeArgumentsOfType`, because upstream `getTypeArguments` panics on
+ * one.
+ */
+const TRAVERSAL_ALTERNATIVES = [["getTypeArguments", "getAliasTypeArgumentsOfType"]] as const;
 
 interface RecordedRequest {
   readonly method: string;
@@ -123,7 +130,11 @@ function driveTypeRelationSurface(paramsDir: string): readonly RecordedRequest[]
       }
     };
     const accessors = checker as unknown as Record<string, (value: unknown) => unknown>;
-    for (const accessor of [...TRAVERSAL_ACCESSORS, "getConstraintOfType"]) {
+    for (const accessor of [
+      ...TRAVERSAL_ACCESSORS,
+      ...TRAVERSAL_ALTERNATIVES.map(([accessor]) => accessor),
+      "getConstraintOfType",
+    ]) {
       attempt(() => accessors[accessor]?.(type));
     }
     attempt(() => checker.getSignaturesOfType(type as never, 0));
@@ -231,7 +242,12 @@ describe("project-scoped handle requests", () => {
 
   it("actually exercised the type-relation surface", () => {
     const methods = new Set(requests.map((request) => request.method));
-    const missing = TRAVERSAL_ACCESSORS.filter((accessor) => !methods.has(accessor));
+    const missing = [
+      ...TRAVERSAL_ACCESSORS.filter((accessor) => !methods.has(accessor)),
+      ...TRAVERSAL_ALTERNATIVES.filter(
+        (alternatives) => !alternatives.some((method) => methods.has(method)),
+      ).map((alternatives) => alternatives.join(" | ")),
+    ];
 
     expect(missing).toEqual([]);
   });

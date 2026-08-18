@@ -787,3 +787,330 @@ fn async_api_supports_capabilities_overlay_diagnostics_and_editor_surface() {
         client.close().await.unwrap();
     });
 }
+
+/// Exercises the checker endpoints the client exposes for type-aware tooling.
+///
+/// These answer questions the binding used to decide by parsing rendered type
+/// text or re-reading source: assignability, array/tuple shape, apparent and
+/// non-nullable forms, alias identity, and a signature's own parameters.
+#[test]
+fn async_api_exposes_checker_endpoints_for_type_aware_tooling() {
+    block_on(async {
+        let client = ApiClient::spawn(support::api_config(ApiMode::AsyncJsonRpcStdio))
+            .await
+            .unwrap();
+        let snapshot = client
+            .update_snapshot(UpdateSnapshotParams {
+                open_project: Some("/workspace/tsconfig.json".into()),
+                file_changes: None,
+                overlay_changes: None,
+            })
+            .await
+            .unwrap();
+        let project = snapshot.projects[0].id.clone();
+        let node = corsa::api::NodeHandle("1.3.80./workspace/src/index.ts".into());
+        let ty = client
+            .get_type_at_location(snapshot.handle.clone(), project.clone(), node.clone())
+            .await
+            .unwrap()
+            .unwrap();
+        let symbol = client
+            .get_symbol_at_location(snapshot.handle.clone(), project.clone(), node.clone())
+            .await
+            .unwrap()
+            .unwrap();
+        let signature = client
+            .get_signatures_of_type(snapshot.handle.clone(), project.clone(), ty.id.clone(), 0)
+            .await
+            .unwrap()
+            .remove(0);
+
+        // Checker predicates, not type-text inspection.
+        assert!(
+            client
+                .is_type_assignable_to(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    ty.id.clone(),
+                    ty.id.clone()
+                )
+                .await
+                .unwrap()
+        );
+        for predicate in ["is_array_type", "is_tuple_type", "is_array_like_type"] {
+            let answered = match predicate {
+                "is_array_type" => {
+                    client
+                        .is_array_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                        .await
+                }
+                "is_tuple_type" => {
+                    client
+                        .is_tuple_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                        .await
+                }
+                _ => {
+                    client
+                        .is_array_like_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                        .await
+                }
+            };
+            assert!(answered.unwrap(), "{predicate} should reach the checker");
+        }
+
+        // Type normalization.
+        for normalized in [
+            client
+                .get_apparent_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                .await
+                .unwrap(),
+            client
+                .get_non_nullable_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                .await
+                .unwrap(),
+            client
+                .get_widened_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                .await
+                .unwrap(),
+            client
+                .get_base_constraint_of_type(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    ty.id.clone(),
+                )
+                .await
+                .unwrap(),
+            client
+                .get_fresh_type_of_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                .await
+                .unwrap(),
+            client
+                .get_regular_type_of_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                .await
+                .unwrap(),
+            client
+                .get_true_type_of_conditional_type(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    ty.id.clone(),
+                )
+                .await
+                .unwrap(),
+            client
+                .get_false_type_of_conditional_type(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    ty.id.clone(),
+                )
+                .await
+                .unwrap(),
+            client
+                .get_type_from_type_node(snapshot.handle.clone(), project.clone(), node.clone())
+                .await
+                .unwrap(),
+        ] {
+            assert!(normalized.is_some());
+        }
+
+        // Signature structure straight from the checker.
+        assert_eq!(
+            client
+                .get_parameters_of_signature(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    signature.id.clone()
+                )
+                .await
+                .unwrap()
+                .iter()
+                .map(|parameter| parameter.name.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second"]
+        );
+        assert!(
+            client
+                .get_this_parameter_of_signature(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    signature.id.clone()
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            client
+                .get_type_parameters_of_signature(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    signature.id.clone()
+                )
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            client
+                .get_parameter_type(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    signature.id.clone(),
+                    0
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            client
+                .get_target_of_signature(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    signature.id.clone()
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            client
+                .get_resolved_signature(snapshot.handle.clone(), project.clone(), node.clone())
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            client
+                .get_signature_from_declaration(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    node.clone()
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // Alias and module identity.
+        assert!(
+            client
+                .get_alias_symbol_of_type(snapshot.handle.clone(), project.clone(), ty.id.clone())
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            client
+                .get_alias_type_arguments_of_type(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    ty.id.clone()
+                )
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            client
+                .get_aliased_symbol(snapshot.handle.clone(), project.clone(), symbol.id.clone())
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            client
+                .get_immediate_aliased_symbol(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    symbol.id.clone()
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            client
+                .get_exports_of_module(snapshot.handle.clone(), project.clone(), symbol.id.clone())
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            client
+                .get_member_in_module_exports(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    symbol.id.clone(),
+                    "value"
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            client
+                .get_export_specifier_local_target_symbol(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    node.clone()
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            client
+                .get_property_of_type(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    ty.id.clone(),
+                    "value"
+                )
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // Documentation and constants.
+        assert_eq!(
+            client
+                .get_js_doc_tags(snapshot.handle.clone(), project.clone(), symbol.id.clone())
+                .await
+                .unwrap()[0]
+                .name,
+            "deprecated"
+        );
+        assert_eq!(
+            client
+                .get_documentation_comment(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    symbol.id.clone()
+                )
+                .await
+                .unwrap(),
+            "docs"
+        );
+        assert_eq!(
+            client
+                .get_constant_value(snapshot.handle.clone(), project.clone(), node.clone())
+                .await
+                .unwrap(),
+            Some(serde_json::json!(42))
+        );
+        assert_eq!(
+            client
+                .get_well_known_symbols(snapshot.handle.clone(), project.clone())
+                .await
+                .unwrap()
+                .undefined
+                .as_str(),
+            "s0000000000000002"
+        );
+
+        client.close().await.unwrap();
+    });
+}
