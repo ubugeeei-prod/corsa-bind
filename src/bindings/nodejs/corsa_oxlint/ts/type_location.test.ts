@@ -343,6 +343,88 @@ describe("corsa oxlint type locations", () => {
     expect(seen.usage).toBe("Foo");
   });
 
+  integrationCase("uses lookup position for repeated type parameter constraints", () => {
+    const seen: Record<
+      string,
+      { readonly text: string; readonly args: readonly string[] } | undefined
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "repeated-type-parameter-constraints",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise repeated type parameter constraint lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          Identifier(node: any) {
+            if (node.name !== "outerUse" && node.name !== "innerUse") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node);
+            const constraint = type ? checker.getConstraintOfType(type) : undefined;
+            seen[node.name] = constraint
+              ? {
+                  text: checker.typeToString(constraint),
+                  args: checker
+                    .getTypeArguments(constraint)
+                    .map((argument) => checker.typeToString(argument)),
+                }
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("repeated-type-parameter-constraints", rule as any, {
+      valid: [
+        {
+          code: [
+            "class OuterConstraint {}",
+            "class InnerConstraint {}",
+            "class Box<T> {}",
+            "function outer<T extends OuterConstraint>(outerParam: T): T {",
+            "  const outerUse = outerParam;",
+            "  function inner<T extends Box<InnerConstraint>>(innerParam: T): T {",
+            "    const innerUse = innerParam;",
+            "    return innerUse;",
+            "  }",
+            "  inner(outerParam as any);",
+            "  return outerUse;",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.outerUse?.text).toBe("OuterConstraint");
+    expect(seen.outerUse?.args).toEqual([]);
+    expect(seen.innerUse?.text).toBe("Box<InnerConstraint>");
+    expect(seen.innerUse?.args).toEqual(["InnerConstraint"]);
+  });
+
   integrationCase("resolves types from wrapper-like AST nodes", () => {
     const seen: Record<string, string | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
@@ -665,6 +747,145 @@ describe("corsa oxlint type locations", () => {
     expect(seen.constructorBases).toContain("Animal");
     expect(seen.mixedBases?.[0]).toContain("Animal");
     expect(seen.intersectionBases).toContain("Animal");
+  });
+
+  integrationCase("preserves constructor union and intersection instance types", () => {
+    const seen: Record<string, unknown> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "compound-constructor-instance-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise compound constructor fallback lookups",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          NewExpression(node: any) {
+            const sourceText = context.sourceCode.text.slice(node.range[0], node.range[1]);
+            const key = sourceText.includes("UnionCtor") ? "union" : "intersection";
+            const type = checker.getTypeAtLocation(node);
+            seen[key] = type
+              ? {
+                  text: checker.typeToString(type),
+                  parts: checker.getTypesOfType(type).map((part) => checker.typeToString(part)),
+                  isIntersection: checker.isIntersectionType(type),
+                  isUnion: checker.isUnionType(type),
+                }
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("compound-constructor-instance-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Dog { readonly dog = true; }",
+            "class Cat { readonly cat = true; }",
+            "declare const UnionCtor: typeof Dog | typeof Cat;",
+            "declare const IntersectionCtor: typeof Dog & typeof Cat;",
+            "new UnionCtor();",
+            "new IntersectionCtor();",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.union).toMatchObject({
+      isUnion: true,
+      parts: expect.arrayContaining(["Dog", "Cat"]),
+    });
+    expect(seen.intersection).toMatchObject({
+      isIntersection: true,
+      parts: expect.arrayContaining(["Dog", "Cat"]),
+    });
+  });
+
+  integrationCase("resolves qualified constructor class names in their namespace scope", () => {
+    const seen: Record<string, readonly string[] | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "qualified-constructor-base-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise qualified constructor fallback lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          VariableDeclarator(node: any) {
+            if (node.id?.name !== "qualifiedCtor") {
+              return;
+            }
+            const type = checker.getTypeAtLocation(node.id);
+            seen.bases = type
+              ? checker.getBaseTypes(type).map((base) => checker.typeToString(base))
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("qualified-constructor-base-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Widget {}",
+            "namespace Models {",
+            "  export class Base {}",
+            "  export class Widget extends Base {}",
+            "}",
+            "const qualifiedCtor = Models.Widget;",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.bases).toEqual(["Base"]);
   });
 
   integrationCase("returns immediate instance type for superclass constructor types", () => {
