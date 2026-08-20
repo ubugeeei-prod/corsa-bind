@@ -150,7 +150,8 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return sessionForContext(context).session.getTypePredicateOfSignature(signature);
     },
     getBaseTypes(type) {
-      return sessionForContext(context).session.getBaseTypes(type);
+      const bases = sessionForContext(context).session.getBaseTypes(type);
+      return bases.length > 0 ? bases : constructorBaseTypesFromType(context, type, this);
     },
     getImplementedTypes(node) {
       if ("pos" in node) {
@@ -211,7 +212,10 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return sessionForContext(context).session.getBaseTypeOfType(type);
     },
     getConstraintOfType(type) {
-      return sessionForContext(context).session.getConstraintOfType(type);
+      return (
+        sessionForContext(context).session.getConstraintOfType(type) ??
+        constraintFromTypeParameterSource(context, type, this)
+      );
     },
     isUnionType(type) {
       return (type.flags & typeFlags.union) !== 0;
@@ -288,10 +292,191 @@ function typeOfNewExpression(
   }
   const constructSignature = checker.getSignaturesOfType(calleeType, SignatureKind.Construct)[0];
   const type = constructSignature
-    ? (checker.getReturnTypeOfSignature(constructSignature) ?? calleeType)
-    : calleeType;
+    ? (checker.getReturnTypeOfSignature(constructSignature) ??
+      constructorInstanceTypeFromType(context, calleeType, checker) ??
+      calleeType)
+    : (constructorInstanceTypeFromType(context, calleeType, checker) ?? calleeType);
   sessionForContext(context).session.rememberTypeLookupFromType(type, calleeType);
   return type;
+}
+
+function constructorBaseTypesFromType(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  const instanceType = constructorInstanceTypeFromType(context, type, checker);
+  if (!instanceType) {
+    return constructorBaseTypesFromConstituents(context, type, checker);
+  }
+  if (isSuperclassConstructorLookup(context, type)) {
+    return [instanceType];
+  }
+  const instanceBases = sessionForContext(context).session.getBaseTypes(instanceType);
+  return instanceBases.length > 0 ? instanceBases : [instanceType];
+}
+
+function constructorBaseTypesFromConstituents(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  if (!checker.isIntersectionType(type) && !checker.isUnionType(type)) {
+    return [];
+  }
+  const bases: CorsaType[] = [];
+  const seen = new Set<string>();
+  for (const constituent of checker.getTypesOfType(type)) {
+    for (const base of constructorBaseTypesFromType(context, constituent, checker)) {
+      if (seen.has(base.id)) {
+        continue;
+      }
+      seen.add(base.id);
+      bases.push(base);
+    }
+  }
+  return bases;
+}
+
+function constructorInstanceTypeFromType(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const text = safeTypeToString(checker, type);
+  if (!text || !/\btypeof\s+/.test(text)) {
+    return undefined;
+  }
+  const symbol = checker.getSymbolOfType(type);
+  const declared = symbol ? checker.getDeclaredTypeOfSymbol(symbol) : undefined;
+  if (
+    declared &&
+    declared.id !== type.id &&
+    !safeTypeToString(checker, declared)?.includes("typeof ")
+  ) {
+    return declared;
+  }
+  const name = firstConstructorTypeName(text);
+  return name ? typeFromClassName(context, name, checker, type) : undefined;
+}
+
+function firstConstructorTypeName(text: string): string | undefined {
+  const match = /\btypeof\s+([A-Za-z_$][\w$]*)/.exec(text);
+  return match?.[1];
+}
+
+function typeFromClassName(
+  context: ContextWithParserOptions,
+  name: string,
+  checker: CorsaTypeCheckerShape,
+  relatedType: CorsaType,
+): CorsaType | undefined {
+  const session = sessionForContext(context).session;
+  const lookup = session.getTypeLookupSource(relatedType);
+  const sourceText = lookup
+    ? (lookup.sourceText ?? session.getSourceTextForPath(lookup.fileName))
+    : context.sourceCode.text;
+  const fileName = lookup?.fileName ?? context.filename;
+  if (!sourceText) {
+    return undefined;
+  }
+  const position = classIdentifierPosition(sourceText, name);
+  if (position === undefined) {
+    return undefined;
+  }
+  return checker.getTypeAtLocation({
+    fileName,
+    pos: position,
+    end: position + name.length,
+    range: [position, position + name.length] as const,
+  });
+}
+
+function classIdentifierPosition(sourceText: string, name: string): number | undefined {
+  const pattern = new RegExp(`\\b(?:declare\\s+)?class\\s+${escapeRegExp(name)}\\b`, "g");
+  const match = pattern.exec(sourceText);
+  return match ? match.index + match[0].lastIndexOf(name) : undefined;
+}
+
+function isSuperclassConstructorLookup(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+): boolean {
+  const session = sessionForContext(context).session;
+  const lookup = session.getTypeLookupSource(type);
+  if (!lookup) {
+    return false;
+  }
+  const sourceText = lookup.sourceText ?? session.getSourceTextForPath(lookup.fileName);
+  if (!sourceText) {
+    return false;
+  }
+  return /\bextends\s*$/.test(sourceText.slice(Math.max(0, lookup.position - 32), lookup.position));
+}
+
+function constraintFromTypeParameterSource(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const name = safeTypeToString(checker, type)?.trim();
+  if (!name || !/^[A-Za-z_$][\w$]*$/.test(name)) {
+    return undefined;
+  }
+  const session = sessionForContext(context).session;
+  const lookup = session.getTypeLookupSource(type);
+  const sourceText = lookup
+    ? (lookup.sourceText ?? session.getSourceTextForPath(lookup.fileName))
+    : context.sourceCode.text;
+  const fileName = lookup?.fileName ?? context.filename;
+  if (!sourceText) {
+    return undefined;
+  }
+  const range = typeParameterConstraintRange(sourceText, name);
+  if (!range) {
+    return undefined;
+  }
+  const constraintNode = {
+    fileName,
+    pos: range[0],
+    end: range[1],
+    range,
+  };
+  const symbol = checker.getSymbolAtLocation(constraintNode);
+  return (
+    (symbol
+      ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
+      : undefined) ?? checker.getTypeAtLocation(constraintNode)
+  );
+}
+
+function typeParameterConstraintRange(
+  sourceText: string,
+  name: string,
+): readonly [number, number] | undefined {
+  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\s+extends\\s+`, "g");
+  const match = pattern.exec(sourceText);
+  if (!match) {
+    return undefined;
+  }
+  const start = match.index + match[0].length;
+  let end = start;
+  while (end < sourceText.length && /[A-Za-z0-9_$.[\]]/.test(sourceText[end]!)) {
+    end += 1;
+  }
+  return end > start ? ([start, end] as const) : undefined;
+}
+
+function safeTypeToString(checker: CorsaTypeCheckerShape, type: CorsaType): string | undefined {
+  try {
+    return checker.typeToString(type);
+  } catch {
+    return undefined;
+  }
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function nodeForTypeLookup(node: Node | CorsaNode): Node | CorsaNode {

@@ -304,6 +304,123 @@ describe("CorsaProjectSession", () => {
     ).toEqual([]);
   });
 
+  it("returns an empty list when getBaseTypes hits an empty signature handle", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.callJson.mockImplementationOnce(() => {
+      throw new Error("protocol error: api: client error: empty signature handle");
+    });
+
+    expect(
+      session.getBaseTypes({
+        id: "type-1",
+        flags: 0,
+        texts: ["Base"],
+      } as never),
+    ).toEqual([]);
+  });
+
+  it("does not send empty signatures back to the runtime", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.callJson.mockClear();
+
+    expect(
+      session.getReturnTypeOfSignature({
+        id: "",
+        flags: 0,
+        typeParameters: [],
+        parameters: [],
+      } as never),
+    ).toBeUndefined();
+    expect(
+      session.getTypePredicateOfSignature({
+        id: "",
+        flags: 0,
+        typeParameters: [],
+        parameters: [],
+      } as never),
+    ).toBeUndefined();
+    expect(client.callJson).not.toHaveBeenCalled();
+  });
+
+  it("returns undefined when signature relations hit an empty signature handle", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+    const client = clients[0];
+    if (!client) {
+      throw new Error("expected a fake client");
+    }
+    client.callJson.mockImplementation(() => {
+      throw new Error("protocol error: api: client error: empty signature handle");
+    });
+
+    const signature = {
+      id: "signature-1",
+      flags: 0,
+      typeParameters: [],
+      parameters: [],
+    };
+    expect(session.getReturnTypeOfSignature(signature as never)).toBeUndefined();
+    expect(session.getTypePredicateOfSignature(signature as never)).toBeUndefined();
+  });
+
   it("returns a server-rendered cached type text when typeToString later hits a stale handle", () => {
     clients.length = 0;
     const runtime = {

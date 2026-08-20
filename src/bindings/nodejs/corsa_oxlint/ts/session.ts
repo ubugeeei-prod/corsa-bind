@@ -629,6 +629,15 @@ export class CorsaProjectSession {
     return this.#classDeclarationByTypeId.get(type.id);
   }
 
+  getTypeLookupSource(
+    type: CorsaType,
+  ): { fileName: string; position: number; sourceText?: string } | undefined {
+    const lookup = this.#typeLookupById.get(type.id);
+    return lookup
+      ? { fileName: lookup.fileName, position: lookup.position, sourceText: lookup.sourceText }
+      : undefined;
+  }
+
   rememberTypeLookupFromType(
     type: CorsaType | undefined,
     relatedType: CorsaType | undefined,
@@ -774,24 +783,45 @@ export class CorsaProjectSession {
   }
 
   getReturnTypeOfSignature(signature: CorsaSignature): CorsaType | undefined {
-    return this.rememberType(
-      this.client().callJson("getReturnTypeOfSignature", {
-        snapshot: this.#snapshot,
-        project: this.projectId(),
-        signature: signature.id,
-      }),
-    );
+    if (signature.id.trim().length === 0) {
+      return undefined;
+    }
+    try {
+      return this.rememberType(
+        this.client().callJson("getReturnTypeOfSignature", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          signature: signature.id,
+        }),
+      );
+    } catch (error) {
+      if (isMissingTypeHandleError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   getTypePredicateOfSignature(signature: CorsaSignature): CorsaTypePredicate | undefined {
-    const predicate = this.client().callJson<CorsaTypePredicate | undefined>(
-      "getTypePredicateOfSignature",
-      {
-        snapshot: this.#snapshot,
-        project: this.projectId(),
-        signature: signature.id,
-      },
-    );
+    if (signature.id.trim().length === 0) {
+      return undefined;
+    }
+    let predicate: CorsaTypePredicate | undefined;
+    try {
+      predicate = this.client().callJson<CorsaTypePredicate | undefined>(
+        "getTypePredicateOfSignature",
+        {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          signature: signature.id,
+        },
+      );
+    } catch (error) {
+      if (isMissingTypeHandleError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
     if (predicate?.type) {
       this.rememberType(predicate.type);
     }
@@ -2045,7 +2075,9 @@ function isRecoverableTransportError(error: unknown): boolean {
 function isMissingTypeHandleError(error: unknown): boolean {
   const message = errorMessage(error);
   return (
-    message.includes("not found in snapshot registry") || message.includes("empty type handle")
+    message.includes("not found in snapshot registry") ||
+    message.includes("empty type handle") ||
+    message.includes("empty signature handle")
   );
 }
 
