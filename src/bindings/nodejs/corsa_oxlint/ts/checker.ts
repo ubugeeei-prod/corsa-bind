@@ -124,6 +124,12 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
     },
     typeToString(type, enclosingDeclaration, flags) {
       void enclosingDeclaration;
+      if (flags === undefined) {
+        const syntheticText = syntheticTypeText(type);
+        if (syntheticText !== undefined) {
+          return syntheticText;
+        }
+      }
       return sessionForContext(context).session.typeToString(type, flags);
     },
     getBaseTypeOfLiteralType(type) {
@@ -150,7 +156,8 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return sessionForContext(context).session.getTypePredicateOfSignature(signature);
     },
     getBaseTypes(type) {
-      return sessionForContext(context).session.getBaseTypes(type);
+      const bases = sessionForContext(context).session.getBaseTypes(type);
+      return bases.length > 0 ? bases : constructorBaseTypesFromType(context, type, this);
     },
     getImplementedTypes(node) {
       if ("pos" in node) {
@@ -178,10 +185,16 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return implementedTypesFromTypeAndBases(context, type, this);
     },
     getTypeArguments(type) {
+      const syntheticArguments = (type as SyntheticSourceType).syntheticTypeArguments;
+      if (syntheticArguments) {
+        return syntheticArguments;
+      }
       return sessionForContext(context).session.getTypeArguments(type);
     },
     getTypesOfType(type) {
-      return sessionForContext(context).session.getTypesOfType(type);
+      return (
+        syntheticTypeConstituents(type) ?? sessionForContext(context).session.getTypesOfType(type)
+      );
     },
     getTargetOfType(type) {
       return sessionForContext(context).session.getTargetOfType(type);
@@ -211,7 +224,10 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return sessionForContext(context).session.getBaseTypeOfType(type);
     },
     getConstraintOfType(type) {
-      return sessionForContext(context).session.getConstraintOfType(type);
+      return (
+        sessionForContext(context).session.getConstraintOfType(type) ??
+        constraintFromTypeParameterSource(context, type, this)
+      );
     },
     isUnionType(type) {
       return (type.flags & typeFlags.union) !== 0;
@@ -247,6 +263,15 @@ const typeFlags = {
   intersection: 1 << 28,
 } as const;
 
+type SyntheticCompoundType = CorsaType & {
+  readonly syntheticTypes: readonly CorsaType[];
+};
+
+type SyntheticSourceType = CorsaType & {
+  readonly syntheticText?: string;
+  readonly syntheticTypeArguments?: readonly CorsaType[];
+};
+
 function sourceTextFor(
   context: ContextWithParserOptions,
   node: Node | CorsaNode | CorsaType | CorsaSymbol | CorsaSignature,
@@ -273,6 +298,79 @@ function pathsReferToSameFile(left: string, right: string): boolean {
   );
 }
 
+function syntheticTypeText(type: CorsaType): string | undefined {
+  return (
+    (type as SyntheticSourceType).syntheticText ??
+    (isSyntheticCompoundType(type) ? type.texts[0] : undefined)
+  );
+}
+
+function syntheticTypeConstituents(type: CorsaType): readonly CorsaType[] | undefined {
+  return isSyntheticCompoundType(type) ? type.syntheticTypes : undefined;
+}
+
+function isSyntheticCompoundType(type: CorsaType): type is SyntheticCompoundType {
+  return (
+    type.id.startsWith("synthetic-compound:") &&
+    Array.isArray((type as SyntheticCompoundType).syntheticTypes)
+  );
+}
+
+function syntheticCompoundType(
+  kind: "union" | "intersection",
+  types: readonly CorsaType[],
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const uniqueTypes = uniqueTypesById(types);
+  if (uniqueTypes.length === 0) {
+    return undefined;
+  }
+  if (uniqueTypes.length === 1) {
+    return uniqueTypes[0];
+  }
+  const separator = kind === "union" ? " | " : " & ";
+  const text = uniqueTypes
+    .map((type) => safeTypeToString(checker, type))
+    .filter((part): part is string => part !== undefined && part.length > 0)
+    .join(separator);
+  if (!text) {
+    return undefined;
+  }
+  return {
+    __corsaOxlintKind: "type",
+    id: `synthetic-compound:${kind}:${uniqueTypes.map((type) => type.id).join(separator)}`,
+    flags: kind === "union" ? typeFlags.union : typeFlags.intersection,
+    texts: [text],
+    syntheticTypes: uniqueTypes,
+  } as SyntheticCompoundType;
+}
+
+function syntheticSourceType(
+  type: CorsaType,
+  text: string,
+  typeArguments: readonly CorsaType[],
+): CorsaType {
+  return {
+    ...type,
+    texts: [text],
+    syntheticText: text,
+    syntheticTypeArguments: typeArguments,
+  } as SyntheticSourceType;
+}
+
+function uniqueTypesById(types: readonly CorsaType[]): readonly CorsaType[] {
+  const seen = new Set<string>();
+  const unique: CorsaType[] = [];
+  for (const type of types) {
+    if (seen.has(type.id)) {
+      continue;
+    }
+    seen.add(type.id);
+    unique.push(type);
+  }
+  return unique;
+}
+
 function typeOfNewExpression(
   context: ContextWithParserOptions,
   node: Node,
@@ -288,10 +386,609 @@ function typeOfNewExpression(
   }
   const constructSignature = checker.getSignaturesOfType(calleeType, SignatureKind.Construct)[0];
   const type = constructSignature
-    ? (checker.getReturnTypeOfSignature(constructSignature) ?? calleeType)
-    : calleeType;
+    ? (checker.getReturnTypeOfSignature(constructSignature) ??
+      constructorInstanceTypeFromType(context, calleeType, checker) ??
+      calleeType)
+    : (constructorInstanceTypeFromType(context, calleeType, checker) ?? calleeType);
   sessionForContext(context).session.rememberTypeLookupFromType(type, calleeType);
   return type;
+}
+
+function constructorBaseTypesFromType(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  const constituentBases = constructorBaseTypesFromConstituents(context, type, checker);
+  if (constituentBases.length > 0) {
+    return constituentBases;
+  }
+  const instanceType = constructorInstanceTypeFromType(context, type, checker);
+  if (!instanceType) {
+    return [];
+  }
+  if (isSuperclassConstructorLookup(context, type)) {
+    return [instanceType];
+  }
+  const instanceBases = sessionForContext(context).session.getBaseTypes(instanceType);
+  return instanceBases.length > 0 ? instanceBases : [instanceType];
+}
+
+function constructorBaseTypesFromConstituents(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  if (!checker.isIntersectionType(type) && !checker.isUnionType(type)) {
+    return [];
+  }
+  const bases: CorsaType[] = [];
+  const seen = new Set<string>();
+  for (const constituent of checker.getTypesOfType(type)) {
+    const directBases = sessionForContext(context).session.getBaseTypes(constituent);
+    const constituentBases =
+      directBases.length > 0
+        ? directBases
+        : constructorBaseTypesFromType(context, constituent, checker);
+    for (const base of constituentBases) {
+      if (seen.has(base.id)) {
+        continue;
+      }
+      seen.add(base.id);
+      bases.push(base);
+    }
+  }
+  return bases;
+}
+
+function constructorInstanceTypeFromType(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const constituentInstance = constructorInstanceTypeFromConstituents(context, type, checker);
+  if (constituentInstance) {
+    return constituentInstance;
+  }
+  return constructorInstanceTypeFromScalar(context, type, checker);
+}
+
+function constructorInstanceTypeFromConstituents(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const kind = compoundTypeKind(type, checker);
+  if (!kind) {
+    return undefined;
+  }
+  const constituents = checker.getTypesOfType(type);
+  if (constituents.length === 0) {
+    return undefined;
+  }
+  const instances: CorsaType[] = [];
+  for (const constituent of constituents) {
+    const instance = constructorInstanceTypeFromType(context, constituent, checker);
+    if (!instance) {
+      return undefined;
+    }
+    instances.push(instance);
+  }
+  return syntheticCompoundType(kind, instances, checker);
+}
+
+function constructorInstanceTypeFromScalar(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const text = safeTypeToString(checker, type);
+  if (!text || !/\btypeof\s+/.test(text)) {
+    return undefined;
+  }
+  const symbol = checker.getSymbolOfType(type);
+  const declared = symbol ? checker.getDeclaredTypeOfSymbol(symbol) : undefined;
+  if (
+    declared &&
+    declared.id !== type.id &&
+    !safeTypeToString(checker, declared)?.includes("typeof ")
+  ) {
+    return declared;
+  }
+  const names = constructorTypeNames(text);
+  return names.length === 1 ? typeFromClassName(context, names[0]!, checker, type) : undefined;
+}
+
+function compoundTypeKind(
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): "union" | "intersection" | undefined {
+  if (checker.isUnionType(type)) {
+    return "union";
+  }
+  return checker.isIntersectionType(type) ? "intersection" : undefined;
+}
+
+function constructorTypeNames(text: string): readonly string[] {
+  const names: string[] = [];
+  const pattern = /\btypeof\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/g;
+  for (const match of text.matchAll(pattern)) {
+    if (match[1]) {
+      names.push(match[1]);
+    }
+  }
+  return names;
+}
+
+function typeFromClassName(
+  context: ContextWithParserOptions,
+  name: string,
+  checker: CorsaTypeCheckerShape,
+  relatedType: CorsaType,
+): CorsaType | undefined {
+  const session = sessionForContext(context).session;
+  const lookup = session.getTypeLookupSource(relatedType);
+  const sourceText = lookup
+    ? (lookup.sourceText ?? session.getSourceTextForPath(lookup.fileName))
+    : context.sourceCode.text;
+  const fileName = lookup?.fileName ?? context.filename;
+  if (!sourceText) {
+    return undefined;
+  }
+  const simpleName = lastQualifiedNamePart(name);
+  const position = classIdentifierPosition(sourceText, name, lookup?.position);
+  if (position === undefined) {
+    return undefined;
+  }
+  return checker.getTypeAtLocation({
+    fileName,
+    pos: position,
+    end: position + simpleName.length,
+    range: [position, position + simpleName.length] as const,
+  });
+}
+
+function classIdentifierPosition(
+  sourceText: string,
+  qualifiedName: string,
+  anchorPosition: number | undefined,
+): number | undefined {
+  const parts = qualifiedName.split(".");
+  const simpleName = parts.at(-1)!;
+  const namespaceRange =
+    parts.length > 1
+      ? namespaceBodyRange(sourceText, parts.slice(0, -1), anchorPosition)
+      : undefined;
+  return classIdentifierPositionInRange(
+    sourceText,
+    simpleName,
+    namespaceRange ?? [0, sourceText.length],
+  );
+}
+
+function classIdentifierPositionInRange(
+  sourceText: string,
+  name: string,
+  range: readonly [number, number],
+): number | undefined {
+  const pattern = new RegExp(
+    `\\b(?:export\\s+)?(?:declare\\s+)?class\\s+${escapeRegExp(name)}\\b`,
+    "g",
+  );
+  pattern.lastIndex = range[0];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(sourceText))) {
+    if (match.index >= range[1]) {
+      return undefined;
+    }
+    return match.index + match[0].lastIndexOf(name);
+  }
+  return undefined;
+}
+
+function namespaceBodyRange(
+  sourceText: string,
+  names: readonly string[],
+  anchorPosition: number | undefined,
+): readonly [number, number] | undefined {
+  let range: readonly [number, number] = [0, sourceText.length];
+  for (const name of names) {
+    const nextRange = namespaceBodyRangeForName(sourceText, name, range, anchorPosition);
+    if (!nextRange) {
+      return undefined;
+    }
+    range = nextRange;
+  }
+  return range;
+}
+
+function namespaceBodyRangeForName(
+  sourceText: string,
+  name: string,
+  range: readonly [number, number],
+  anchorPosition: number | undefined,
+): readonly [number, number] | undefined {
+  const pattern = new RegExp(`\\b(?:export\\s+)?namespace\\s+${escapeRegExp(name)}\\s*\\{`, "g");
+  pattern.lastIndex = range[0];
+  let fallback: readonly [number, number] | undefined;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(sourceText))) {
+    if (match.index >= range[1]) {
+      break;
+    }
+    const bodyStart = sourceText.indexOf("{", match.index) + 1;
+    const bodyEnd = matchingBraceEnd(sourceText, bodyStart - 1);
+    if (bodyStart <= 0 || bodyEnd === undefined || bodyEnd > range[1]) {
+      continue;
+    }
+    const bodyRange = [bodyStart, bodyEnd] as const;
+    if (
+      anchorPosition !== undefined &&
+      anchorPosition >= bodyRange[0] &&
+      anchorPosition <= bodyRange[1]
+    ) {
+      return bodyRange;
+    }
+    fallback ??= bodyRange;
+  }
+  return fallback;
+}
+
+function lastQualifiedNamePart(name: string): string {
+  return name.slice(name.lastIndexOf(".") + 1);
+}
+
+function matchingBraceEnd(sourceText: string, openBracePosition: number): number | undefined {
+  let depth = 0;
+  for (let index = openBracePosition; index < sourceText.length; index += 1) {
+    const char = sourceText[index];
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return undefined;
+}
+
+function isSuperclassConstructorLookup(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+): boolean {
+  const session = sessionForContext(context).session;
+  const lookup = session.getTypeLookupSource(type);
+  if (!lookup) {
+    return false;
+  }
+  const sourceText = lookup.sourceText ?? session.getSourceTextForPath(lookup.fileName);
+  if (!sourceText) {
+    return false;
+  }
+  return /\bextends\s*$/.test(sourceText.slice(Math.max(0, lookup.position - 32), lookup.position));
+}
+
+function constraintFromTypeParameterSource(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const name = safeTypeToString(checker, type)?.trim();
+  if (!name || !/^[A-Za-z_$][\w$]*$/.test(name)) {
+    return undefined;
+  }
+  const session = sessionForContext(context).session;
+  const lookup = session.getTypeLookupSource(type);
+  const sourceText = lookup
+    ? (lookup.sourceText ?? session.getSourceTextForPath(lookup.fileName))
+    : context.sourceCode.text;
+  const fileName = lookup?.fileName ?? context.filename;
+  if (!sourceText) {
+    return undefined;
+  }
+  const range = typeParameterConstraintRange(sourceText, name, lookup?.position);
+  if (!range) {
+    return undefined;
+  }
+  const constraintNode = {
+    fileName,
+    pos: range[0],
+    end: range[1],
+    range,
+  };
+  const symbol = checker.getSymbolAtLocation(constraintNode);
+  const constraintType =
+    (symbol
+      ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
+      : undefined) ?? checker.getTypeAtLocation(constraintNode);
+  if (!constraintType) {
+    return undefined;
+  }
+  const constraintText = sourceText.slice(range[0], range[1]).trim();
+  const argumentTypes = typeArgumentRanges(sourceText, range[0], range[1])
+    .map((argumentRange) => typeFromSourceRange(fileName, argumentRange, checker))
+    .filter((argument): argument is CorsaType => argument !== undefined);
+  return argumentTypes.length > 0
+    ? syntheticSourceType(constraintType, constraintText, argumentTypes)
+    : constraintType;
+}
+
+function typeFromSourceRange(
+  fileName: string,
+  range: readonly [number, number],
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const node = {
+    fileName,
+    pos: range[0],
+    end: range[1],
+    range,
+  };
+  const symbol = checker.getSymbolAtLocation(node);
+  return (
+    (symbol
+      ? (checker.getDeclaredTypeOfSymbol(symbol) ?? checker.getTypeOfSymbol(symbol))
+      : undefined) ?? checker.getTypeAtLocation(node)
+  );
+}
+
+function typeParameterConstraintRange(
+  sourceText: string,
+  name: string,
+  lookupPosition: number | undefined,
+): readonly [number, number] | undefined {
+  const candidate = typeParameterConstraintCandidate(sourceText, name, lookupPosition);
+  return candidate ? [candidate.constraintStart, candidate.constraintEnd] : undefined;
+}
+
+type TypeParameterConstraintCandidate = {
+  readonly nameStart: number;
+  readonly nameEnd: number;
+  readonly constraintStart: number;
+  readonly constraintEnd: number;
+  readonly declarationRange?: readonly [number, number];
+};
+
+function typeParameterConstraintCandidate(
+  sourceText: string,
+  name: string,
+  lookupPosition: number | undefined,
+): TypeParameterConstraintCandidate | undefined {
+  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\s+extends\\s+`, "g");
+  let selected: TypeParameterConstraintCandidate | undefined;
+  let selectedScore = Number.NEGATIVE_INFINITY;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(sourceText))) {
+    const nameStart = match.index;
+    const nameEnd = nameStart + name.length;
+    const constraintStart = match.index + match[0].length;
+    const constraintEnd = scanTypeParameterConstraintEnd(sourceText, constraintStart);
+    if (constraintEnd <= constraintStart) {
+      continue;
+    }
+    const declarationRange = declarationRangeForTypeParameter(sourceText, nameStart, constraintEnd);
+    const candidate = {
+      nameStart,
+      nameEnd,
+      constraintStart,
+      constraintEnd,
+      declarationRange,
+    };
+    if (lookupPosition !== undefined && lookupPosition >= nameStart && lookupPosition <= nameEnd) {
+      return candidate;
+    }
+    const score = typeParameterConstraintCandidateScore(candidate, lookupPosition);
+    if (score > selectedScore) {
+      selected = candidate;
+      selectedScore = score;
+    }
+  }
+  return selected;
+}
+
+function typeParameterConstraintCandidateScore(
+  candidate: TypeParameterConstraintCandidate,
+  lookupPosition: number | undefined,
+): number {
+  if (lookupPosition === undefined) {
+    return -candidate.nameStart;
+  }
+  const declarationRange = candidate.declarationRange;
+  if (
+    declarationRange &&
+    lookupPosition >= declarationRange[0] &&
+    lookupPosition <= declarationRange[1]
+  ) {
+    return declarationRange[0];
+  }
+  return candidate.nameStart <= lookupPosition ? candidate.nameStart - 1_000_000 : -2_000_000;
+}
+
+function declarationRangeForTypeParameter(
+  sourceText: string,
+  nameStart: number,
+  constraintEnd: number,
+): readonly [number, number] | undefined {
+  const listStart = sourceText.lastIndexOf("<", nameStart);
+  if (listStart === -1) {
+    return undefined;
+  }
+  const listEnd = scanTypeParameterListEnd(sourceText, listStart);
+  if (listEnd === undefined || listEnd < constraintEnd) {
+    return undefined;
+  }
+  const bodyStart = sourceText.indexOf("{", listEnd);
+  if (bodyStart === -1) {
+    return [listStart, listEnd + 1];
+  }
+  const bodyEnd = matchingBraceEnd(sourceText, bodyStart);
+  return bodyEnd === undefined ? [listStart, sourceText.length] : [listStart, bodyEnd + 1];
+}
+
+function scanTypeParameterListEnd(sourceText: string, listStart: number): number | undefined {
+  let depth = 0;
+  for (let index = listStart; index < sourceText.length; index += 1) {
+    const char = sourceText[index];
+    if (char === "<") {
+      depth += 1;
+    } else if (char === ">") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return undefined;
+}
+
+function scanTypeParameterConstraintEnd(sourceText: string, start: number): number {
+  let end = start;
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let braceDepth = 0;
+  while (end < sourceText.length) {
+    const char = sourceText[end]!;
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">") {
+      if (angleDepth === 0) {
+        break;
+      }
+      angleDepth -= 1;
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")") {
+      parenDepth = Math.max(0, parenDepth - 1);
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}") {
+      if (braceDepth === 0) {
+        break;
+      }
+      braceDepth -= 1;
+    } else if (
+      angleDepth === 0 &&
+      bracketDepth === 0 &&
+      parenDepth === 0 &&
+      braceDepth === 0 &&
+      (char === "," || char === "=")
+    ) {
+      break;
+    }
+    end += 1;
+  }
+  while (end > start && /\s/.test(sourceText[end - 1]!)) {
+    end -= 1;
+  }
+  return end;
+}
+
+function typeArgumentRanges(
+  sourceText: string,
+  start: number,
+  end: number,
+): readonly (readonly [number, number])[] {
+  const open = sourceText.indexOf("<", start);
+  if (open === -1 || open >= end) {
+    return [];
+  }
+  const close = matchingAngleEnd(sourceText, open, end);
+  if (close === undefined) {
+    return [];
+  }
+  const ranges: (readonly [number, number])[] = [];
+  let argumentStart = open + 1;
+  let angleDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let braceDepth = 0;
+  for (let index = open + 1; index < close; index += 1) {
+    const char = sourceText[index]!;
+    if (char === "<") {
+      angleDepth += 1;
+    } else if (char === ">") {
+      angleDepth = Math.max(0, angleDepth - 1);
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")") {
+      parenDepth = Math.max(0, parenDepth - 1);
+    } else if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}") {
+      braceDepth = Math.max(0, braceDepth - 1);
+    } else if (
+      char === "," &&
+      angleDepth === 0 &&
+      bracketDepth === 0 &&
+      parenDepth === 0 &&
+      braceDepth === 0
+    ) {
+      appendTrimmedRange(ranges, sourceText, argumentStart, index);
+      argumentStart = index + 1;
+    }
+  }
+  appendTrimmedRange(ranges, sourceText, argumentStart, close);
+  return ranges;
+}
+
+function matchingAngleEnd(
+  sourceText: string,
+  openAnglePosition: number,
+  limit: number,
+): number | undefined {
+  let depth = 0;
+  for (let index = openAnglePosition; index < limit; index += 1) {
+    const char = sourceText[index];
+    if (char === "<") {
+      depth += 1;
+    } else if (char === ">") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return undefined;
+}
+
+function appendTrimmedRange(
+  ranges: (readonly [number, number])[],
+  sourceText: string,
+  start: number,
+  end: number,
+): void {
+  while (start < end && /\s/.test(sourceText[start]!)) {
+    start += 1;
+  }
+  while (end > start && /\s/.test(sourceText[end - 1]!)) {
+    end -= 1;
+  }
+  if (end > start) {
+    ranges.push([start, end] as const);
+  }
+}
+
+function safeTypeToString(checker: CorsaTypeCheckerShape, type: CorsaType): string | undefined {
+  try {
+    return checker.typeToString(type);
+  } catch {
+    return undefined;
+  }
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function nodeForTypeLookup(node: Node | CorsaNode): Node | CorsaNode {
