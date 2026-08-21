@@ -112,7 +112,7 @@ mod tests {
     fn lock() -> LockedRepository {
         LockedRepository {
             path: "ref/corsa-upstream".into(),
-            repository: "https://github.com/microsoft/typescript-go.git".into(),
+            repository: "https://github.com/microsoft/TypeScript.git".into(),
             commit: "abc".into(),
             tree: "tree".into(),
             committer_date: "2026-03-30T00:00:00Z".into(),
@@ -123,7 +123,7 @@ mod tests {
 
     fn snapshot() -> RepositorySnapshot {
         RepositorySnapshot {
-            remote_url: "git@github.com:microsoft/typescript-go.git".into(),
+            remote_url: "git@github.com:microsoft/TypeScript.git".into(),
             commit: "abc".into(),
             tree: "tree".into(),
             committer_date: "2026-03-30T00:00:00Z".into(),

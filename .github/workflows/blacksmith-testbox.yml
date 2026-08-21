@@ -62,7 +62,7 @@ jobs:
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: ref/corsa-upstream/go.mod
+          go-version-file: ref/corsa-upstream/tsc/go.mod
           cache: false
 
       - name: Setup Vite+

@@ -1,12 +1,12 @@
 {
   "currentDirectory": ".",
-  "fileCount": 104,
-  "firstFile": "ref/corsa-upstream/_packages/native-preview/src/api/fs.ts",
-  "lastFile": "ref/corsa-upstream/_packages/native-preview/src/internal/utils.ts",
+  "fileCount": 106,
+  "firstFile": "ref/corsa-upstream/packages/typescript/src/api/fs.ts",
+  "lastFile": "ref/corsa-upstream/packages/typescript/src/internal/utils.ts",
   "projectCount": 1,
-  "rootFiles": 104,
-  "configFileName": "ref/corsa-upstream/_packages/native-preview/tsconfig.json",
-  "primaryFile": "ref/corsa-upstream/_packages/native-preview/src/api/fs.ts",
+  "rootFiles": 106,
+  "configFileName": "ref/corsa-upstream/packages/typescript/tsconfig.json",
+  "primaryFile": "ref/corsa-upstream/packages/typescript/src/api/fs.ts",
   "stringTypeFlags": 32,
   "rendered": "string"
 }

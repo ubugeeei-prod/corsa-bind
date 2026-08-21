@@ -25,10 +25,9 @@ const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
 const realBinary = resolve(workspaceRoot, `.cache/corsa${executableSuffix}`);
-const realDatasetCandidates = [
-  "ref/corsa-upstream/_packages/native-preview/tsconfig.json",
-  "ref/corsa-upstream/_packages/api/tsconfig.json",
-].map((path) => resolve(workspaceRoot, path));
+const realDatasetCandidates = ["ref/corsa-upstream/packages/typescript/tsconfig.json"].map((path) =>
+  resolve(workspaceRoot, path),
+);
 const realDataset =
   realDatasetCandidates.find((candidate) => existsSync(candidate)) ?? realDatasetCandidates[0];
 const realCorsaReady = existsSync(realBinary) && existsSync(realDataset);

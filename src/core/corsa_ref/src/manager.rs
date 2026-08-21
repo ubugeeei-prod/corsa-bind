@@ -184,7 +184,7 @@ mod tests {
                 "remote",
                 "add",
                 "origin",
-                "https://github.com/microsoft/typescript-go.git",
+                "https://github.com/microsoft/TypeScript.git",
             ])
             .current_dir(&repo)
             .output()
@@ -195,7 +195,7 @@ mod tests {
         assert_eq!(lock.corsa_upstream.path, "ref/corsa-upstream");
         assert_eq!(
             lock.corsa_upstream.repository,
-            "https://github.com/microsoft/typescript-go.git"
+            "https://github.com/microsoft/TypeScript.git"
         );
         assert_eq!(lock.version, 1);
     }
@@ -208,7 +208,7 @@ mod tests {
             version: 1,
             corsa_upstream: LockedRepository {
                 path: "ref/corsa-upstream".into(),
-                repository: "https://github.com/microsoft/typescript-go.git".into(),
+                repository: "https://github.com/microsoft/TypeScript.git".into(),
                 commit: "abc".into(),
                 tree: "tree".into(),
                 committer_date: "2026-03-30T00:00:00Z".into(),
@@ -245,7 +245,7 @@ mod tests {
                 "remote",
                 "add",
                 "origin",
-                "https://github.com/microsoft/typescript-go.git",
+                "https://github.com/microsoft/TypeScript.git",
             ])
             .current_dir(&repo)
             .output()

@@ -48,10 +48,9 @@ cargo run --release -p corsa --bin bench_tooling_compare -- \
   --json-output .cache/bench_tooling_compare.json
 ```
 
-By default the tooling runner uses the pinned upstream `native-preview`
-package, because it is the largest bundled dataset that currently completes a
-clean Corsa CLI project check. Use `--dataset PATH` to add more projects when
-you want exploratory numbers and are prepared to handle diagnostics.
+By default the tooling runner uses the pinned upstream `packages/typescript`
+project. Use `--dataset PATH` to add more projects when you want exploratory
+numbers and are prepared to handle diagnostics.
 
 `project_check` is the apples-to-apples CLI comparison.
 The lint lanes use the overlapping type-aware rules currently published by
@@ -133,11 +132,9 @@ Default native scenarios now cover both transport and type-query hot paths:
 
 ## Datasets
 
-| dataset          | files |   bytes |  lines | config                                                      |
-| ---------------- | ----: | ------: | -----: | ----------------------------------------------------------- |
-| `ast`            |    29 | 630,429 | 14,653 | `ref/corsa-upstream/_packages/ast/tsconfig.json`            |
-| `native-preview` |    71 | 939,501 | 21,144 | `ref/corsa-upstream/_packages/native-preview/tsconfig.json` |
-| `_extension`     |    13 |  78,255 |  2,022 | `ref/corsa-upstream/_extension/tsconfig.json`               |
+| dataset      | files |     bytes |  lines | config                                                 |
+| ------------ | ----: | --------: | -----: | ------------------------------------------------------ |
+| `typescript` |   106 | 1,299,988 | 30,007 | `ref/corsa-upstream/packages/typescript/tsconfig.json` |
 
 ## 2026-03-31 Tooling Compare
 

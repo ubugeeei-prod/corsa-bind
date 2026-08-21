@@ -102,7 +102,7 @@ fn main() -> Result<(), corsa::CorsaError> {
     block_on(async {
         let client = ApiClient::spawn(
             ApiSpawnConfig::new(".cache/corsa")
-                .with_cwd("ref/corsa-upstream/_packages/native-preview"),
+                .with_cwd("ref/corsa-upstream/packages/typescript"),
         )
         .await?;
 

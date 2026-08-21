@@ -36,7 +36,7 @@ receives fixes.
 - Rust: `1.85+`
 - JavaScript runtimes for published packages: Node.js `22+`, Deno `2.0+`, Bun `1.2+`
 - Node.js tooling for repository scripts and examples: `24+`
-- Go: the version declared by `ref/corsa-upstream/go.mod`
+- Go: the version declared by `ref/corsa-upstream/tsc/go.mod`
 - Operating systems: Linux, macOS, and Windows for the supported local surface
 - Published Node prebuilds: `darwin-arm64`, `darwin-x64`, `linux-arm64-gnu`, `linux-arm64-musl`, `linux-x64-gnu`, `linux-x64-musl`, `win32-arm64-msvc`, `win32-x64-msvc`
 
