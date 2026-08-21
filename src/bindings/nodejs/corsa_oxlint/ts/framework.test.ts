@@ -657,6 +657,71 @@ describe("corsa oxlint", () => {
     }
   });
 
+  it("defaults RuleTester corsa executable from the calling test file directory", async () => {
+    const previousExecutable = process.env.CORSA_EXECUTABLE;
+    const previousCwd = process.cwd();
+    const previousDescribe = RuleTester.describe;
+    const previousIt = RuleTester.it;
+    delete process.env.CORSA_EXECUTABLE;
+    try {
+      const { packageRoot, executable: expectedExecutable } = createTypeScriptPackage();
+      const launchRoot = mkdtempSync(join(tmpdir(), "corsa-oxlint-launch-"));
+      cleanupDirs.add(launchRoot);
+      const probeDir = resolve(packageRoot, "__tests__");
+      const probePath = resolve(probeDir, `rule_tester_probe_${Date.now()}.ts`);
+      mkdirSync(probeDir, { recursive: true });
+      writeFileSync(
+        probePath,
+        [
+          `import { RuleTester } from ${JSON.stringify(pathToFileURL(resolve(import.meta.dirname, "rule_tester.ts")).href)};`,
+          "",
+          "export let seen;",
+          "RuleTester.describe = (_name, fn) => fn?.();",
+          "RuleTester.it = (_name, fn) => fn?.();",
+          "",
+          'new RuleTester({ languageOptions: { sourceType: "module" } }).run("default-executable-callsite", {',
+          "  meta: {",
+          '    messages: { demo: "demo" },',
+          "    schema: [],",
+          "  },",
+          "  create(context) {",
+          "    seen = {",
+          "      languageExecutable: context.languageOptions?.parserOptions?.corsa?.executable,",
+          "      parserExecutable: context.parserOptions?.corsa?.executable,",
+          "      settingsExecutable: context.settings?.corsaOxlint?.parserOptions?.corsa?.executable,",
+          "    };",
+          "    return {};",
+          "  },",
+          "}, {",
+          '  valid: [{ code: "const value = 1;" }],',
+          "  invalid: [],",
+          "});",
+          "",
+        ].join("\n"),
+      );
+
+      process.chdir(launchRoot);
+      const probe = (await import(`${pathToFileURL(probePath).href}?case=${Date.now()}`)) as {
+        seen: Record<string, unknown> | undefined;
+      };
+
+      expect(probe.seen).toEqual({
+        languageExecutable: expectedExecutable,
+        parserExecutable: expectedExecutable,
+        settingsExecutable: expectedExecutable,
+      });
+    } finally {
+      process.chdir(previousCwd);
+      RuleTester.describe = previousDescribe;
+      RuleTester.it = previousIt;
+      if (previousExecutable === undefined) {
+        delete process.env.CORSA_EXECUTABLE;
+      } else {
+        process.env.CORSA_EXECUTABLE = previousExecutable;
+      }
+    }
+  });
+
   it("defaults decorated type-aware rules to the corsa executable", () => {
     const previousExecutable = process.env.CORSA_EXECUTABLE;
     delete process.env.CORSA_EXECUTABLE;
