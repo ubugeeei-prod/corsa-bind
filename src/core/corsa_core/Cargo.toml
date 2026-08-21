@@ -1,6 +1,6 @@
 [package]
 name = "corsa_core"
-version = "1.12.1"
+version = "1.12.2"
 edition = "2024"
 description = "Shared errors, process lifecycle helpers, and fast-path primitives for corsa"
 publish = ["crates-io"]
