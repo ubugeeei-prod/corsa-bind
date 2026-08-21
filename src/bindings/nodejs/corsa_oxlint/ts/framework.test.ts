@@ -859,6 +859,84 @@ describe("corsa oxlint", () => {
     });
   });
 
+  integrationCase("exposes type-aware node maps and symbols to custom RuleTester rules", () => {
+    const seen: Record<string, unknown>[] = [];
+    const rule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`)({
+      name: "type-service-probe",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise parser service maps and symbols inside RuleTester",
+          recommended: "recommended",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          fired: "type service probe fired",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          Identifier(node: any) {
+            if (node.name !== "value") {
+              return;
+            }
+            const tsNode = services.esTreeNodeToTSNodeMap.get(node);
+            const type = services.getTypeAtLocation(node);
+            const normalized = type ? (checker.getBaseTypeOfLiteralType(type) ?? type) : undefined;
+            seen.push({
+              hasFullTypeInformation: services.hasFullTypeInformation,
+              hasEstreeToTsNode: services.esTreeNodeToTSNodeMap.has(node),
+              hasTsNodeToEstree: services.tsNodeToESTreeNodeMap.has(tsNode),
+              roundTripsToEstree: services.tsNodeToESTreeNodeMap.get(tsNode) === node,
+              typeText: normalized ? checker.typeToString(normalized) : undefined,
+              symbolName: services.getSymbolAtLocation(node)?.name,
+            });
+            context.report({ node, messageId: "fired" });
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester({
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            corsa: {
+              executable: realCorsaBinary,
+            },
+          },
+        },
+      },
+    });
+
+    tester.run("type-service-probe", rule as any, {
+      valid: [],
+      invalid: [
+        {
+          code: 'const value = "text"; value;',
+          errors: [{ messageId: "fired" }, { messageId: "fired" }],
+        },
+      ],
+    });
+
+    expect(seen).toEqual(
+      expect.arrayContaining([
+        {
+          hasFullTypeInformation: true,
+          hasEstreeToTsNode: true,
+          hasTsNodeToEstree: true,
+          roundTripsToEstree: true,
+          typeText: "string",
+          symbolName: "value",
+        },
+      ]),
+    );
+  });
+
   integrationCase("keeps type-aware RuleTester cases in the shared default project", () => {
     const rule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`)({
       name: "class-type-probe",

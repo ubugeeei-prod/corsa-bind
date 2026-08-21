@@ -3,6 +3,8 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { nativeLintRuleMetas } from "@corsa-bind/napi";
+
 import { RuleTester } from "./rule_tester";
 import { integrationCase as resolveIntegrationCase, resolvedRealCorsaBinary } from "./test_support";
 import {
@@ -21,10 +23,16 @@ const integrationCase = resolveIntegrationCase();
 
 describe("corsa oxlint native rules", () => {
   it("exports the native plugin surface", () => {
+    const nativeRuleNames = nativeLintRuleMetas().map((meta) => meta.name);
+
+    expect(nativeRuleNames.sort()).toEqual([...implementedNativeRuleNames].sort());
     expect(defaultCorsaOxlintPlugin).toBe(corsaOxlintPlugin);
     expect(Object.keys(corsaOxlintPlugin.rules ?? {}).sort()).toEqual(
       [...implementedNativeRuleNames].sort(),
     );
+    for (const name of implementedNativeRuleNames) {
+      expect(corsaOxlintRules[name].meta?.docs?.requiresTypeChecking).toBe(true);
+    }
   });
 
   upstreamCase("tracks implemented and pending upstream rule names", () => {

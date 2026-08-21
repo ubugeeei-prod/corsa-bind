@@ -3,12 +3,19 @@ import { resolveProjectConfig } from "./context";
 import { CorsaProjectSession } from "./session";
 
 const sessions = new Map<string, CorsaProjectSession>();
-let installedExitHook = false;
-
-export function sessionForContext(context: ContextWithParserOptions): {
+type SessionContext = {
   project: ReturnType<typeof resolveProjectConfig>;
   session: CorsaProjectSession;
-} {
+};
+
+const contextSessions = new WeakMap<ContextWithParserOptions, SessionContext>();
+let installedExitHook = false;
+
+export function sessionForContext(context: ContextWithParserOptions): SessionContext {
+  const cached = contextSessions.get(context);
+  if (cached) {
+    return cached;
+  }
   const project = resolveProjectConfig(context);
   const key = [
     project.configPath,
@@ -22,7 +29,9 @@ export function sessionForContext(context: ContextWithParserOptions): {
     sessions.set(key, session);
   }
   installExitHook();
-  return { project, session };
+  const resolved = { project, session };
+  contextSessions.set(context, resolved);
+  return resolved;
 }
 
 function installExitHook(): void {

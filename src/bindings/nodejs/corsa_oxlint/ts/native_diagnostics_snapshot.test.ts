@@ -1,19 +1,40 @@
 import { describe, expect, it } from "vitest";
 
-import { runNativeLintRule } from "@corsa-bind/napi";
+import { nativeLintRuleMetas, runNativeLintRule } from "@corsa-bind/napi";
 import type { NativeLintDiagnostic, NativeLintNode } from "@corsa-bind/napi";
+
+import { implementedNativeRuleNames } from "./rules";
 
 type IdRest = Omit<NativeLintNode, "kind" | "range" | "text" | "typeTexts">;
 type NodeRest = Omit<NativeLintNode, "kind" | "range">;
 type Suggestion = NonNullable<NativeLintDiagnostic["suggestions"]>[number];
 
 describe("native diagnostic snapshots", () => {
+  it("executes every implemented native rule through the Rust bridge", () => {
+    const metas = nativeLintRuleMetas();
+    const names = metas.map((meta) => meta.name).sort();
+
+    expect(names).toEqual([...implementedNativeRuleNames].sort());
+    for (const meta of metas) {
+      expect(() =>
+        runNativeLintRule(meta.name, node(meta.listeners[0] ?? "Program", [0, 0])),
+      ).not.toThrow();
+    }
+  });
+
+  it("has at least one diagnostic fixture for every implemented native rule", () => {
+    const coveredRuleNames = new Set(diagnosticCases.map(({ ruleName }) => ruleName));
+
+    expect([...coveredRuleNames].sort()).toEqual([...implementedNativeRuleNames].sort());
+  });
+
   it("reports the native rule cases that should be errors", () => {
     const snapshots = diagnosticCases.map(({ ruleName, scenario, node }) => ({
       caseName: `${ruleName}: ${scenario}`,
       diagnostics: runNativeLintRule(ruleName, node).map(summarizeDiagnostic),
     }));
 
+    expect(snapshots.filter(({ diagnostics }) => diagnostics.length === 0)).toEqual([]);
     expect(snapshots).toMatchInlineSnapshot(`
       [
         {
@@ -152,6 +173,223 @@ describe("native diagnostic snapshots", () => {
           "caseName": "use-unknown-in-catch-callback-variable: catch parameter typed as Error",
           "diagnostics": [
             "use-unknown-in-catch-callback-variable/unexpected@23..35: Catch callback variables should be explicitly typed as unknown.",
+          ],
+        },
+        {
+          "caseName": "consistent-return: value return followed by bare return",
+          "diagnostics": [
+            "consistent-return/missingReturnValue@34..41: Function expected a return value.",
+          ],
+        },
+        {
+          "caseName": "consistent-type-exports: named export contains only type-based specifiers",
+          "diagnostics": [
+            "consistent-type-exports/typeOverValue@0..22: All exports in the declaration are only used as types. Use \`export type\`.",
+          ],
+        },
+        {
+          "caseName": "dot-notation: computed access can be dot access",
+          "diagnostics": [
+            "dot-notation/useDot@7..14: [{{key}}] is better written in dot notation. | suggestions useDot@6..15=>.value: ["value"] is better written in dot notation.",
+          ],
+        },
+        {
+          "caseName": "no-base-to-string: object stringified by string concatenation",
+          "diagnostics": [
+            "no-base-to-string/unexpected@5..18: This value is stringified through its base Object#toString() representation.",
+          ],
+        },
+        {
+          "caseName": "no-confusing-void-expression: void call in a variable initializer",
+          "diagnostics": [
+            "no-confusing-void-expression/invalidVoidExpr@14..28: Placing a void expression inside another expression is forbidden.",
+          ],
+        },
+        {
+          "caseName": "no-deprecated: deprecated identifier use",
+          "diagnostics": [
+            "no-deprecated/deprecated@0..8: This declaration is deprecated.",
+          ],
+        },
+        {
+          "caseName": "no-duplicate-type-constituents: duplicate string union constituent",
+          "diagnostics": [
+            "no-duplicate-type-constituents/duplicate@9..15: Union type constituent is duplicated with a previous constituent. | suggestions duplicate@9..15=><empty>: Remove the duplicated type constituent.",
+          ],
+        },
+        {
+          "caseName": "no-misused-promises: promise used as an if condition",
+          "diagnostics": [
+            "no-misused-promises/conditional@4..11: Expected non-Promise value in a boolean conditional.",
+          ],
+        },
+        {
+          "caseName": "no-misused-spread: string spread into an array",
+          "diagnostics": [
+            "no-misused-spread/noStringSpread@1..8: Using the spread operator on a string can mishandle special characters, because it produces Unicode code points, which will break complex characters (like emojis) into multiple parts.",
+          ],
+        },
+        {
+          "caseName": "no-redundant-type-constituents: string literal overridden by string primitive",
+          "diagnostics": [
+            "no-redundant-type-constituents/literalOverridden@9..12: Literal constituent is overridden by a primitive in this union type.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-boolean-literal-compare: boolean compared to true",
+          "diagnostics": [
+            "no-unnecessary-boolean-literal-compare/direct@0..13: This expression unnecessarily compares a boolean value to a boolean instead of using it directly. | suggestions direct@0..13=>flag: This expression unnecessarily compares a boolean value to a boolean instead of using it directly.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-condition: always truthy string literal condition",
+          "diagnostics": [
+            "no-unnecessary-condition/alwaysTruthy@4..9: Unnecessary conditional, value is always truthy.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-qualifier: namespace qualifier is already in scope",
+          "diagnostics": [
+            "no-unnecessary-qualifier/unnecessaryQualifier@0..1: Qualifier is unnecessary since the referenced name is in scope. | suggestions unnecessaryQualifier@0..2=><empty>: Remove the unnecessary qualifier.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-template-expression: number literal interpolation",
+          "diagnostics": [
+            "no-unnecessary-template-expression/noUnnecessaryTemplateExpression@1..5: Template literal expression is unnecessary and can be simplified.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-type-arguments: explicit type argument equals the default",
+          "diagnostics": [
+            "no-unnecessary-type-arguments/unnecessaryTypeParameter@5..11: This is the default value for this type parameter, so it can be omitted. | suggestions unnecessaryTypeParameter@4..12=><empty>: This is the default value for this type parameter, so it can be omitted.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-type-assertion: assertion does not change the type",
+          "diagnostics": [
+            "no-unnecessary-type-assertion/unnecessaryAssertion@0..15: This assertion is unnecessary since it does not change the type of the expression. | suggestions unnecessaryAssertion@0..15=><empty>: This assertion is unnecessary since it does not change the type of the expression.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-type-conversion: String called on a string value",
+          "diagnostics": [
+            "no-unnecessary-type-conversion/unnecessaryTypeConversion@0..6: This type conversion does not change the type or value of the expression. | suggestions suggestRemove@0..13=>value: Remove the type conversion. | suggestSatisfies@0..13=>value satisfies string: Instead, assert that the value satisfies the primitive type.",
+          ],
+        },
+        {
+          "caseName": "no-unnecessary-type-parameters: type parameter used only once",
+          "diagnostics": [
+            "no-unnecessary-type-parameters/sole@1..2: Type parameter is used only once in the signature. | suggestions replaceUsagesWithConstraint@1..2=><empty>: Replace all usages of type parameter with its constraint.",
+          ],
+        },
+        {
+          "caseName": "no-unsafe-argument: any argument passed to a string parameter",
+          "diagnostics": [
+            "no-unsafe-argument/unsafeArgument@5..10: Unsafe argument of an any typed value assigned to a non-any parameter.",
+          ],
+        },
+        {
+          "caseName": "no-unsafe-assignment: any initializer assigned to a string variable",
+          "diagnostics": [
+            "no-unsafe-assignment/unsafe@0..22: Unsafe assignment of an any-typed value.",
+          ],
+        },
+        {
+          "caseName": "no-unsafe-enum-comparison: enum value compared to number",
+          "diagnostics": [
+            "no-unsafe-enum-comparison/mismatchedCondition@0..15: The two values in this comparison do not have a shared enum type.",
+          ],
+        },
+        {
+          "caseName": "no-useless-default-assignment: default parameter on non-nullish target",
+          "diagnostics": [
+            "no-useless-default-assignment/uselessDefaultAssignment@8..16: Default value is useless because the value is not nullish. This default assignment will never be used. | suggestions uselessDefaultAssignment@5..16=><empty>: Remove the default assignment",
+          ],
+        },
+        {
+          "caseName": "non-nullable-type-assertion-style: nullable value asserted as non-nullable",
+          "diagnostics": [
+            "non-nullable-type-assertion-style/preferNonNullAssertion@0..15: Use a ! assertion to more succinctly remove null and undefined from the type. | suggestions preferNonNullAssertion@5..15=><empty>,5..5=>!: Use a ! assertion to more succinctly remove null and undefined from the type.",
+          ],
+        },
+        {
+          "caseName": "prefer-nullish-coalescing: nullable value with logical or fallback",
+          "diagnostics": [
+            "prefer-nullish-coalescing/preferNullishOverOr@0..18: Prefer using nullish coalescing operator (\`??\`) instead of a logical or (\`||\`), as it is a safer operator.",
+          ],
+        },
+        {
+          "caseName": "prefer-optional-chain: and-chain member access",
+          "diagnostics": [
+            "prefer-optional-chain/preferOptionalChain@0..15: Prefer using an optional chain expression instead, as it's more concise and easier to read.",
+          ],
+        },
+        {
+          "caseName": "prefer-readonly: private member is never reassigned",
+          "diagnostics": [
+            "prefer-readonly/preferReadonly@0..13: Member is never reassigned; mark it as \`readonly\`.",
+          ],
+        },
+        {
+          "caseName": "prefer-readonly-parameter-types: mutable typed parameter",
+          "diagnostics": [
+            "prefer-readonly-parameter-types/shouldBeReadonly@9..25: Parameter should be a readonly type.",
+          ],
+        },
+        {
+          "caseName": "prefer-return-this-type: method returns this while annotated with class type",
+          "diagnostics": [
+            "prefer-return-this-type/useThisType@15..21: Use \`this\` type instead. | suggestions useThisType@15..21=>this: Use \`this\` type instead.",
+          ],
+        },
+        {
+          "caseName": "promise-function-async: non-async function returns a promise",
+          "diagnostics": [
+            "promise-function-async/missingAsync@0..42: Functions that return promises must be async. | suggestions missingAsync@0..0=>async : Functions that return promises must be async.",
+          ],
+        },
+        {
+          "caseName": "related-getter-setter-pairs: getter return type is not assignable to setter parameter",
+          "diagnostics": [
+            "related-getter-setter-pairs/mismatch@25..31: \`get()\` type should be assignable to its equivalent \`set()\` type.",
+          ],
+        },
+        {
+          "caseName": "require-await: async function has no await",
+          "diagnostics": [
+            "require-await/missingAwait@0..30: Function has no 'await' expression.",
+          ],
+        },
+        {
+          "caseName": "return-await: async return of promise requires await in try block",
+          "diagnostics": [
+            "return-await/requiredPromiseAwait@7..23: Returning an awaited promise is required in this context. | suggestions requiredPromiseAwaitSuggestion@7..7=>await (,23..23=>): Add \`await\` before the expression. Use caution as this may impact control flow.",
+          ],
+        },
+        {
+          "caseName": "strict-boolean-expressions: nullable string condition",
+          "diagnostics": [
+            "strict-boolean-expressions/conditionErrorNullableString@4..9: Unexpected nullable string value in conditional. Please handle the nullish and empty string cases explicitly.",
+          ],
+        },
+        {
+          "caseName": "strict-void-return: concise arrow returns value in void context",
+          "diagnostics": [
+            "strict-void-return/nonVoidReturn@13..14: Value returned in a context where a void return is expected.",
+          ],
+        },
+        {
+          "caseName": "switch-exhaustiveness-check: union switch misses a branch",
+          "diagnostics": [
+            "switch-exhaustiveness-check/switchIsNotExhaustive@8..13: Switch is not exhaustive. Cases not matched: {{missingBranches}} | suggestions addMissingCases@28..28=>
+      case 'b': { throw new Error('Not implemented yet: \\'b\\' case') }: Add branches for missing cases.",
+          ],
+        },
+        {
+          "caseName": "unbound-method: method reference loses this binding",
+          "diagnostics": [
+            "unbound-method/unboundWithoutThisAnnotation@0..14: Avoid referencing unbound methods which may cause unintentional scoping of \`this\`.",
           ],
         },
       ]
@@ -391,6 +629,500 @@ const diagnosticCases = [
         }),
       ],
     ),
+  },
+  {
+    ruleName: "consistent-return",
+    scenario: "value return followed by bare return",
+    node: node("FunctionDeclaration", [0, 42], {
+      children: {
+        body: node("BlockStatement", [20, 42], {
+          childLists: {
+            body: [
+              node("ReturnStatement", [22, 31], {
+                children: { argument: node("Literal", [29, 30], { fields: { value: 1 } }) },
+              }),
+              node("ReturnStatement", [34, 41]),
+            ],
+          },
+        }),
+      },
+    }),
+  },
+  {
+    ruleName: "consistent-type-exports",
+    scenario: "named export contains only type-based specifiers",
+    node: node("ExportNamedDeclaration", [0, 22], {
+      fields: { exportKind: "value" },
+      childLists: {
+        specifiers: [
+          node("ExportSpecifier", [9, 12], {
+            fields: { exportKind: "value", __isTypeBasedSymbol: true },
+          }),
+        ],
+      },
+    }),
+  },
+  {
+    ruleName: "dot-notation",
+    scenario: "computed access can be dot access",
+    node: node("MemberExpression", [0, 15], {
+      fields: { computed: true },
+      children: {
+        object: id("record", [0, 6]),
+        property: node("Literal", [7, 14], { fields: { value: "value" } }),
+      },
+    }),
+  },
+  {
+    ruleName: "no-base-to-string",
+    scenario: "object stringified by string concatenation",
+    node: node("BinaryExpression", [0, 18], {
+      fields: { operator: "+" },
+      children: {
+        left: node("Literal", [0, 2], { fields: { value: "" } }),
+        right: node("ObjectExpression", [5, 18]),
+      },
+    }),
+  },
+  {
+    ruleName: "no-confusing-void-expression",
+    scenario: "void call in a variable initializer",
+    node: node("CallExpression", [14, 28], {
+      fields: {
+        __ancestorChain: [{ kind: "VariableDeclarator", start: 0, end: 28 }],
+      },
+      typeTexts: ["void"],
+    }),
+  },
+  {
+    ruleName: "no-deprecated",
+    scenario: "deprecated identifier use",
+    node: id("oldValue", [0, 8], [], {
+      fields: {
+        name: "oldValue",
+        __deprecated: true,
+        __parentKind: "CallExpression",
+      },
+    }),
+  },
+  {
+    ruleName: "no-duplicate-type-constituents",
+    scenario: "duplicate string union constituent",
+    node: node("TSUnionType", [0, 15], {
+      childLists: {
+        types: [node("TSStringKeyword", [0, 6]), node("TSStringKeyword", [9, 15])],
+      },
+    }),
+  },
+  {
+    ruleName: "no-misused-promises",
+    scenario: "promise used as an if condition",
+    node: node("IfStatement", [0, 32], {
+      children: { test: id("promise", [4, 11], ["Promise<boolean>"]) },
+    }),
+  },
+  {
+    ruleName: "no-misused-spread",
+    scenario: "string spread into an array",
+    node: node("SpreadElement", [1, 8], {
+      fields: { __parentKind: "ArrayExpression" },
+      children: { argument: id("text", [4, 8], ["string"]) },
+    }),
+  },
+  {
+    ruleName: "no-redundant-type-constituents",
+    scenario: "string literal overridden by string primitive",
+    node: node("TSUnionType", [0, 12], {
+      childLists: {
+        types: [
+          node("TSStringKeyword", [0, 6]),
+          node("TSLiteralType", [9, 12], {
+            children: { literal: node("Literal", [10, 11], { fields: { value: "a" } }) },
+          }),
+        ],
+      },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-boolean-literal-compare",
+    scenario: "boolean compared to true",
+    node: node("BinaryExpression", [0, 13], {
+      fields: { operator: "===" },
+      children: {
+        left: id("flag", [0, 4], ["boolean"]),
+        right: node("Literal", [9, 13], { fields: { value: true } }),
+      },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-condition",
+    scenario: "always truthy string literal condition",
+    node: node("IfStatement", [0, 18], {
+      children: { test: id("value", [4, 9], ['"value"']) },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-qualifier",
+    scenario: "namespace qualifier is already in scope",
+    node: node("TSQualifiedName", [0, 3], {
+      fields: {
+        __qualifierNamespaceInScope: true,
+        __accessedNameAlreadyInScope: true,
+      },
+      children: {
+        left: id("A", [0, 1]),
+        right: id("B", [2, 3]),
+      },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-template-expression",
+    scenario: "number literal interpolation",
+    node: node("TemplateLiteral", [0, 6], {
+      childLists: {
+        quasis: [
+          node("TemplateElement", [0, 2], { fields: { value: { raw: "", cooked: "" } } }),
+          node("TemplateElement", [5, 6], { fields: { value: { raw: "", cooked: "" } } }),
+        ],
+        expressions: [node("Literal", [3, 4], { fields: { value: 1 } })],
+      },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-type-arguments",
+    scenario: "explicit type argument equals the default",
+    node: node("CallExpression", [0, 18], {
+      fields: {
+        __typeArgumentRanges: [{ start: 5, end: 11 }],
+        __typeArgumentListRange: { start: 4, end: 12 },
+        __typeParameterCount: 1,
+        __lastTypeParameterHasDefault: true,
+        __lastTypeArgumentEqualsDefault: true,
+      },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-type-assertion",
+    scenario: "assertion does not change the type",
+    node: node("TSAsExpression", [0, 15], {
+      fields: {
+        __typeAnnotationText: "string",
+        __typeIsUnchanged: true,
+      },
+      children: {
+        expression: id("value", [0, 5], ["string"]),
+        typeAnnotation: node("TSStringKeyword", [9, 15]),
+      },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-type-conversion",
+    scenario: "String called on a string value",
+    node: node("CallExpression", [0, 13], {
+      children: {
+        callee: id("String", [0, 6]),
+      },
+      childLists: {
+        arguments: [id("value", [7, 12], ["string"])],
+      },
+    }),
+  },
+  {
+    ruleName: "no-unnecessary-type-parameters",
+    scenario: "type parameter used only once",
+    node: node("TSTypeParameterDeclaration", [0, 11], {
+      childLists: {
+        params: [
+          node("TSTypeParameter", [1, 2], {
+            fields: {
+              __typeParameterName: "T",
+              __typeParameterUsageCount: 1,
+            },
+          }),
+        ],
+      },
+    }),
+  },
+  {
+    ruleName: "no-unsafe-argument",
+    scenario: "any argument passed to a string parameter",
+    node: node("CallExpression", [0, 11], {
+      fields: { __expectedArgumentTypeTexts: [["string"]] },
+      children: { callee: id("take", [0, 4], ["(value: string) => void"]) },
+      childLists: { arguments: [id("value", [5, 10], ["any"])] },
+    }),
+  },
+  {
+    ruleName: "no-unsafe-assignment",
+    scenario: "any initializer assigned to a string variable",
+    node: node("VariableDeclarator", [0, 22], {
+      children: {
+        id: id("value", [6, 11], ["string"], {
+          children: { typeAnnotation: node("TSTypeAnnotation", [11, 19]) },
+        }),
+        init: id("source", [20, 22], ["any"]),
+      },
+    }),
+  },
+  {
+    ruleName: "no-unsafe-enum-comparison",
+    scenario: "enum value compared to number",
+    node: node("BinaryExpression", [0, 15], {
+      fields: { operator: "===" },
+      children: {
+        left: id("Color.Red", [0, 9], [], {
+          fields: {
+            __enumTypeIds: ["Color"],
+            __unionPartEnumValueKinds: ["number"],
+          },
+        }),
+        right: node("Literal", [14, 15], {
+          fields: { value: 1, __isNumberLike: true },
+        }),
+      },
+    }),
+  },
+  {
+    ruleName: "no-useless-default-assignment",
+    scenario: "default parameter on non-nullish target",
+    node: node("AssignmentPattern", [0, 16], {
+      fields: {
+        __parentKind: "FunctionDeclaration",
+        __targetTypeTexts: ["string"],
+      },
+      children: {
+        left: id("value", [0, 5]),
+        right: node("Literal", [8, 16], { fields: { value: "fallback" } }),
+      },
+    }),
+  },
+  {
+    ruleName: "non-nullable-type-assertion-style",
+    scenario: "nullable value asserted as non-nullable",
+    node: node("TSAsExpression", [0, 15], {
+      fields: {
+        __expressionUnionTypeTexts: ["string", "undefined"],
+        __assertedUnionTypeTexts: ["string"],
+        __higherPrecedenceThanUnary: true,
+      },
+      children: { expression: id("value", [0, 5], ["string | undefined"]) },
+    }),
+  },
+  {
+    ruleName: "prefer-nullish-coalescing",
+    scenario: "nullable value with logical or fallback",
+    node: node("LogicalExpression", [0, 18], {
+      fields: { operator: "||" },
+      children: {
+        left: id("value", [0, 5], ["string | undefined"]),
+        right: node("Literal", [9, 18], { fields: { value: "fallback" } }),
+      },
+    }),
+  },
+  {
+    ruleName: "prefer-optional-chain",
+    scenario: "and-chain member access",
+    node: node("LogicalExpression", [0, 15], {
+      fields: { operator: "&&" },
+      children: {
+        left: id("foo", [0, 3]),
+        right: node("MemberExpression", [7, 14], {
+          fields: { computed: false, optional: false },
+          children: {
+            object: id("foo", [7, 10]),
+            property: id("bar", [11, 14]),
+          },
+        }),
+      },
+    }),
+  },
+  {
+    ruleName: "prefer-readonly",
+    scenario: "private member is never reassigned",
+    node: node("PropertyDefinition", [0, 18], {
+      fields: { accessibility: "private", computed: false },
+      children: { key: id("value", [8, 13]) },
+    }),
+  },
+  {
+    ruleName: "prefer-readonly-parameter-types",
+    scenario: "mutable typed parameter",
+    node: node("FunctionDeclaration", [0, 36], {
+      childLists: {
+        params: [
+          id("values", [9, 25], ["string[]"], {
+            children: { typeAnnotation: node("TSTypeAnnotation", [15, 25]) },
+          }),
+        ],
+      },
+    }),
+  },
+  {
+    ruleName: "prefer-return-this-type",
+    scenario: "method returns this while annotated with class type",
+    node: node("FunctionExpression", [0, 40], {
+      fields: { __nearestClassName: "Fluent" },
+      children: {
+        returnType: node("TSTypeAnnotation", [13, 21], {
+          children: {
+            typeAnnotation: node("TSTypeReference", [15, 21], {
+              children: { typeName: id("Fluent", [15, 21]) },
+            }),
+          },
+        }),
+        body: node("BlockStatement", [22, 40], {
+          childLists: {
+            body: [
+              node("ReturnStatement", [25, 37], {
+                children: { argument: node("ThisExpression", [32, 36]) },
+              }),
+            ],
+          },
+        }),
+      },
+    }),
+  },
+  {
+    ruleName: "promise-function-async",
+    scenario: "non-async function returns a promise",
+    node: node("FunctionDeclaration", [0, 42], {
+      fields: { __signatureReturnTypeTexts: [["Promise<string>"]] },
+      children: { body: node("BlockStatement", [31, 42]) },
+    }),
+  },
+  {
+    ruleName: "related-getter-setter-pairs",
+    scenario: "getter return type is not assignable to setter parameter",
+    node: node("ClassDeclaration", [0, 80], {
+      children: {
+        body: node("ClassBody", [10, 80], {
+          childLists: {
+            body: [
+              node("MethodDefinition", [12, 35], {
+                fields: { kind: "get", __getterTypeAssignableToSetter: false },
+                children: {
+                  key: id("value", [16, 21]),
+                  value: node("FunctionExpression", [21, 35], {
+                    children: {
+                      returnType: node("TSTypeAnnotation", [23, 31], {
+                        children: {
+                          typeAnnotation: node("TSStringKeyword", [25, 31], {
+                            typeTexts: ["string"],
+                          }),
+                        },
+                      }),
+                    },
+                  }),
+                },
+              }),
+              node("MethodDefinition", [37, 70], {
+                fields: { kind: "set" },
+                children: {
+                  key: id("value", [41, 46]),
+                  value: node("FunctionExpression", [46, 70], {
+                    childLists: {
+                      params: [id("next", [51, 63], ["number"])],
+                    },
+                  }),
+                },
+              }),
+            ],
+          },
+        }),
+      },
+    }),
+  },
+  {
+    ruleName: "require-await",
+    scenario: "async function has no await",
+    node: node("FunctionDeclaration", [0, 30], {
+      fields: { async: true },
+      children: {
+        body: node("BlockStatement", [20, 30], {
+          childLists: {
+            body: [
+              node("ReturnStatement", [22, 28], {
+                children: { argument: node("Literal", [29, 30], { fields: { value: 1 } }) },
+              }),
+            ],
+          },
+        }),
+      },
+    }),
+  },
+  {
+    ruleName: "return-await",
+    scenario: "async return of promise requires await in try block",
+    node: node("ReturnStatement", [0, 23], {
+      fields: { __inAsyncScope: true, __returnAwaitRequiresAwait: true },
+      children: {
+        argument: promiseCall("resolve", [7, 23]),
+      },
+    }),
+  },
+  {
+    ruleName: "strict-boolean-expressions",
+    scenario: "nullable string condition",
+    node: node("IfStatement", [0, 18], {
+      children: { test: id("value", [4, 9], ["string | undefined"]) },
+    }),
+  },
+  {
+    ruleName: "strict-void-return",
+    scenario: "concise arrow returns value in void context",
+    node: node("CallExpression", [0, 20], {
+      childLists: {
+        arguments: [
+          node("ArrowFunctionExpression", [4, 18], {
+            fields: {
+              __voidReturnExpected: true,
+              __functionApparentReturnTypeTexts: ["number"],
+            },
+            children: {
+              body: node("Literal", [13, 14], { fields: { value: 1 }, typeTexts: ["number"] }),
+            },
+          }),
+        ],
+      },
+    }),
+  },
+  {
+    ruleName: "switch-exhaustiveness-check",
+    scenario: "union switch misses a branch",
+    node: node("SwitchStatement", [0, 40], {
+      fields: {
+        __missingBranchTexts: ["'b'"],
+        __missingBranchCaseTests: ["'b'"],
+      },
+      children: { discriminant: id("value", [8, 13]) },
+      childLists: {
+        cases: [
+          node("SwitchCase", [16, 28], {
+            children: { test: node("Literal", [21, 24], { fields: { value: "a" } }) },
+          }),
+        ],
+      },
+    }),
+  },
+  {
+    ruleName: "unbound-method",
+    scenario: "method reference loses this binding",
+    node: node("MemberExpression", [0, 14], {
+      fields: {
+        computed: false,
+        __safeUse: false,
+        __unboundMethodInfo: {
+          isMethod: true,
+          firstParamIsThis: false,
+          thisArgIsVoid: false,
+          isStatic: false,
+        },
+      },
+      children: {
+        object: id("instance", [0, 8]),
+        property: id("method", [9, 15]),
+      },
+    }),
   },
 ];
 
