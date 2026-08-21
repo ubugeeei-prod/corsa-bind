@@ -14,6 +14,7 @@ pub struct SpawnOptions {
     pub shutdown_timeout_ms: Option<u64>,
     pub outbound_capacity: Option<usize>,
     pub allow_unstable_upstream_calls: Option<bool>,
+    pub run_external_code: Option<bool>,
 }
 
 pub fn build_spawn_config(options: SpawnOptions) -> Result<ApiSpawnConfig> {
@@ -35,6 +36,9 @@ pub fn build_spawn_config(options: SpawnOptions) -> Result<ApiSpawnConfig> {
     }
     if let Some(allow) = options.allow_unstable_upstream_calls {
         config = config.with_allow_unstable_upstream_calls(allow);
+    }
+    if let Some(allow) = options.run_external_code {
+        config = config.with_run_external_code(allow);
     }
     Ok(config)
 }
@@ -103,7 +107,7 @@ mod tests {
     #[test]
     fn spawn_config_accepts_transport_limits() {
         let options = serde_json::from_str::<SpawnOptions>(
-            r#"{"executable":"./corsa","requestTimeoutMs":5000,"shutdownTimeoutMs":250,"outboundCapacity":8,"allowUnstableUpstreamCalls":true}"#,
+            r#"{"executable":"./corsa","requestTimeoutMs":5000,"shutdownTimeoutMs":250,"outboundCapacity":8,"allowUnstableUpstreamCalls":true,"runExternalCode":true}"#,
         )
         .unwrap();
         let config = build_spawn_config(options).unwrap();
@@ -117,5 +121,6 @@ mod tests {
         );
         assert_eq!(config.outbound_capacity, 8);
         assert!(config.allow_unstable_upstream_calls);
+        assert!(config.run_external_code);
     }
 }

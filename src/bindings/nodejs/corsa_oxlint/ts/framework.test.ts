@@ -936,6 +936,99 @@ describe("corsa oxlint", () => {
     }
   });
 
+  integrationCase("exposes using declarations to custom type-aware RuleTester rules", () => {
+    const seen: Record<string, unknown>[] = [];
+    const rule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`)({
+      name: "using-type-service-probe",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise parser services on explicit resource management declarations",
+          recommended: "recommended",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          fired: "using type service probe fired",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          VariableDeclaration(node: any) {
+            if (node.kind !== "using") {
+              return;
+            }
+            const identifier = node.declarations[0]?.id;
+            if (identifier?.type !== "Identifier") {
+              return;
+            }
+            const tsNode = services.esTreeNodeToTSNodeMap.get(identifier);
+            const type = services.getTypeAtLocation(identifier);
+            const normalized = type ? (checker.getBaseTypeOfLiteralType(type) ?? type) : undefined;
+            seen.push({
+              declarationKind: node.kind,
+              hasFullTypeInformation: services.hasFullTypeInformation,
+              hasEstreeToTsNode: services.esTreeNodeToTSNodeMap.has(identifier),
+              hasTsNodeToEstree: services.tsNodeToESTreeNodeMap.has(tsNode),
+              roundTripsToEstree: services.tsNodeToESTreeNodeMap.get(tsNode) === identifier,
+              typeText: normalized ? checker.typeToString(normalized) : undefined,
+              symbolName: services.getSymbolAtLocation(identifier)?.name,
+            });
+            context.report({ node: identifier, messageId: "fired" });
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester({
+      settings: {
+        corsaOxlint: {
+          parserOptions: {
+            corsa: {
+              executable: realCorsaBinary,
+            },
+          },
+        },
+      },
+    });
+
+    tester.run("using-type-service-probe", rule as any, {
+      valid: [],
+      invalid: [
+        {
+          code: [
+            "interface SymbolConstructor { readonly dispose: unique symbol; }",
+            "type DisposableResource = {",
+            "  readonly label: string;",
+            "  [Symbol.dispose](): void;",
+            "};",
+            "declare const resource: DisposableResource;",
+            "function inspect() {",
+            "  using value = resource;",
+            "  value.label;",
+            "}",
+          ].join("\n"),
+          errors: [{ messageId: "fired" }],
+        },
+      ],
+    });
+
+    expect(seen).toEqual([
+      {
+        declarationKind: "using",
+        hasFullTypeInformation: true,
+        hasEstreeToTsNode: true,
+        hasTsNodeToEstree: true,
+        roundTripsToEstree: true,
+        typeText: "DisposableResource",
+        symbolName: "value",
+      },
+    ]);
+  });
+
   integrationCase("keeps type-aware RuleTester cases in the shared default project", () => {
     const rule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`)({
       name: "class-type-probe",

@@ -1425,6 +1425,7 @@ export class CorsaProjectSession {
         executable: this.runtime.executable,
         cwd: this.runtime.cwd,
         mode: this.runtime.mode,
+        runExternalCode: this.runtime.runExternalCode,
       });
       this.#client.initialize();
     }

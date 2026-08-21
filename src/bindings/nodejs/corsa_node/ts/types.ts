@@ -8,6 +8,8 @@ export interface ApiClientOptions {
   shutdownTimeoutMs?: number;
   outboundCapacity?: number;
   allowUnstableUpstreamCalls?: boolean;
+  /** Allows trusted projects to execute configured TypeScript content mapper processes. */
+  runExternalCode?: boolean;
 }
 
 export interface InitializeResponse {

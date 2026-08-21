@@ -54,6 +54,8 @@ pub struct ApiSpawnConfig {
     pub release_queue_capacity: usize,
     /// Allows calls to upstream endpoints that are known to be unstable.
     pub allow_unstable_upstream_calls: bool,
+    /// Allows trusted projects to execute configured TypeScript content mapper processes.
+    pub run_external_code: bool,
     /// Optional observer for structured transport events.
     pub observer: Option<SharedObserver>,
     /// Optional profiler for fine-grained request phase samples.
@@ -75,6 +77,7 @@ impl ApiSpawnConfig {
             outbound_capacity: 256,
             release_queue_capacity: 256,
             allow_unstable_upstream_calls: false,
+            run_external_code: false,
             observer: None,
             profiler: None,
         }
@@ -138,6 +141,12 @@ impl ApiSpawnConfig {
         self
     }
 
+    /// Enables TypeScript's `--runExternalCode` gate for trusted content mappers.
+    pub fn with_run_external_code(mut self, allow: bool) -> Self {
+        self.run_external_code = allow;
+        self
+    }
+
     /// Sets the observer used for structured transport events.
     pub fn with_observer(mut self, observer: SharedObserver) -> Self {
         self.observer = Some(observer);
@@ -191,5 +200,6 @@ mod tests {
     fn new_prefers_msgpack_fast_path() {
         let config = ApiSpawnConfig::new("/opt/bin/corsa");
         assert_eq!(config.mode, ApiMode::SyncMsgpackStdio);
+        assert!(!config.run_external_code);
     }
 }

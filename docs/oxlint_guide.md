@@ -101,6 +101,8 @@ export default [
             executable: "./.cache/corsa", // the Corsa binary you provide
             mode: "msgpack",
             requestTimeoutMs: 30000,
+            // Required only for trusted workspaces that use TypeScript content mappers.
+            runExternalCode: false,
           },
         },
       },
@@ -111,9 +113,17 @@ export default [
 
 The `corsa` block maps onto the same runtime controls as the
 [Node binding](./nodejs_binding.md): `executable`, `mode`, `requestTimeoutMs`,
-`shutdownTimeoutMs`, `outboundCapacity`, and `allowUnstableUpstreamCalls`.
+`shutdownTimeoutMs`, `outboundCapacity`, `allowUnstableUpstreamCalls`, and
+`runExternalCode`.
 Leaving `allowUnstableUpstreamCalls` unset keeps unstable upstream endpoints
 such as `printNode` disabled.
+Leave `runExternalCode` unset unless the workspace is trusted and its
+`tsconfig.json` uses TypeScript `contentMappers`; when enabled, it forwards the
+checker-side `--runExternalCode` gate so those mapper processes can run.
+Explicit resource management syntax is supported in both lanes: custom
+type-aware rules can inspect `using` declarations through parser services, and
+the built-in `require-await` rule treats `await using` as an await-like
+operation.
 
 > [!IMPORTANT]
 > `corsa-oxlint` needs a Corsa binary at the `executable` path. It is not
@@ -175,6 +185,9 @@ tester.run("no-string-plus-number", noStringPlusNumber, {
 the runnable `examples/corsa_oxlint/rule_tester.ts` and
 `native_rule_tester.ts` samples for end-to-end usage against the real pinned
 Corsa binary.
+RuleTester-generated projects also cover TypeScript explicit resource
+management syntax, so a custom rule can match `using` declaration kinds and
+still use `getParserServices()` for the declared resource.
 
 ## How the Rust lane works
 

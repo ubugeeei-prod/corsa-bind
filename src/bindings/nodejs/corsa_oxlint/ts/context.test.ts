@@ -47,6 +47,7 @@ describe("context", () => {
             project: ["tsconfig.json"],
             corsa: {
               executable: "/repo/.cache/corsa",
+              runExternalCode: true,
             },
           },
         },
@@ -60,6 +61,7 @@ describe("context", () => {
     expect(resolved.corsa).toEqual({
       executable: "/repo/.cache/corsa",
       mode: "jsonrpc",
+      runExternalCode: true,
     });
   });
 
@@ -92,6 +94,7 @@ describe("context", () => {
 
     expect(normalizePathSeparators(resolved.configPath)).toContain(".cache/corsa_oxlint/default/");
     expect(resolved.runtime.executable).toBe(resolve(workspace, ".cache/corsa"));
+    expect(resolved.runtime.runExternalCode).toBe(false);
   });
 
   it("resolves the platform-specific default corsa executable when it exists", () => {
