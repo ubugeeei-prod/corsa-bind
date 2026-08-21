@@ -219,7 +219,7 @@ Flow:
 
 Important design choices:
 
-- the default tooling dataset is the pinned upstream `native-preview` package, which currently completes a clean Corsa CLI project check
+- the default tooling dataset is the pinned upstream `packages/typescript` project, which tracks the TypeScript 7 JavaScript package surface
 - `typescript-eslint`, `corsa-oxlint`, bare `oxlint`, and `tsgolint` are allowed to exit with code `1` because lint findings are expected and should not invalidate timing
 - `typescript-eslint`, `corsa-oxlint`, and `tsgolint` use the overlapping type-aware rule set currently exported from `corsa-oxlint/rules`
 - bare `oxlint` intentionally runs without the Corsa JS plugin or type-aware `tsgolint` bridge, so it is a raw Oxlint process baseline rather than the same rule workload

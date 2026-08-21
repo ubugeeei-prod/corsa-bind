@@ -9,10 +9,9 @@ export const corsaPath = resolve(
   workspaceRoot,
   process.platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa",
 );
-const datasetCandidates = [
-  "ref/corsa-upstream/_packages/native-preview/tsconfig.json",
-  "ref/corsa-upstream/_packages/api/tsconfig.json",
-].map((path) => resolve(workspaceRoot, path));
+const datasetCandidates = ["ref/corsa-upstream/packages/typescript/tsconfig.json"].map((path) =>
+  resolve(workspaceRoot, path),
+);
 export const datasetPath =
   datasetCandidates.find((candidate) => existsSync(candidate)) ?? datasetCandidates[0];
 export const corsaOxlintFixtureDir = resolve(workspaceRoot, "bench/fixtures/corsa_oxlint");

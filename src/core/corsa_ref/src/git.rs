@@ -225,24 +225,24 @@ mod tests {
     #[test]
     fn canonicalizes_https_and_ssh_urls() {
         assert_eq!(
-            canonical_repository_id("https://github.com/microsoft/typescript-go.git"),
-            "github.com/microsoft/typescript-go"
+            canonical_repository_id("https://github.com/microsoft/TypeScript.git"),
+            "github.com/microsoft/TypeScript"
         );
         assert_eq!(
-            canonical_repository_id("git@github.com:microsoft/typescript-go.git"),
-            "github.com/microsoft/typescript-go"
+            canonical_repository_id("git@github.com:microsoft/TypeScript.git"),
+            "github.com/microsoft/TypeScript"
         );
         assert_eq!(
-            canonical_repository_url("git@github.com:microsoft/typescript-go.git"),
-            "https://github.com/microsoft/typescript-go.git"
+            canonical_repository_url("git@github.com:microsoft/TypeScript.git"),
+            "https://github.com/microsoft/TypeScript.git"
         );
         assert_eq!(
-            canonical_repository_id("ssh://git@github.com/microsoft/typescript-go.git"),
-            "github.com/microsoft/typescript-go"
+            canonical_repository_id("ssh://git@github.com/microsoft/TypeScript.git"),
+            "github.com/microsoft/TypeScript"
         );
         assert_eq!(
-            canonical_repository_url("ssh://git@github.com/microsoft/typescript-go.git"),
-            "https://github.com/microsoft/typescript-go.git"
+            canonical_repository_url("ssh://git@github.com/microsoft/TypeScript.git"),
+            "https://github.com/microsoft/TypeScript.git"
         );
     }
 }

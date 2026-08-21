@@ -79,15 +79,12 @@ pub fn real_corsa_binary() -> PathBuf {
 }
 
 pub fn real_dataset() -> PathBuf {
-    [
-        workspace_root().join("ref/corsa-upstream/_packages/native-preview/tsconfig.json"),
-        workspace_root().join("ref/corsa-upstream/_packages/api/tsconfig.json"),
-    ]
-    .into_iter()
-    .find(|path| path.exists())
-    .unwrap_or_else(|| {
-        workspace_root().join("ref/corsa-upstream/_packages/native-preview/tsconfig.json")
-    })
+    [workspace_root().join("ref/corsa-upstream/packages/typescript/tsconfig.json")]
+        .into_iter()
+        .find(|path| path.exists())
+        .unwrap_or_else(|| {
+            workspace_root().join("ref/corsa-upstream/packages/typescript/tsconfig.json")
+        })
 }
 
 pub fn real_api_config(mode: ApiMode) -> Option<ApiSpawnConfig> {

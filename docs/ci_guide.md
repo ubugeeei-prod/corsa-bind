@@ -280,7 +280,7 @@ The pinned upstream ref now declares:
 
 in:
 
-- [`../ref/corsa-upstream/go.mod`](../ref/corsa-upstream/go.mod)
+- [`../ref/corsa-upstream/tsc/go.mod`](../ref/corsa-upstream/tsc/go.mod)
 
 That means CI cannot rely on whatever `go` version happens to be preinstalled on a runner.
 Without an explicit setup step, `vp run -w build_corsa` can fail even if the repository itself is otherwise correct.
@@ -289,7 +289,7 @@ The workflow now sets Go explicitly through:
 
 - [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 
-using `actions/setup-go` and `go-version-file: ref/corsa-upstream/go.mod`.
+using `actions/setup-go` and `go-version-file: ref/corsa-upstream/tsc/go.mod`.
 
 This keeps the workflow aligned with the actual upstream requirement instead of duplicating a version string elsewhere.
 
@@ -388,7 +388,7 @@ Using `go-version-file` means:
 - there is less room for silent drift
 
 Because `ref/corsa-upstream` is a managed checkout, fresh CI jobs must run
-`corsa_ref sync` before `actions/setup-go` can read `ref/corsa-upstream/go.mod`.
+`corsa_ref sync` before `actions/setup-go` can read `ref/corsa-upstream/tsc/go.mod`.
 
 ## Reproducibility Beats Convenience
 
@@ -407,7 +407,7 @@ The most important files for this CI stabilization work are:
 - [`../src/bindings/nodejs/corsa_oxlint/tsconfig.json`](../src/bindings/nodejs/corsa_oxlint/tsconfig.json)
 - [`../src/bindings/nodejs/corsa_oxlint/ts/session.ts`](../src/bindings/nodejs/corsa_oxlint/ts/session.ts)
 - [`../src/bindings/nodejs/corsa_oxlint/ts/rules/type_utils.ts`](../src/bindings/nodejs/corsa_oxlint/ts/rules/type_utils.ts)
-- [`../ref/corsa-upstream/go.mod`](../ref/corsa-upstream/go.mod)
+- [`../ref/corsa-upstream/tsc/go.mod`](../ref/corsa-upstream/tsc/go.mod)
 
 ## Branch Protection Readiness
 
@@ -461,7 +461,7 @@ Check:
 
 - `go version`
 - whether the shell actually exposes Go 1.26
-- whether CI is using `actions/setup-go` with `ref/corsa-upstream/go.mod`
+- whether CI is using `actions/setup-go` with `ref/corsa-upstream/tsc/go.mod`
 
 If a login shell is overriding the toolchain, prefer the `nix develop -c sh -c '...'` pattern.
 

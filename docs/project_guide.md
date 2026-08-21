@@ -29,9 +29,9 @@ That systems layer is where most of the repository's value lives.
 
 `corsa-bind` is the repository and distribution name for bindings around the
 Corsa effort: the native TypeScript 7 implementation line tracked here in the
-`typescript-go` codebase. The TypeScript roadmap describes this as the JS-based
-TypeScript 6 line versus the native TypeScript 7 line, and it uses `Strada` for
-the original TypeScript codename and `Corsa` for this effort
+`tsc` module inside `microsoft/TypeScript`. The TypeScript roadmap describes this
+as the JS-based TypeScript 6 line versus the native TypeScript 7 line, and it uses
+`Strada` for the original TypeScript codename and `Corsa` for this effort
 ([TypeScript Native Port: Versioning Roadmap](https://devblogs.microsoft.com/typescript/typescript-native-port/#versioning-roadmap)).
 
 We keep `corsa` for crate, binary, and upstream-facing labels where that matches

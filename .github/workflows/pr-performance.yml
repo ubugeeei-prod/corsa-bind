@@ -125,11 +125,24 @@ jobs:
             echo "missing upstream checkout" >&2
             exit 1
           fi
+          if [ -f ref/corsa-upstream/tsc/go.mod ]; then
+            echo "go_version_file=ref/corsa-upstream/tsc/go.mod" >> "$GITHUB_OUTPUT"
+          else
+            echo "go_version_file=ref/corsa-upstream/go.mod" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f ref/corsa-upstream/packages/typescript/tsconfig.json ]; then
+            echo "dataset_path=ref/corsa-upstream/packages/typescript/tsconfig.json" >> "$GITHUB_OUTPUT"
+          elif [ -f ref/corsa-upstream/_packages/native-preview/tsconfig.json ]; then
+            echo "dataset_path=ref/corsa-upstream/_packages/native-preview/tsconfig.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing benchmark dataset" >&2
+            exit 1
+          fi
 
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: ref/corsa-upstream/go.mod
+          go-version-file: ${{ steps.compat.outputs.go_version_file }}
           cache: false
 
       - name: Setup Vite+
@@ -185,6 +198,7 @@ jobs:
           benchmark_args=(--allow-partial-failures)
           cargo run --manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml --release -p corsa --bin bench_tooling_compare -- \
             --corsa .cache/corsa \
+            --dataset "${{ steps.compat.outputs.dataset_path }}" \
             "${benchmark_args[@]}" \
             --iterations "$BENCH_ITERATIONS" \
             --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \

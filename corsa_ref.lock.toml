@@ -2,9 +2,9 @@ version = 1
 
 [corsa_upstream]
 path = "ref/corsa-upstream"
-repository = "https://github.com/microsoft/typescript-go.git"
-commit = "89d5d5b2849a0db0957065889ca58536fa6d2e4a"
-tree = "bc369d37139fbc9792a2a32b89e92ace2344e43a"
-committer_date = "2026-08-20T06:46:10Z"
-author = "Ryan Cavanaugh"
-subject = "Add closure notice and link to original repo (#4919)"
+repository = "https://github.com/microsoft/TypeScript.git"
+commit = "c087644e82dc3d48cf87e4c5519eeaaea9daf35c"
+tree = "0ff705d2c52d2c6f05b53be8ee72223bb96b2168"
+committer_date = "2026-08-20T20:21:21Z"
+author = "Jake Bailey"
+subject = "Downgrade too-new npm deps (#63925)"
