@@ -1,6 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { RuleTester as OxlintRuleTester } from "oxlint/plugins-dev";
 
@@ -25,6 +26,7 @@ type TestLifecycleGlobal = typeof globalThis & {
 
 const cleanupDirs = new Set<string>();
 let cleanupInstalled = false;
+const ruleTesterModulePath = fileURLToPath(import.meta.url);
 
 export class RuleTester {
   /**
@@ -65,8 +67,8 @@ export class RuleTester {
   readonly #config?: RuleTesterConfig;
 
   constructor(config?: RuleTesterConfig) {
-    this.#config = config;
-    this.#inner = new OxlintRuleTester(config);
+    this.#config = normalizeRuleTesterConfig(config);
+    this.#inner = new OxlintRuleTester(this.#config);
   }
 
   run(ruleName: string, rule: Record<string, unknown>, tests: TestCases): void {
@@ -173,7 +175,10 @@ function applyRuleTesterRuntimeDefaults(
   if (parserOptions.corsa?.executable !== undefined) {
     return parserOptions;
   }
-  const rootDir = resolve(test.cwd ?? config?.cwd ?? process.cwd());
+  const rootDir = resolveRuleTesterRuntimeRoot(test, config);
+  if (!rootDir) {
+    return parserOptions;
+  }
   const executable = process.env.CORSA_EXECUTABLE ?? optionalDefaultCorsaExecutable(rootDir);
   if (!executable) {
     return parserOptions;
@@ -183,6 +188,61 @@ function applyRuleTesterRuntimeDefaults(
       executable,
     },
   });
+}
+
+function normalizeRuleTesterConfig(
+  config: RuleTesterConfig | undefined,
+): RuleTesterConfig | undefined {
+  const cwd = config?.cwd === undefined ? resolveCallingTestDirectory() : resolve(config.cwd);
+  if (!cwd) {
+    return config;
+  }
+  return config ? { ...config, cwd } : ({ cwd } as RuleTesterConfig);
+}
+
+function resolveRuleTesterRuntimeRoot(
+  test: TestCase,
+  config: RuleTesterConfig | undefined,
+): string | undefined {
+  if (test.cwd !== undefined) {
+    return resolve(test.cwd);
+  }
+  if (config?.cwd !== undefined) {
+    return resolve(config.cwd);
+  }
+  if (test.filename && isAbsolute(test.filename)) {
+    return dirname(test.filename);
+  }
+  return undefined;
+}
+
+function resolveCallingTestDirectory(): string | undefined {
+  const stack = new Error().stack;
+  if (!stack) {
+    return undefined;
+  }
+  for (const line of stack.split("\n")) {
+    const filename = stackLineFilePath(line);
+    if (!filename || resolve(filename) === ruleTesterModulePath) {
+      continue;
+    }
+    return dirname(filename);
+  }
+  return undefined;
+}
+
+function stackLineFilePath(line: string): string | undefined {
+  const trimmed = line.trim();
+  const parenthesized = /\((?<location>.+)\)$/.exec(trimmed)?.groups?.location;
+  const location = parenthesized ?? trimmed.replace(/^at\s+/, "");
+  const positioned = /^(?<specifier>.+):\d+:\d+$/.exec(location)?.groups?.specifier;
+  if (!positioned || positioned.startsWith("node:")) {
+    return undefined;
+  }
+  if (positioned.startsWith("file://")) {
+    return fileURLToPath(positioned);
+  }
+  return isAbsolute(positioned) ? positioned : undefined;
 }
 
 function optionalDefaultCorsaExecutable(rootDir: string): string | undefined {
