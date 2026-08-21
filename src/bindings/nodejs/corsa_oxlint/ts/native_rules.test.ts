@@ -321,6 +321,14 @@ describe("corsa oxlint native rules", () => {
         valid: [
           { code: "async function ok() { await Promise.resolve(1); }" },
           { code: "async function ok() { return Promise.resolve(1); }" },
+          {
+            code: [
+              "interface SymbolConstructor { readonly asyncDispose: unique symbol; }",
+              "interface AsyncDisposable { [Symbol.asyncDispose](): PromiseLike<void>; }",
+              "declare const resource: AsyncDisposable;",
+              "async function ok() { await using value = resource; }",
+            ].join("\n"),
+          },
         ],
         invalid: [
           { code: "async function nope() { return 1; }", errors: 1 },

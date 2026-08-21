@@ -230,6 +230,7 @@ impl ApiClient {
             ApiMode::AsyncJsonRpcStdio => {
                 let driver = spawn_jsonrpc_stdio(
                     &config.command,
+                    config.run_external_code,
                     config.filesystem.clone(),
                     config.request_timeout,
                     config.shutdown_timeout,
@@ -242,6 +243,7 @@ impl ApiClient {
             ApiMode::SyncMsgpackStdio => {
                 let driver = spawn_msgpack_stdio(
                     &config.command,
+                    config.run_external_code,
                     config.filesystem.clone(),
                     config.request_timeout,
                     config.outbound_capacity,

@@ -102,6 +102,7 @@ function resolveRuntimeOptions(
     ),
     cwd: resolve(runtime?.cwd ?? rootDir),
     mode: runtime?.mode ?? "msgpack",
+    runExternalCode: runtime?.runExternalCode ?? false,
     cacheLifetimeMs: runtime?.cacheLifetimeMs ?? DEFAULT_CACHE_LIFETIME_MS,
   };
 }

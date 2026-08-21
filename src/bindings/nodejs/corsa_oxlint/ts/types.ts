@@ -9,6 +9,8 @@ export interface CorsaRuntimeOptions {
   shutdownTimeoutMs?: number;
   outboundCapacity?: number;
   allowUnstableUpstreamCalls?: boolean;
+  /** Allows trusted projects to execute configured TypeScript content mapper processes. */
+  runExternalCode?: boolean;
   cacheLifetimeMs?: number;
 }
 
@@ -32,6 +34,7 @@ export interface ResolvedRuntimeOptions {
   executable: string;
   cwd: string;
   mode: ApiMode;
+  runExternalCode: boolean;
   cacheLifetimeMs: number;
 }
 

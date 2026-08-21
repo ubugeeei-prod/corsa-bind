@@ -84,6 +84,7 @@ const client = CorsaApiClient.spawn({
 | `shutdownTimeoutMs`          | `number`                 | `2000`       | Graceful shutdown budget on `close()`.                         |
 | `outboundCapacity`           | `number`                 | `256`        | Outbound request queue capacity.                               |
 | `allowUnstableUpstreamCalls` | `boolean`                | `false`      | Opt in to unstable upstream endpoints such as `printNode`.     |
+| `runExternalCode`            | `boolean`                | `false`      | Opt in to trusted TypeScript content mapper processes.         |
 
 Always pair a `spawn()` with a `close()` (use `try`/`finally`):
 
@@ -126,6 +127,13 @@ try {
   client.close();
 }
 ```
+
+For TypeScript content mappers, keep `runExternalCode` unset unless the
+workspace is trusted. Setting it to `true` forwards TypeScript's
+`--runExternalCode` gate to the spawned checker so configured `contentMappers`
+may launch their mapper processes.
+The same checker path understands TypeScript explicit resource management
+syntax, including `using` declarations and `await using` inside async scopes.
 
 ### Snapshots and handles
 

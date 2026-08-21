@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const clients: FakeClient[] = [];
 const clientSetups: ((client: FakeClient) => void)[] = [];
+const spawnOptions: unknown[] = [];
 
 class FakeClient {
   readonly initialize = vi.fn();
@@ -41,7 +42,8 @@ class FakeClient {
 
 vi.mock("@corsa-bind/napi", () => ({
   CorsaApiClient: {
-    spawn: vi.fn(() => {
+    spawn: vi.fn((options: unknown) => {
+      spawnOptions.push(options);
       const client = new FakeClient();
       clients.push(client);
       return client;
@@ -54,6 +56,7 @@ const { CorsaProjectSession, uniqueClassDeclarationPosition } = await import("./
 describe("CorsaProjectSession", () => {
   beforeEach(() => {
     clientSetups.length = 0;
+    spawnOptions.length = 0;
   });
 
   it("reuses the current snapshot when visiting a new unchanged file", () => {
@@ -62,6 +65,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -80,6 +84,35 @@ describe("CorsaProjectSession", () => {
     expect(clients[0]?.updateSnapshot).toHaveBeenCalledTimes(1);
   });
 
+  it("passes trusted content mapper external-code opt-in to the spawned runtime", () => {
+    clients.length = 0;
+    const runtime = {
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      runExternalCode: true,
+      cacheLifetimeMs: 60_000,
+    } as const;
+    const session = new CorsaProjectSession(
+      {
+        filename: "/tmp/one.ts",
+        rootDir: "/tmp",
+        configPath: "/tmp/tsconfig.json",
+        runtime,
+      },
+      runtime,
+    );
+
+    session.getTypeAtPosition("/tmp/one.ts", 0);
+
+    expect(spawnOptions[0]).toMatchObject({
+      executable: "/tmp/corsa",
+      cwd: "/tmp",
+      mode: "msgpack",
+      runExternalCode: true,
+    });
+  });
+
   it("does not rotate an unchanged snapshot only because the cache lifetime expired", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
@@ -89,6 +122,7 @@ describe("CorsaProjectSession", () => {
         executable: "/tmp/corsa",
         cwd: "/tmp",
         mode: "msgpack",
+        runExternalCode: false,
         cacheLifetimeMs: 1,
       } as const;
       const session = new CorsaProjectSession(
@@ -119,6 +153,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -153,6 +188,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -187,6 +223,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -238,6 +275,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -274,6 +312,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -310,6 +349,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -346,6 +386,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -390,6 +431,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -427,6 +469,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -463,6 +506,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -502,6 +546,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -538,6 +583,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -580,6 +626,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -611,6 +658,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -652,6 +700,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -679,6 +728,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(
@@ -722,6 +772,7 @@ describe("CorsaProjectSession", () => {
       executable: "/tmp/corsa",
       cwd: "/tmp",
       mode: "msgpack",
+      runExternalCode: false,
       cacheLifetimeMs: 60_000,
     } as const;
     const session = new CorsaProjectSession(

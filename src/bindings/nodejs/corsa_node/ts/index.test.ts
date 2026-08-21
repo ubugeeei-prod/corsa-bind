@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -370,7 +371,154 @@ describe("CorsaApiClient", () => {
       }
     });
   }
+
+  const contentMapperCase = realCorsaReady ? it : it.skip;
+
+  contentMapperCase("runs trusted TypeScript content mappers through the spawned runtime", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "corsa-content-mapper-"));
+    const tsconfig = join(projectRoot, "tsconfig.json");
+    const mapperFile = join(projectRoot, "node_modules", "mapper", "mapper.mjs");
+    let client: ReturnType<typeof CorsaApiClient.spawn> | undefined;
+    let snapshotHandle: string | undefined;
+
+    try {
+      writeContentMapperProject(projectRoot);
+
+      client = CorsaApiClient.spawn({
+        executable: realBinary,
+        cwd: projectRoot,
+        mode: "msgpack",
+        runExternalCode: true,
+      });
+      client.initialize();
+
+      const config = client.parseConfigFile(tsconfig);
+      expect(config.fileNames.some((fileName) => fileName.endsWith("main.ts"))).toBe(true);
+
+      const snapshot = client.updateSnapshot({ openProject: tsconfig });
+      snapshotHandle = snapshot.snapshot;
+      const project = snapshot.projects[0];
+      expect(project).toBeDefined();
+
+      const source = readText(
+        client.getSourceFile(snapshot.snapshot, project.id, join(projectRoot, "app.box")),
+      );
+      expect(source).toContain('export const mapped: string = "from mapper";');
+      expect(existsSync(mapperFile)).toBe(true);
+    } finally {
+      try {
+        if (client && snapshotHandle) {
+          client.releaseHandle(snapshotHandle);
+        }
+      } finally {
+        client?.close();
+        rmSync(projectRoot, { force: true, recursive: true });
+      }
+    }
+  });
 });
+
+function writeContentMapperProject(projectRoot: string): void {
+  const mapperRoot = join(projectRoot, "node_modules", "mapper");
+  mkdirSync(mapperRoot, { recursive: true });
+  writeFileSync(
+    join(projectRoot, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          module: "esnext",
+          moduleResolution: "bundler",
+          strict: true,
+          target: "es2020",
+        },
+        contentMappers: [{ package: "mapper", extensions: [".box"] }],
+        include: ["**/*"],
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(join(projectRoot, "app.box"), "ignored by the mapper\n");
+  writeFileSync(
+    join(projectRoot, "main.ts"),
+    ['import { mapped } from "./app.box";', "export const value: string = mapped;", ""].join("\n"),
+  );
+  writeFileSync(
+    join(mapperRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "mapper",
+        version: "1.0.0",
+        typescript: {
+          contentMapper: {
+            exec: [process.execPath, join(mapperRoot, "mapper.mjs")],
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    join(mapperRoot, "mapper.mjs"),
+    [
+      "let buffer = Buffer.alloc(0);",
+      'process.stdin.on("data", (chunk) => {',
+      "  buffer = Buffer.concat([buffer, chunk]);",
+      "  drain();",
+      "});",
+      "function drain() {",
+      "  for (;;) {",
+      '    const headerEnd = buffer.indexOf("\\r\\n\\r\\n");',
+      "    if (headerEnd < 0) return;",
+      '    const header = buffer.subarray(0, headerEnd).toString("utf8");',
+      "    const match = /^Content-Length: (\\d+)/im.exec(header);",
+      '    if (!match) throw new Error("missing Content-Length");',
+      "    const bodyStart = headerEnd + 4;",
+      "    const length = Number(match[1]);",
+      "    if (buffer.length < bodyStart + length) return;",
+      '    const message = JSON.parse(buffer.subarray(bodyStart, bodyStart + length).toString("utf8"));',
+      "    buffer = buffer.subarray(bodyStart + length);",
+      "    handle(message);",
+      "  }",
+      "}",
+      "function handle(message) {",
+      "  switch (message.method) {",
+      '    case "initialize":',
+      '      send(message.id, { protocolVersion: 1, positionEncoding: "utf-8", diagnosticSource: "box" });',
+      "      return;",
+      '    case "openProject":',
+      "      send(message.id, {});",
+      "      return;",
+      '    case "closeProject":',
+      "      send(message.id, null);",
+      "      return;",
+      '    case "transform":',
+      '      send(message.id, { text: "export const mapped: string = \\"from mapper\\";\\n", extension: ".ts", mappings: [] });',
+      "      return;",
+      "    default:",
+      "      sendError(message.id, `unexpected method ${message.method}`);",
+      "  }",
+      "}",
+      "function send(id, result) {",
+      '  const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, result }), "utf8");',
+      "  process.stdout.write(`Content-Length: ${body.length}\\r\\n\\r\\n`);",
+      "  process.stdout.write(body);",
+      "}",
+      "function sendError(id, message) {",
+      '  const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32601, message } }), "utf8");',
+      "  process.stdout.write(`Content-Length: ${body.length}\\r\\n\\r\\n`);",
+      "  process.stdout.write(body);",
+      "}",
+      "",
+    ].join("\n"),
+  );
+}
+
+function readText(source: Uint8Array | null): string {
+  expect(source).not.toBeNull();
+  return Buffer.from(source!).toString("utf8");
+}
 
 describe("CorsaVirtualDocument", () => {
   it("tracks incremental virtual file changes", () => {
