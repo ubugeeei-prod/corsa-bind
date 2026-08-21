@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { describe, expect, it } from "vitest";
 
@@ -374,48 +375,51 @@ describe("CorsaApiClient", () => {
 
   const contentMapperCase = realCorsaReady ? it : it.skip;
 
-  contentMapperCase("runs trusted TypeScript content mappers through the spawned runtime", () => {
-    const projectRoot = mkdtempSync(join(tmpdir(), "corsa-content-mapper-"));
-    const tsconfig = join(projectRoot, "tsconfig.json");
-    const mapperFile = join(projectRoot, "node_modules", "mapper", "mapper.mjs");
-    let client: ReturnType<typeof CorsaApiClient.spawn> | undefined;
-    let snapshotHandle: string | undefined;
+  contentMapperCase(
+    "runs trusted TypeScript content mappers through the spawned runtime",
+    async () => {
+      const projectRoot = mkdtempSync(join(tmpdir(), "corsa-content-mapper-"));
+      const tsconfig = join(projectRoot, "tsconfig.json");
+      const mapperFile = join(projectRoot, "node_modules", "mapper", "mapper.mjs");
+      let client: ReturnType<typeof CorsaApiClient.spawn> | undefined;
+      let snapshotHandle: string | undefined;
 
-    try {
-      writeContentMapperProject(projectRoot);
-
-      client = CorsaApiClient.spawn({
-        executable: realBinary,
-        cwd: projectRoot,
-        mode: "msgpack",
-        runExternalCode: true,
-      });
-      client.initialize();
-
-      const config = client.parseConfigFile(tsconfig);
-      expect(config.fileNames.some((fileName) => fileName.endsWith("main.ts"))).toBe(true);
-
-      const snapshot = client.updateSnapshot({ openProject: tsconfig });
-      snapshotHandle = snapshot.snapshot;
-      const project = snapshot.projects[0];
-      expect(project).toBeDefined();
-
-      const source = readText(
-        client.getSourceFile(snapshot.snapshot, project.id, join(projectRoot, "app.box")),
-      );
-      expect(source).toContain('export const mapped: string = "from mapper";');
-      expect(existsSync(mapperFile)).toBe(true);
-    } finally {
       try {
-        if (client && snapshotHandle) {
-          client.releaseHandle(snapshotHandle);
-        }
+        writeContentMapperProject(projectRoot);
+
+        client = CorsaApiClient.spawn({
+          executable: realBinary,
+          cwd: projectRoot,
+          mode: "msgpack",
+          runExternalCode: true,
+        });
+        client.initialize();
+
+        const config = client.parseConfigFile(tsconfig);
+        expect(config.fileNames.some((fileName) => fileName.endsWith("main.ts"))).toBe(true);
+
+        const snapshot = client.updateSnapshot({ openProject: tsconfig });
+        snapshotHandle = snapshot.snapshot;
+        const project = snapshot.projects[0];
+        expect(project).toBeDefined();
+
+        const source = readText(
+          client.getSourceFile(snapshot.snapshot, project.id, join(projectRoot, "app.box")),
+        );
+        expect(source).toContain('export const mapped: string = "from mapper";');
+        expect(existsSync(mapperFile)).toBe(true);
       } finally {
-        client?.close();
-        rmSync(projectRoot, { force: true, recursive: true });
+        try {
+          if (client && snapshotHandle) {
+            client.releaseHandle(snapshotHandle);
+          }
+        } finally {
+          client?.close();
+          await removeTemporaryProject(projectRoot);
+        }
       }
-    }
-  });
+    },
+  );
 });
 
 function writeContentMapperProject(projectRoot: string): void {
@@ -467,6 +471,7 @@ function writeContentMapperProject(projectRoot: string): void {
       "  buffer = Buffer.concat([buffer, chunk]);",
       "  drain();",
       "});",
+      'process.stdin.on("end", () => process.exit(0));',
       "function drain() {",
       "  for (;;) {",
       '    const headerEnd = buffer.indexOf("\\r\\n\\r\\n");',
@@ -518,6 +523,29 @@ function writeContentMapperProject(projectRoot: string): void {
 function readText(source: Uint8Array | null): string {
   expect(source).not.toBeNull();
   return Buffer.from(source!).toString("utf8");
+}
+
+async function removeTemporaryProject(projectRoot: string): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  for (;;) {
+    try {
+      rmSync(projectRoot, { force: true, recursive: true });
+      return;
+    } catch (error) {
+      if (!isRetryableWindowsRmError(error) || Date.now() >= deadline) {
+        throw error;
+      }
+      await delay(50);
+    }
+  }
+}
+
+function isRetryableWindowsRmError(error: unknown): boolean {
+  if (process.platform !== "win32" || typeof error !== "object" || error === null) {
+    return false;
+  }
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EBUSY" || code === "ENOTEMPTY" || code === "EPERM";
 }
 
 describe("CorsaVirtualDocument", () => {
