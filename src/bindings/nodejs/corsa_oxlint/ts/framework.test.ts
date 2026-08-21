@@ -923,18 +923,17 @@ describe("corsa oxlint", () => {
       ],
     });
 
-    expect(seen).toEqual(
-      expect.arrayContaining([
-        {
-          hasFullTypeInformation: true,
-          hasEstreeToTsNode: true,
-          hasTsNodeToEstree: true,
-          roundTripsToEstree: true,
-          typeText: "string",
-          symbolName: "value",
-        },
-      ]),
-    );
+    expect(seen).toHaveLength(2);
+    for (const observation of seen) {
+      expect(observation).toEqual({
+        hasFullTypeInformation: true,
+        hasEstreeToTsNode: true,
+        hasTsNodeToEstree: true,
+        roundTripsToEstree: true,
+        typeText: "string",
+        symbolName: "value",
+      });
+    }
   });
 
   integrationCase("keeps type-aware RuleTester cases in the shared default project", () => {

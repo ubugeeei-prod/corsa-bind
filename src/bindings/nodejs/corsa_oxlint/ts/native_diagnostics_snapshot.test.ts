@@ -389,7 +389,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "unbound-method: method reference loses this binding",
           "diagnostics": [
-            "unbound-method/unboundWithoutThisAnnotation@0..14: Avoid referencing unbound methods which may cause unintentional scoping of \`this\`.",
+            "unbound-method/unboundWithoutThisAnnotation@0..15: Avoid referencing unbound methods which may cause unintentional scoping of \`this\`.",
           ],
         },
       ]
@@ -1041,7 +1041,7 @@ const diagnosticCases = [
         body: node("BlockStatement", [20, 30], {
           childLists: {
             body: [
-              node("ReturnStatement", [22, 28], {
+              node("ReturnStatement", [22, 30], {
                 children: { argument: node("Literal", [29, 30], { fields: { value: 1 } }) },
               }),
             ],
@@ -1107,7 +1107,7 @@ const diagnosticCases = [
   {
     ruleName: "unbound-method",
     scenario: "method reference loses this binding",
-    node: node("MemberExpression", [0, 14], {
+    node: node("MemberExpression", [0, 15], {
       fields: {
         computed: false,
         __safeUse: false,
@@ -1161,7 +1161,7 @@ function promiseCall(
   range: [number, number],
   args: NativeLintNode[] = [],
 ): NativeLintNode {
-  return memberCall(id("Promise", [0, 7]), name, range, args);
+  return memberCall(id("Promise", [range[0], range[0] + "Promise".length]), name, range, args);
 }
 
 function id(
