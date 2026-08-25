@@ -621,9 +621,6 @@ impl RaftNode {
         if last_local <= snapshot.last_included_index {
             self.log.clear();
         } else {
-            let drop = (snapshot.last_included_index - self.log_base_index + self.log.len() as u64
-                - last_local) as usize;
-            let _ = drop;
             self.log.clear();
             let entries = self.storage.load_log(self.id.as_str())?;
             for entry in entries {
@@ -709,7 +706,7 @@ impl RaftNode {
             self.state_machine.apply(&entry.command)?;
             self.last_applied = next;
         }
-        Ok(())
+        self.maybe_compact_log()
     }
 
     pub(super) fn step(&mut self, message: RaftMessage, now: Instant) -> Result<Outbox> {
@@ -784,7 +781,6 @@ impl RaftNode {
         Ok(outbox)
     }
 
-    #[allow(dead_code)]
     pub(super) fn maybe_compact_log(&mut self) -> Result<()> {
         let threshold = self.config.snapshot_threshold;
         if threshold == usize::MAX {
