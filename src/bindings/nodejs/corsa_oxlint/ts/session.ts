@@ -91,6 +91,8 @@ export class CorsaProjectSession {
   #sourceLengthByPath = new Map<string, number>();
   #typeTextById = new Map<string, string>();
   #jsDocTagsBySymbolId = new Map<string, readonly CorsaJsDocTagInfo[]>();
+  #statByPath = new Map<string, { mtimeMs: number; at: number }>();
+  #crossFileSourceTextByPath = new Map<string, string | undefined>();
   #lastRefreshMs = 0;
   #snapshotHasIssuedHandles = false;
   #supportsOverlayChanges?: boolean;
@@ -1384,6 +1386,7 @@ export class CorsaProjectSession {
     this.#symbolSearchRangeByTypeId.clear();
     this.#sourceLengthByPath.clear();
     this.#jsDocTagsBySymbolId.clear();
+    this.#crossFileSourceTextByPath.clear();
     this.#snapshotHasIssuedHandles = false;
   }
 
@@ -1415,6 +1418,31 @@ export class CorsaProjectSession {
     };
   }
 
+  /**
+   * Rate-limits the per-query `statSync`: while the same lint source text is
+   * being processed and the cache lifetime has not elapsed, the last observed
+   * mtime is authoritative. Every type query used to stat the file.
+   */
+  private statMtimeMsThrottled(
+    fileName: string,
+    sourceText: string | undefined,
+    cached: FileCache | undefined,
+    now: number,
+  ): number {
+    const entry = this.#statByPath.get(fileName);
+    if (
+      entry &&
+      now - entry.at <= this.runtime.cacheLifetimeMs &&
+      cached !== undefined &&
+      cached.lintSourceText === sourceText
+    ) {
+      return entry.mtimeMs;
+    }
+    const mtimeMs = statMtimeMs(fileName);
+    this.#statByPath.set(fileName, { mtimeMs, at: now });
+    return mtimeMs;
+  }
+
   private sourceTextForPath(path: string): string | undefined {
     const direct = this.#files.get(path);
     if (direct) {
@@ -1425,7 +1453,12 @@ export class CorsaProjectSession {
         return cached.lintSourceText ?? cached.sourceText ?? readFileOrUndefined(fileName);
       }
     }
-    return readFileOrUndefined(path) ?? readFileOrUndefined(`${this.runtime.cwd}/${path}`);
+    if (this.#crossFileSourceTextByPath.has(path)) {
+      return this.#crossFileSourceTextByPath.get(path);
+    }
+    const text = readFileOrUndefined(path) ?? readFileOrUndefined(`${this.runtime.cwd}/${path}`);
+    this.#crossFileSourceTextByPath.set(path, text);
+    return text;
   }
 
   private withTransportRecovery<T>(operation: () => T, action: string): T {
@@ -1540,7 +1573,7 @@ export class CorsaProjectSession {
     const now = Date.now();
     const expired = now - this.#lastRefreshMs > this.runtime.cacheLifetimeMs;
     const cached = this.#files.get(fileName);
-    const mtimeMs = statMtimeMs(fileName);
+    const mtimeMs = this.statMtimeMsThrottled(fileName, sourceText, cached, now);
     const overlayText = this.supportedOverlayText(fileName, sourceText, mtimeMs, cached);
     const mtimeChanged = cached !== undefined && mtimeMs !== cached.mtimeMs;
     const textChanged = overlayText !== cached?.sourceText;
