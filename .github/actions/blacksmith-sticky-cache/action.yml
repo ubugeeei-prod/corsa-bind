@@ -31,35 +31,35 @@ runs:
   steps:
     - name: Mount Cargo target sticky disk
       if: ${{ runner.os == 'Linux' && inputs.cargo-target == 'true' }}
-      uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+      uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
       with:
         key: ${{ github.repository }}-${{ inputs.suffix }}-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
         path: target
 
     - name: Mount corsa_ref target sticky disk
       if: ${{ runner.os == 'Linux' && inputs.corsa-ref-target == 'true' }}
-      uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+      uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
       with:
         key: ${{ github.repository }}-${{ inputs.suffix }}-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
         path: .cache/corsa-ref-target
 
     - name: Mount Go build sticky disk
       if: ${{ runner.os == 'Linux' && inputs.go-build == 'true' }}
-      uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+      uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
       with:
         key: ${{ github.repository }}-${{ inputs.suffix }}-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
         path: .cache/go-build
 
     - name: Mount npm cache sticky disk
       if: ${{ runner.os == 'Linux' && inputs.npm-cache == 'true' }}
-      uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+      uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
       with:
         key: ${{ github.repository }}-${{ inputs.suffix }}-${{ runner.os }}-npm-cache-${{ hashFiles('ref/corsa-upstream/package-lock.json', 'bench/cli_compare/package-lock.json') }}
         path: ~/.npm
 
     - name: Mount pnpm store sticky disk
       if: ${{ runner.os == 'Linux' && inputs.pnpm-store == 'true' }}
-      uses: useblacksmith/stickydisk@13af8883542ca949a717e70fef89d15edbb29d88 # v1.2.0
+      uses: useblacksmith/stickydisk@35ba2e331a80056a42af053ee54968511de2b7c7 # v1.4.0
       with:
         key: ${{ github.repository }}-${{ inputs.suffix }}-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
         path: ~/.local/share/pnpm/store
