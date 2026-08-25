@@ -330,6 +330,503 @@ function splitTupleText(text: string): string[] {
   return parts;
 }
 
+
+// ---------------------------------------------------------------------------
+// no-unsafe-enum-comparison
+// ---------------------------------------------------------------------------
+
+// TypeScript 7's native checker renumbered TypeFlags relative to Strada;
+// these mirror ref/corsa-upstream/tsc/internal/checker/types.go.
+const TYPE_FLAG_ANY = 1 << 0;
+const TYPE_FLAG_UNKNOWN = 1 << 1;
+const TYPE_FLAG_STRING = 1 << 5;
+const TYPE_FLAG_NUMBER = 1 << 6;
+const TYPE_FLAG_BIGINT = 1 << 7;
+const TYPE_FLAG_BOOLEAN = 1 << 8;
+const TYPE_FLAG_STRING_LITERAL = 1 << 10;
+const TYPE_FLAG_NUMBER_LITERAL = 1 << 11;
+const TYPE_FLAG_BIGINT_LITERAL = 1 << 12;
+const TYPE_FLAG_BOOLEAN_LITERAL = 1 << 13;
+const TYPE_FLAG_ENUM_LITERAL = 1 << 15;
+const TYPE_FLAG_ENUM = 1 << 16;
+const TYPE_FLAG_NEVER = 1 << 18;
+const TYPE_FLAG_TEMPLATE_LITERAL = 1 << 22;
+const TYPE_FLAG_STRING_MAPPING = 1 << 23;
+const TYPE_FLAG_UNION = 1 << 27;
+const TYPE_FLAG_STRING_LIKE =
+  TYPE_FLAG_STRING | TYPE_FLAG_STRING_LITERAL | TYPE_FLAG_TEMPLATE_LITERAL | TYPE_FLAG_STRING_MAPPING;
+const TYPE_FLAG_NUMBER_LIKE = TYPE_FLAG_NUMBER | TYPE_FLAG_NUMBER_LITERAL | TYPE_FLAG_ENUM;
+
+const ENUM_COMPARISON_OPERATORS = new Set(["<", "<=", ">", ">=", "==", "===", "!=", "!=="]);
+
+/** Splits a type into its union constituents (the type itself when scalar). */
+function unionPartsOfType(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+): readonly CorsaType[] {
+  if ((type.flags & TYPE_FLAG_UNION) === 0) {
+    return [type];
+  }
+  const parts = checkerFor(context).getTypesOfType(type);
+  return parts.length > 0 ? parts : [type];
+}
+
+function renderedTypeText(context: ContextWithParserOptions, type: CorsaType): string {
+  return type.texts?.[0] ?? checkerFor(context).typeToString(type);
+}
+
+/** The declaring enum's rendered name for an enum(-literal) type part. */
+function enumIdOfPart(context: ContextWithParserOptions, part: CorsaType): string | undefined {
+  if ((part.flags & (TYPE_FLAG_ENUM | TYPE_FLAG_ENUM_LITERAL)) === 0) {
+    return undefined;
+  }
+  const text = renderedTypeText(context, part);
+  const dot = text.lastIndexOf(".");
+  return dot > 0 ? text.slice(0, dot) : text;
+}
+
+function annotateEnumComparisonOperand(context: ContextWithParserOptions, operand: any): void {
+  if (!operand || typeof operand !== "object" || operand.__unionPartTypeIds) {
+    return;
+  }
+  const type = typeAtNode(context, operand);
+  if (!type) {
+    return;
+  }
+  const parts = unionPartsOfType(context, type);
+  operand.__unionPartTypeIds = parts.map((part) => part.id);
+  const enumIds = new Set<string>();
+  const enumValueKinds: string[] = [];
+  let numberLike = false;
+  let stringLike = false;
+  for (const part of parts) {
+    const enumId = enumIdOfPart(context, part);
+    if (enumId !== undefined) {
+      enumIds.add(enumId);
+      if (part.flags & TYPE_FLAG_NUMBER_LITERAL) {
+        enumValueKinds.push("number");
+      } else if (part.flags & TYPE_FLAG_STRING_LITERAL) {
+        enumValueKinds.push("string");
+      }
+    }
+    if (part.flags & TYPE_FLAG_NUMBER_LIKE) {
+      numberLike = true;
+    }
+    if (part.flags & TYPE_FLAG_STRING_LIKE) {
+      stringLike = true;
+    }
+  }
+  operand.__enumTypeIds = [...enumIds];
+  operand.__unionPartEnumValueKinds = enumValueKinds;
+  if (numberLike) {
+    operand.__isNumberLike = true;
+  }
+  if (stringLike) {
+    operand.__isStringLike = true;
+  }
+}
+
+const unsafeEnumComparisonFacts: FactProvider = (context, node, _sink) => {
+  void _sink;
+  if (node.type === "BinaryExpression") {
+    if (!ENUM_COMPARISON_OPERATORS.has(node.operator)) {
+      return;
+    }
+    annotateEnumComparisonOperand(context, node.left);
+    annotateEnumComparisonOperand(context, node.right);
+    return;
+  }
+  if (node.type === "SwitchCase") {
+    if (!node.test) {
+      return;
+    }
+    const discriminant = node.parent?.discriminant;
+    if (!discriminant) {
+      return;
+    }
+    annotateEnumComparisonOperand(context, node.test);
+    annotateEnumComparisonOperand(context, discriminant);
+    (node as any).__switchDiscriminant = discriminant;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// no-redundant-type-constituents
+// ---------------------------------------------------------------------------
+
+const TYPE_PART_FLAG_LABELS: readonly (readonly [number, string])[] = [
+  [TYPE_FLAG_ANY, "any"],
+  [TYPE_FLAG_UNKNOWN, "unknown"],
+  [TYPE_FLAG_NEVER, "never"],
+  [TYPE_FLAG_STRING, "string"],
+  [TYPE_FLAG_NUMBER, "number"],
+  [TYPE_FLAG_BIGINT, "bigint"],
+  [TYPE_FLAG_BOOLEAN, "boolean"],
+  [TYPE_FLAG_STRING_LITERAL, "stringLiteral"],
+  [TYPE_FLAG_NUMBER_LITERAL, "numberLiteral"],
+  [TYPE_FLAG_BIGINT_LITERAL, "bigintLiteral"],
+  [TYPE_FLAG_BOOLEAN_LITERAL, "booleanLiteral"],
+  [TYPE_FLAG_TEMPLATE_LITERAL, "templateLiteral"],
+];
+
+function typePartFlagLabel(flags: number): string {
+  for (const [mask, label] of TYPE_PART_FLAG_LABELS) {
+    if (flags & mask) {
+      return label;
+    }
+  }
+  return "other";
+}
+
+/** Type-node kinds whose semantics the Rust side can already derive locally. */
+const LOCALLY_RESOLVED_TYPE_NODE_KINDS = new Set([
+  "TSAnyKeyword",
+  "TSBigIntKeyword",
+  "TSBooleanKeyword",
+  "TSLiteralType",
+  "TSNeverKeyword",
+  "TSNumberKeyword",
+  "TSStringKeyword",
+  "TSTemplateLiteralType",
+  "TSUnknownKeyword",
+]);
+
+const redundantTypeConstituentsFacts: FactProvider = (context, node, _sink) => {
+  void _sink;
+  if (node.type !== "TSUnionType" && node.type !== "TSIntersectionType") {
+    return;
+  }
+  for (const constituent of Array.isArray(node.types) ? node.types : []) {
+    if (
+      !constituent ||
+      LOCALLY_RESOLVED_TYPE_NODE_KINDS.has(constituent.type) ||
+      constituent.__typePartFlags
+    ) {
+      continue;
+    }
+    const type = typeAtNode(context, constituent);
+    if (!type) {
+      continue;
+    }
+    constituent.__typePartFlags = unionPartsOfType(context, type).map((part) => ({
+      flag: typePartFlagLabel(part.flags),
+      text: renderedTypeText(context, part),
+    }));
+  }
+};
+
+// ---------------------------------------------------------------------------
+// require-await (yield facts)
+// ---------------------------------------------------------------------------
+
+const requireAwaitFacts: FactProvider = (context, node, _sink) => {
+  void _sink;
+  if (node.generator !== true) {
+    return;
+  }
+  forEachNodeOfType(node.body, "YieldExpression", (yieldNode: any) => {
+    const argument = yieldNode.argument;
+    if (!argument) {
+      return;
+    }
+    if (yieldNode.delegate === true) {
+      const propertyNames = propertyNamesAt(context, argument);
+      if (propertyNames.some((name) => name.startsWith("__@asyncIterator"))) {
+        yieldNode.__yieldDelegatesAsyncIterable = true;
+      }
+      return;
+    }
+    const texts = typeTextsAtNode(context, argument);
+    const thenable =
+      texts.some((text) =>
+        text
+          .split("|")
+          .some((part) => part.trim().startsWith("Promise<") || part.trim().startsWith("PromiseLike<")),
+      ) || propertyNamesAt(context, argument).includes("then");
+    if (thenable) {
+      yieldNode.__yieldArgumentThenable = true;
+    }
+  });
+};
+
+function propertyNamesAt(context: ContextWithParserOptions, node: any): readonly string[] {
+  const type = typeAtNode(context, node);
+  if (!type) {
+    return [];
+  }
+  return checkerFor(context)
+    .getPropertiesOfType(type)
+    .map((property) => property.name);
+}
+
+/** Depth-limited walk over an ESTree subtree, skipping parent backlinks. */
+function forEachNodeOfType(
+  root: any,
+  kind: string,
+  visit: (node: any) => void,
+  depthLimit = 6,
+): void {
+  if (!root || typeof root !== "object" || depthLimit < 0) {
+    return;
+  }
+  if (Array.isArray(root)) {
+    for (const item of root) {
+      forEachNodeOfType(item, kind, visit, depthLimit);
+    }
+    return;
+  }
+  if (typeof root.type === "string" && root.type === kind) {
+    visit(root);
+  }
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "parent" || value === null || typeof value !== "object") {
+      continue;
+    }
+    forEachNodeOfType(value, kind, visit, depthLimit - 1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// unbound-method
+// ---------------------------------------------------------------------------
+
+const SYMBOL_FLAG_METHOD = 1 << 13;
+
+/**
+ * Faithful ESTree port of the upstream `isSafeUse` parent walk.
+ */
+function isSafeUse(start: any): boolean {
+  let node = start;
+  let parent = start?.parent;
+  while (parent) {
+    switch (parent.type) {
+      case "ChainExpression":
+      case "TSNonNullExpression":
+      case "TSAsExpression":
+      case "TSTypeAssertion":
+        node = parent;
+        parent = parent.parent;
+        continue;
+      case "IfStatement":
+      case "ForStatement":
+      case "MemberExpression":
+      case "SwitchStatement":
+      case "WhileStatement":
+        return true;
+      case "UpdateExpression":
+        return parent.operator === "++" || parent.operator === "--";
+      case "UnaryExpression":
+        return ["!", "delete", "typeof", "void"].includes(parent.operator);
+      case "CallExpression":
+        return stripChainExpression(parent.callee) === node;
+      case "ConditionalExpression":
+        return parent.test === node;
+      case "TaggedTemplateExpression":
+        return parent.tag === node;
+      case "LogicalExpression":
+        if (parent.operator === "&&" && parent.left === node) {
+          return true;
+        }
+        node = parent;
+        parent = parent.parent;
+        continue;
+      case "BinaryExpression":
+        if (["!=", "!==", "==", "===", "instanceof"].includes(parent.operator)) {
+          return true;
+        }
+        return false;
+      case "AssignmentExpression":
+        return (
+          parent.left === node ||
+          (node.type === "MemberExpression" &&
+            node.object?.type === "Super" &&
+            parent.left?.type === "MemberExpression" &&
+            parent.left.object?.type === "ThisExpression")
+        );
+      default:
+        return false;
+    }
+  }
+  return false;
+}
+
+interface UnboundMethodInfo {
+  isMethod: boolean;
+  firstParamIsThis: boolean;
+  thisArgIsVoid: boolean;
+  isStatic: boolean;
+}
+
+/**
+ * Resolves the method-shape bundle for a member reference through the
+ * checker. Returns undefined (rule stays silent) when the shape cannot be
+ * proven — including an unknowable `static` modifier while `ignoreStatic`
+ * is on.
+ */
+function unboundMethodInfoAt(
+  context: ContextWithParserOptions,
+  lookupNode: any,
+  ignoreStatic: boolean,
+): UnboundMethodInfo | undefined {
+  const checker = checkerFor(context);
+  const symbol = checker.getSymbolAtLocation(lookupNode);
+  if (!symbol) {
+    return undefined;
+  }
+  const isMethod = (symbol.flags & SYMBOL_FLAG_METHOD) !== 0;
+  let firstParamIsThis = false;
+  let thisArgIsVoid = false;
+  if (isMethod) {
+    const type = checker.getTypeOfSymbol(symbol);
+    const signature = type ? checker.getSignaturesOfType(type, 0)[0] : undefined;
+    if (signature?.thisParameterSymbol || signature?.thisParameter) {
+      firstParamIsThis = true;
+      const thisTexts = signature.thisParameterTypeTexts ?? [];
+      thisArgIsVoid = thisTexts.length > 0 && thisTexts.every((text) => text.trim() === "void");
+    }
+  }
+  const isStatic = staticModifierFor(context, symbol);
+  if (isMethod && ignoreStatic && isStatic === undefined) {
+    // Reporting a static method that ignoreStatic excludes would be a false
+    // positive, so degrade to silence when staticness is unknowable.
+    return undefined;
+  }
+  return {
+    isMethod,
+    firstParamIsThis,
+    thisArgIsVoid,
+    isStatic: isStatic ?? false,
+  };
+}
+
+/**
+ * Determines the `static` modifier by reading the declaration's leading text
+ * when the declaration lives in the current file. Compact node handles carry
+ * no source offset, so staticness can be unknowable.
+ */
+function staticModifierFor(
+  context: ContextWithParserOptions,
+  symbol: { readonly valueDeclaration?: string; readonly declarations: readonly string[] },
+): boolean | undefined {
+  const declaration = symbol.valueDeclaration ?? symbol.declarations[0];
+  if (!declaration) {
+    return undefined;
+  }
+  const [posPart, , ...pathParts] = declaration.split(".");
+  const path = pathParts.join(".");
+  const filename = String(context.filename ?? "");
+  if (!path || !(path === filename || filename.endsWith(path) || path.endsWith(filename))) {
+    return undefined;
+  }
+  const pos = Number(posPart);
+  if (!Number.isFinite(pos) || pos < 0) {
+    return undefined;
+  }
+  const source = context.sourceCode.text;
+  if (pos > source.length) {
+    return undefined;
+  }
+  const lineStart = source.lastIndexOf("\n", pos) + 1;
+  return /\bstatic\b/.test(source.slice(lineStart, pos + 1));
+}
+
+function insideTypeDeclaration(node: any): boolean {
+  for (let current = node?.parent; current; current = current.parent) {
+    const kind = current.type;
+    if (
+      kind === "TSInterfaceDeclaration" ||
+      kind === "TSTypeAliasDeclaration" ||
+      kind === "TSTypeLiteral" ||
+      kind === "TSDeclareFunction" ||
+      (typeof kind === "string" && kind.startsWith("TSType"))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const unboundMethodFacts: FactProvider = (context, node, sink) => {
+  const options = (context as { options?: readonly unknown[] }).options?.[0] as
+    | { ignoreStatic?: boolean }
+    | undefined;
+  const ignoreStatic = options?.ignoreStatic === true;
+
+  if (node.type === "MemberExpression") {
+    if (isSafeUse(node)) {
+      sink.fields.__safeUse = true;
+      return;
+    }
+    const property = node.computed ? undefined : node.property;
+    if (!property || property.type !== "Identifier") {
+      return;
+    }
+    const info = unboundMethodInfoAt(context, property, ignoreStatic);
+    if (info) {
+      sink.fields.__unboundMethodInfo = { ...info };
+    }
+    const objectSymbol =
+      node.object?.type === "Identifier"
+        ? checkerFor(context).getSymbolAtLocation(node.object)
+        : undefined;
+    if (objectSymbol) {
+      const declaration = objectSymbol.valueDeclaration ?? objectSymbol.declarations[0];
+      if (declaration) {
+        const path = declaration.split(".").slice(2).join(".");
+        const filename = String(context.filename ?? "");
+        if (path && !(path === filename || filename.endsWith(path))) {
+          sink.fields.__objectNotImported = true;
+        }
+      }
+    }
+    return;
+  }
+
+  if (node.type === "ObjectPattern") {
+    if (insideTypeDeclaration(node)) {
+      sink.fields.__insideTypeDeclaration = true;
+      return;
+    }
+    annotateDestructuredProperties(context, node, ignoreStatic);
+    return;
+  }
+
+  if (node.type === "ObjectExpression") {
+    if (node.parent?.type === "AssignmentExpression" && node.parent.left === node) {
+      sink.fields.__isAssignmentTarget = true;
+      annotateDestructuredProperties(context, node, ignoreStatic);
+    }
+  }
+};
+
+function annotateDestructuredProperties(
+  context: ContextWithParserOptions,
+  node: any,
+  ignoreStatic: boolean,
+): void {
+  for (const property of Array.isArray(node.properties) ? node.properties : []) {
+    if (!property || typeof property !== "object") {
+      continue;
+    }
+    if (property.type === "RestElement" || property.type === "SpreadElement") {
+      property.__isRest = true;
+      continue;
+    }
+    if (property.computed) {
+      property.__isComputed = true;
+      continue;
+    }
+    const key = property.key;
+    if (key?.type !== "Identifier") {
+      continue;
+    }
+    const info = unboundMethodInfoAt(context, key, ignoreStatic);
+    if (info) {
+      property.__unboundMethodInfo = { ...info };
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // compiler-option facts
 // ---------------------------------------------------------------------------
@@ -362,5 +859,9 @@ export function attachConfigFacts(
 
 export const ruleFactProviders: Record<string, readonly FactProvider[]> = {
   "no-misused-promises": [misusedPromisesFacts],
+  "no-redundant-type-constituents": [redundantTypeConstituentsFacts],
   "no-unsafe-argument": [unsafeArgumentFacts],
+  "no-unsafe-enum-comparison": [unsafeEnumComparisonFacts],
+  "require-await": [requireAwaitFacts],
+  "unbound-method": [unboundMethodFacts],
 };

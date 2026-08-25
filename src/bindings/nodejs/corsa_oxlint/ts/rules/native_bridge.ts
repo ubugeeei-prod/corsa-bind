@@ -97,8 +97,24 @@ export function toNativeNode(
   const children: Record<string, NativeLintNode> = {};
   const childLists: Record<string, NativeLintNode[]> = {};
 
+  const typeAnnotationText = sourceTypeAnnotationText(context, node);
+  if (typeAnnotationText) {
+    fields.__typeAnnotationText = typeAnnotationText;
+  }
+
+  const options = (context as { options?: unknown }).options;
+  if (includeRuleOptions && Array.isArray(options) && options.length > 0 && isJsonValue(options)) {
+    fields.__ruleOptions = options;
+  }
+  if (includeRuleOptions) {
+    // Host facts run BEFORE child serialization: fact providers may annotate
+    // descendant AST nodes, and those annotations must be visible when the
+    // subtree is serialized below.
+    addHostInputs(context, node, fields, includeSymbolFacts, ruleName);
+  }
+
   for (const [key, value] of Object.entries(node)) {
-    if (isSkippedField(key)) {
+    if (isSkippedField(key) || key in fields) {
       continue;
     }
     if (isNativeChildNode(value)) {
@@ -149,19 +165,6 @@ export function toNativeNode(
     if (isJsonPrimitive(value)) {
       fields[key] = value;
     }
-  }
-
-  const typeAnnotationText = sourceTypeAnnotationText(context, node);
-  if (typeAnnotationText) {
-    fields.__typeAnnotationText = typeAnnotationText;
-  }
-
-  const options = (context as { options?: unknown }).options;
-  if (includeRuleOptions && Array.isArray(options) && options.length > 0 && isJsonValue(options)) {
-    fields.__ruleOptions = options;
-  }
-  if (includeRuleOptions) {
-    addHostInputs(context, node, fields, includeSymbolFacts, ruleName);
   }
 
   const nativeNode: NativeLintNode = {

@@ -540,6 +540,73 @@ describe("corsa oxlint native rules", () => {
       ],
     });
   });
+
+  integrationCase("runs no-unsafe-enum-comparison through RuleTester", () => {
+    createTester().run(
+      "no-unsafe-enum-comparison",
+      corsaOxlintRules["no-unsafe-enum-comparison"] as never,
+      {
+        valid: [
+          {
+            code: "enum Fruit { Apple, Banana } declare const fruit: Fruit; if (fruit === Fruit.Apple) { console.log(1); }",
+          },
+        ],
+        invalid: [
+          {
+            code: "enum Fruit { Apple, Banana } declare const fruit: Fruit; if (fruit === 99) { console.log(1); }",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-redundant-type-constituents through RuleTester", () => {
+    createTester().run(
+      "no-redundant-type-constituents",
+      corsaOxlintRules["no-redundant-type-constituents"] as never,
+      {
+        valid: [{ code: "type Union = string | number; declare const value: Union;" }],
+        invalid: [
+          { code: "type Redundant = string | 'literal'; declare const value: Redundant;", errors: 1 },
+          { code: "type WithAny = any | number; declare const value: WithAny;", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs require-await generator yields through RuleTester", () => {
+    createTester().run("require-await", corsaOxlintRules["require-await"] as never, {
+      valid: [
+        {
+          code: "async function* fine() { yield Promise.resolve(1); }",
+        },
+      ],
+      invalid: [
+        { code: "async function* nope() { yield 1; }", errors: 1 },
+      ],
+    });
+  });
+
+  integrationCase("runs unbound-method through RuleTester", () => {
+    createTester().run("unbound-method", corsaOxlintRules["unbound-method"] as never, {
+      valid: [
+        {
+          code: "class Greeter { greet() { return 'hi'; } } const greeter = new Greeter(); greeter.greet();",
+        },
+        {
+          code: "class Counter { static count() { return 1; } } const counted = Counter.count;",
+          options: [{ ignoreStatic: true }],
+        },
+      ],
+      invalid: [
+        {
+          code: "class Greeter { greet() { return 'hi'; } } const greeter = new Greeter(); const method = greeter.greet;",
+          errors: 1,
+        },
+      ],
+    });
+  });
 });
 
 function createTester(): RuleTester {
