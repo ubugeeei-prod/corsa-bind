@@ -448,6 +448,9 @@ function ancestorFacts(
       if (typeof ancestor.async === "boolean") {
         fact.async = ancestor.async;
       }
+      if (ancestor.type === "CatchClause" && ancestor.param?.type === "Identifier") {
+        fact.catchParamName = ancestor.param.name;
+      }
       const className = ancestor.id?.name;
       if (
         (ancestor.type === "ClassDeclaration" || ancestor.type === "ClassExpression") &&
@@ -471,6 +474,27 @@ function ancestorFacts(
         const parentCalleeName = identifierName(stripChainExpression(ancestor.parent?.callee));
         if (parentCalleeName) {
           fact.parentCalleeName = parentCalleeName;
+        }
+        const parentCallee = stripChainExpression(ancestor.parent?.callee);
+        if (
+          parentCallee?.type === "MemberExpression" &&
+          parentCallee.property?.type === "Identifier"
+        ) {
+          fact.parentCalleePropertyName = parentCallee.property.name;
+        }
+        const parentArguments = ancestor.parent?.arguments;
+        if (Array.isArray(parentArguments)) {
+          const index = parentArguments.indexOf(ancestor);
+          if (index >= 0) {
+            fact.parentArgumentIndex = index;
+            if (
+              parentArguments
+                .slice(0, index)
+                .some((argument: any) => argument?.type === "SpreadElement")
+            ) {
+              fact.parentLeadingSpreadArgument = true;
+            }
+          }
         }
         if (ancestor.parent?.parent?.type) {
           fact.parentParentKind = ancestor.parent.parent.type;

@@ -52,7 +52,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-floating-promises: unhandled Promise.resolve expression",
           "diagnostics": [
-            "no-floating-promises/unexpected@0..19: Promises must be awaited, returned, or explicitly ignored with void. | suggestions floatingVoid@0..0=>void : Prefix the expression with void. | floatingAwait@0..0=>await : Await the promise.",
+            "no-floating-promises/floatingVoid@0..18: Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the \`void\` operator. | suggestions floatingFixVoid@0..0=>void : Add void operator to ignore. | floatingFixAwait@0..0=>await : Await promise.",
           ],
         },
         {

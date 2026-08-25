@@ -116,7 +116,7 @@ fn ignores_base_to_string_known_safe_type() {
 
 #[test]
 fn reports_floating_promise_with_suggestions() {
-    let mut node = node_with_children(
+    let node = node_with_children(
         "ExpressionStatement",
         TextRange::new(0, 19),
         [(
@@ -124,17 +124,15 @@ fn reports_floating_promise_with_suggestions() {
             promise_member_call_node("resolve", Vec::new()),
         )],
     );
-    node.fields
-        .insert("__nearestFunctionAsync".to_owned(), json!(true));
 
     let diagnostics = registry().run_rule("no-floating-promises", &node).unwrap();
 
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].rule_name, "no-floating-promises");
-    assert_eq!(diagnostics[0].message_id, "unexpected");
+    assert_eq!(diagnostics[0].message_id, "floatingVoid");
     assert_eq!(diagnostics[0].suggestions.len(), 2);
-    assert_eq!(diagnostics[0].suggestions[0].message_id, "floatingVoid");
-    assert_eq!(diagnostics[0].suggestions[1].message_id, "floatingAwait");
+    assert_eq!(diagnostics[0].suggestions[0].message_id, "floatingFixVoid");
+    assert_eq!(diagnostics[0].suggestions[1].message_id, "floatingFixAwait");
 }
 
 #[test]
