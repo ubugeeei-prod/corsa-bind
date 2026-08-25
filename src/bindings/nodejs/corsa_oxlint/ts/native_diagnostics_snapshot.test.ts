@@ -112,7 +112,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "only-throw-error: throwing a string",
           "diagnostics": [
-            "only-throw-error/unexpected@0..13: Only Error-like values should be thrown.",
+            "only-throw-error/object@6..13: Expected an error object to be thrown.",
           ],
         },
         {

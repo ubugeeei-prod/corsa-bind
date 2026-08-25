@@ -384,9 +384,17 @@ fn is_obviously_promise_producing(node: &LintNode) -> bool {
     if current.kind != "CallExpression" {
         return false;
     }
-    let Some(callee) = current.child("callee") else {
+    let Some(callee) = current.child("callee").map(strip_chain_expression) else {
         return false;
     };
+    // An immediately-invoked async function literal produces a promise by
+    // construction; anonymous function literals have no position-addressable
+    // checker type, so this is exact rather than a heuristic.
+    if (callee.kind == "ArrowFunctionExpression" || callee.kind == "FunctionExpression")
+        && callee.field_bool("async") == Some(true)
+    {
+        return true;
+    }
     member_property_name(callee).as_deref() == Some("resolve")
         && member_object(callee).is_some_and(|object| is_identifier_named(object, "Promise"))
 }
@@ -466,7 +474,7 @@ fn is_known_safe_call(expression: &LintNode, options: &Options) -> bool {
     let callee_name = crate::lint::helpers::identifier_name(callee)
         .or_else(|| member_property_name(callee));
     if callee_name
-        .is_some_and(|name| options.allow_for_known_safe_calls.iter().any(|allowed| *allowed == name))
+        .is_some_and(|name| options.allow_for_known_safe_calls.contains(&name))
     {
         return true;
     }

@@ -430,6 +430,116 @@ describe("corsa oxlint native rules", () => {
       },
     );
   });
+
+  integrationCase("runs no-misused-promises conditional checks through RuleTester", () => {
+    createTester().run("no-misused-promises", corsaOxlintRules["no-misused-promises"] as never, {
+      valid: [
+        { code: "async function ok() { if (await Promise.resolve(true)) { console.log(1); } }" },
+      ],
+      invalid: [
+        {
+          code: "async function nope() { if (Promise.resolve(true)) { console.log(1); } }",
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs no-misused-promises void-return argument checks through RuleTester", () => {
+    createTester().run("no-misused-promises", corsaOxlintRules["no-misused-promises"] as never, {
+      valid: [
+        {
+          code: "declare function takes(cb: () => Promise<void>): void; takes(async () => {});",
+        },
+      ],
+      invalid: [
+        {
+          code: "declare function takes(cb: () => void): void; takes(async () => {});",
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs no-unsafe-argument through RuleTester", () => {
+    createTester().run("no-unsafe-argument", corsaOxlintRules["no-unsafe-argument"] as never, {
+      valid: [
+        { code: "declare function takes(value: number): void; takes(1);" },
+      ],
+      invalid: [
+        {
+          code: "declare function takes(value: number): void; declare const loose: any; takes(loose);",
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs no-floating-promises ignoreVoid=false through RuleTester", () => {
+    createTester().run("no-floating-promises", corsaOxlintRules["no-floating-promises"] as never, {
+      valid: [
+        { code: "async function ok() { void Promise.resolve(1); }" },
+        {
+          code: "async function ok() { await Promise.resolve(1); }",
+          options: [{ ignoreVoid: false }],
+        },
+      ],
+      invalid: [
+        {
+          code: "async function nope() { void Promise.resolve(1); }",
+          options: [{ ignoreVoid: false }],
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs no-floating-promises ignoreIIFE through RuleTester", () => {
+    createTester().run("no-floating-promises", corsaOxlintRules["no-floating-promises"] as never, {
+      valid: [
+        {
+          code: "(async () => { console.log(1); })();",
+          options: [{ ignoreIIFE: true }],
+        },
+      ],
+      invalid: [{ code: "(async () => { console.log(1); })();", errors: 1 }],
+    });
+  });
+
+  integrationCase("runs only-throw-error through RuleTester", () => {
+    createTester().run("only-throw-error", corsaOxlintRules["only-throw-error"] as never, {
+      valid: [
+        { code: "function ok() { throw new Error('boom'); }" },
+        { code: "function ok(value: any) { throw value; }" },
+        { code: "try { console.log(1); } catch (error) { throw error; }" },
+      ],
+      invalid: [
+        { code: "function nope() { throw 'boom'; }", errors: 1 },
+        {
+          code: "function nope(value: any) { throw value; }",
+          options: [{ allowThrowingAny: false, allowThrowingUnknown: false }],
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs no-base-to-string options through RuleTester", () => {
+    createTester().run("no-base-to-string", corsaOxlintRules["no-base-to-string"] as never, {
+      valid: [
+        { code: "declare const mystery: unknown; const label = `${mystery}`;" },
+        { code: "const fn = () => 1; const label = `${fn}`;" },
+        { code: "const names = ['a', 'b']; const label = `${names}`;" },
+      ],
+      invalid: [
+        {
+          code: "declare const mystery: unknown; const label = `${mystery}`;",
+          options: [{ checkUnknown: true }],
+          errors: 1,
+        },
+      ],
+    });
+  });
 });
 
 function createTester(): RuleTester {

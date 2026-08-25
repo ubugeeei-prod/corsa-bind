@@ -325,6 +325,8 @@ fn object_relation_legacy_key(method: &str) -> Option<&'static str> {
         | "getBaseTypeOfType"
         | "getCheckTypeOfType"
         | "getConstraintOfType"
+        | "getConstraintOfTypeParameter"
+        | "getDefaultFromTypeParameter"
         | "getExtendsTypeOfType"
         | "getIndexTypeOfType"
         | "getObjectTypeOfType"
@@ -332,11 +334,16 @@ fn object_relation_legacy_key(method: &str) -> Option<&'static str> {
         | "getTypeParametersOfType"
         | "getOuterTypeParametersOfType"
         | "getLocalTypeParametersOfType"
-        | "getAliasTypeArgumentsOfType" => Some("type"),
+        | "getAliasTypeArgumentsOfType"
+        | "getApparentType"
+        | "getApparentPropertiesOfType"
+        | "getNonNullableType"
+        | "getReducedType" => Some("type"),
         "getTypeParametersOfSignature"
         | "getParametersOfSignature"
         | "getThisParameterOfSignature"
-        | "getTargetOfSignature" => Some("signature"),
+        | "getTargetOfSignature"
+        | "getReturnTypeOfSignature" => Some("signature"),
         "getParentOfSymbol"
         | "getExportSymbolOfSymbol"
         | "getMembersOfSymbol"

@@ -7,6 +7,7 @@ import type {
   NativeNodeMetadataDepth,
 } from "@corsa-bind/napi";
 
+import { attachConfigFacts, ruleFactProviders } from "./fact_providers";
 import { createNativeRule } from "./rule_creator";
 import { checkerFor, propertyNamesOfNode, typeAtNode, typeTextsAtNode } from "./type_utils";
 import type { ContextWithParserOptions, CorsaCallSignatureFacts } from "../types";
@@ -69,6 +70,8 @@ export function createRustNativeRule(
                   includePropertyNamesOption(bridgeOptions, meta),
                   includeText,
                   meta.bridge.symbolFacts === true,
+                  0,
+                  ruleName,
                 ),
               ),
             );
@@ -88,6 +91,7 @@ export function toNativeNode(
   includeText: NodeMetadataOption = false,
   includeSymbolFacts = false,
   depth = 0,
+  ruleName?: string,
 ): NativeLintNode {
   const fields: Record<string, unknown> = {};
   const children: Record<string, NativeLintNode> = {};
@@ -114,6 +118,11 @@ export function toNativeNode(
       continue;
     }
     if (Array.isArray(value)) {
+      if (key.startsWith("__") && isJsonValue(value)) {
+        // Rule-specific facts may be nested JSON (e.g. per-slot text lists).
+        fields[key] = value;
+        continue;
+      }
       if (maxDepth > 0 && value.every(isNativeChildNode)) {
         childLists[key] = value.map((child) =>
           toNativeNode(
@@ -152,7 +161,7 @@ export function toNativeNode(
     fields.__ruleOptions = options;
   }
   if (includeRuleOptions) {
-    addHostInputs(context, node, fields, includeSymbolFacts);
+    addHostInputs(context, node, fields, includeSymbolFacts, ruleName);
   }
 
   const nativeNode: NativeLintNode = {
@@ -324,6 +333,7 @@ function addHostInputs(
   node: RangedNode,
   fields: Record<string, unknown>,
   includeSymbolFacts: boolean,
+  ruleName?: string,
 ): void {
   const current = node as any;
   const ancestors = ancestorFacts(context, current);
@@ -352,6 +362,13 @@ function addHostInputs(
   const returnTypeFacts = returnTypeFactsOfNode(context, current);
   if (Object.keys(returnTypeFacts).length > 0) {
     fields.__returnTypeFacts = returnTypeFacts;
+  }
+  if (ruleName) {
+    const sink = { fields };
+    attachConfigFacts(ruleName, context, sink);
+    for (const provider of ruleFactProviders[ruleName] ?? []) {
+      provider(context, current, sink);
+    }
   }
 }
 

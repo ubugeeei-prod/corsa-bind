@@ -63,8 +63,25 @@ export function createProgram(
 export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeCheckerShape {
   return {
     getTypeAtLocation(node) {
-      if ((node as { readonly type?: string }).type === "NewExpression") {
+      const kind = (node as { readonly type?: string }).type;
+      if (kind === "NewExpression") {
         return typeOfNewExpression(context, node as Node, this);
+      }
+      // A position query resolves the touching token, which for call-like
+      // expressions is the callee leaf — never the call result. Resolve the
+      // result through the callee's call signatures instead, the same way
+      // NewExpression resolves through construct signatures.
+      if (kind === "CallExpression") {
+        const resolved = typeOfCallExpression(context, node as Node, this);
+        if (resolved) {
+          return resolved;
+        }
+      }
+      if (kind === "AwaitExpression") {
+        const resolved = typeOfAwaitExpression(node as Node, this);
+        if (resolved) {
+          return resolved;
+        }
       }
       const lookupNode = nodeForTypeLookup(node);
       const type = sessionForContext(context).session.getTypeAtSourceRange(
@@ -159,6 +176,15 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
       return sessionForContext(context).session.getTypePredicateOfSignature(signature);
     },
     getBaseTypes(type) {
+      // A constructor type in a superclass position resolves to its immediate
+      // instance type first; the generic base-type cascade would skip past it
+      // to the instance's own bases.
+      if (isSuperclassConstructorLookup(context, type)) {
+        const constructorBases = constructorBaseTypesFromType(context, type, this);
+        if (constructorBases.length > 0) {
+          return constructorBases;
+        }
+      }
       const bases = sessionForContext(context).session.getBaseTypes(type);
       return bases.length > 0 ? bases : constructorBaseTypesFromType(context, type, this);
     },
@@ -374,6 +400,67 @@ function uniqueTypesById(types: readonly CorsaType[]): readonly CorsaType[] {
   return unique;
 }
 
+/**
+ * Resolves the result type of a call expression through the callee's call
+ * signatures.
+ *
+ * Position-based type lookups resolve the touching token, so the direct query
+ * for a call expression range yields the callee's type. Going through the
+ * call signature mirrors what `checker.getTypeAtLocation(callExpr)` means in
+ * the real TypeScript API. Overloads resolve to the first signature, which is
+ * the same approximation the NewExpression path uses.
+ */
+function typeOfCallExpression(
+  context: ContextWithParserOptions,
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const callee = childNode(node, "callee");
+  if (!callee) {
+    return undefined;
+  }
+  const calleeType = checker.getTypeAtLocation(callee);
+  if (!calleeType) {
+    return undefined;
+  }
+  const callSignature = checker.getSignaturesOfType(calleeType, SignatureKind.Call)[0];
+  if (!callSignature) {
+    return undefined;
+  }
+  const returnType = checker.getReturnTypeOfSignature(callSignature);
+  if (!returnType) {
+    return undefined;
+  }
+  sessionForContext(context).session.rememberTypeLookupFromType(returnType, calleeType);
+  return returnType;
+}
+
+/**
+ * Resolves `await expr` to the awaited type by unwrapping a promise-like
+ * reference type's first type argument.
+ */
+function typeOfAwaitExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaType | undefined {
+  const argument = childNode(node, "argument");
+  if (!argument) {
+    return undefined;
+  }
+  const argumentType = checker.getTypeAtLocation(argument);
+  if (!argumentType) {
+    return undefined;
+  }
+  const rendered = argumentType.texts?.length
+    ? argumentType.texts
+    : [checker.typeToString(argumentType)];
+  const isPromiseReference = rendered.some(
+    (text) =>
+      text.startsWith("Promise<") || text.startsWith("PromiseLike<") || text === "Promise",
+  );
+  if (!isPromiseReference) {
+    return argumentType;
+  }
+  return checker.getTypeArguments(argumentType)[0] ?? argumentType;
+}
+
 function typeOfNewExpression(
   context: ContextWithParserOptions,
   node: Node,
@@ -386,6 +473,16 @@ function typeOfNewExpression(
   const calleeType = checker.getTypeAtLocation(callee);
   if (!calleeType) {
     return undefined;
+  }
+  // A compound constructor type (`typeof Dog | typeof Cat`) must resolve
+  // through its constituents so the instance type stays compound; the first
+  // construct signature alone would collapse it to one branch.
+  if (checker.isUnionType(calleeType) || checker.isIntersectionType(calleeType)) {
+    const compound = constructorInstanceTypeFromType(context, calleeType, checker);
+    if (compound) {
+      sessionForContext(context).session.rememberTypeLookupFromType(compound, calleeType);
+      return compound;
+    }
   }
   const constructSignature = checker.getSignaturesOfType(calleeType, SignatureKind.Construct)[0];
   const type = constructSignature
