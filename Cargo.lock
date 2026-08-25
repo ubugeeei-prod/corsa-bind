@@ -27,12 +27,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
-name = "bumpalo"
-version = "3.20.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
-
-[[package]]
 name = "castaway"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -107,7 +101,6 @@ name = "corsa_core"
 version = "1.12.4"
 dependencies = [
  "base64",
- "bumpalo",
  "compact_str",
  "memchr",
  "rustc-hash",
@@ -164,7 +157,6 @@ dependencies = [
  "corsa_core",
  "corsa_jsonrpc",
  "corsa_runtime",
- "log",
  "lsp-types",
  "parking_lot",
  "serde",

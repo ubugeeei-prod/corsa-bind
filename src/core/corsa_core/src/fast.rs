@@ -6,7 +6,6 @@
 
 use std::fmt::{self, Write as _};
 
-pub use bumpalo::{Bump, collections::String as BumpString};
 pub use compact_str::{CompactString, ToCompactString};
 pub use memchr::{memchr, memmem};
 pub use rustc_hash::{FxHashMap, FxHashSet};

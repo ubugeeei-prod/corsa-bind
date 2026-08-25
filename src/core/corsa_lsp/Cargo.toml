@@ -16,7 +16,6 @@ name = "corsa_lsp"
 path = "src/lib.rs"
 
 [dependencies]
-log = { workspace = true }
 lsp-types = "0.97"
 parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }

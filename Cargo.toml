@@ -23,7 +23,6 @@ repository = "https://github.com/ubugeeei-prod/corsa-bind"
 rust-version = "1.85"
 
 [workspace.dependencies]
-bumpalo = { version = "3", features = ["collections"] }
 compact_str = { version = "0.10", features = ["serde"] }
 log = "0.4"
 memchr = "2"

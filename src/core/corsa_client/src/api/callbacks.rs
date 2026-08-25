@@ -1,5 +1,5 @@
 use crate::jsonrpc::{RpcHandler, RpcHandlerMap, RpcResponseError};
-use corsa_core::fast::{Bump, BumpString, CompactString, SmallVec, compact_format};
+use corsa_core::fast::{CompactString, SmallVec, compact_format};
 use phf::phf_map;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -216,11 +216,10 @@ fn build_handler(fs: Arc<dyn ApiFileSystem>, method: &'static str) -> RpcHandler
 }
 
 fn render_callback_flag(names: &[&'static str]) -> CompactString {
-    let arena = Bump::new();
     let capacity = CALLBACK_PREFIX.len()
         + names.iter().map(|name| name.len()).sum::<usize>()
         + names.len().saturating_sub(1);
-    let mut flag = BumpString::with_capacity_in(capacity, &arena);
+    let mut flag = CompactString::with_capacity(capacity);
     flag.push_str(CALLBACK_PREFIX);
     for (index, name) in names.iter().enumerate() {
         if index > 0 {
@@ -228,7 +227,7 @@ fn render_callback_flag(names: &[&'static str]) -> CompactString {
         }
         flag.push_str(name);
     }
-    CompactString::from(flag.as_str())
+    flag
 }
 
 fn unsupported_callback(method: &str) -> RpcResponseError {
