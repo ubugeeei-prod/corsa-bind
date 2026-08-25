@@ -1970,15 +1970,7 @@ fn char_len_at(text: &str, index: usize) -> Option<usize> {
 }
 
 fn is_stale_handle_error(error: &CorsaError) -> bool {
-    match error {
-        CorsaError::Rpc(rpc) => is_stale_handle_message(&rpc.message),
-        CorsaError::Protocol(message) => is_stale_handle_message(message),
-        _ => false,
-    }
-}
-
-fn is_stale_handle_message(message: &str) -> bool {
-    message.contains("not found in snapshot registry") || message.contains("empty type handle")
+    ApiClient::is_stale_handle_error(error)
 }
 
 async fn get_signatures_of_type_with_parameter_texts(
