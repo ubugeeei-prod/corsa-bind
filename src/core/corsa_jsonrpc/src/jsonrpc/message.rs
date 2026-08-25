@@ -131,36 +131,55 @@ impl RawMessage {
     }
 
     /// Classifies the envelope into a higher-level message kind.
+    ///
+    /// This clones the payload; prefer [`into_kind`](Self::into_kind) when the
+    /// envelope is no longer needed afterwards.
     pub fn kind(&self) -> Result<MessageKind> {
+        self.clone().into_kind()
+    }
+
+    /// Classifies the envelope into a higher-level message kind, consuming the
+    /// envelope so payloads move instead of being deep-cloned.
+    pub fn into_kind(self) -> Result<MessageKind> {
         if self.jsonrpc.as_str() != "2.0" {
             return Err(CorsaError::Protocol(compact_format(format_args!(
                 "unsupported jsonrpc version: {}",
                 self.jsonrpc
             ))));
         }
-        match (&self.id, &self.method, &self.result, &self.error) {
+        match (self.id, self.method, self.result, self.error) {
             (Some(id), Some(method), None, None) => Ok(MessageKind::Request {
-                id: id.clone(),
-                method: method.clone(),
-                params: self.params.clone().unwrap_or(Value::Null),
+                id,
+                method,
+                params: self.params.unwrap_or(Value::Null),
             }),
             (None, Some(method), None, None) => Ok(MessageKind::Notification {
-                method: method.clone(),
-                params: self.params.clone().unwrap_or(Value::Null),
+                method,
+                params: self.params.unwrap_or(Value::Null),
             }),
             (Some(id), None, Some(result), None) => Ok(MessageKind::Response {
-                id: id.clone(),
-                result: Some(result.clone()),
+                id,
+                result: Some(result),
                 error: None,
             }),
             (Some(id), None, None, Some(error)) => Ok(MessageKind::Response {
-                id: id.clone(),
+                id,
                 result: None,
-                error: Some(error.clone()),
+                error: Some(error),
             }),
-            _ => Err(CorsaError::UnexpectedMessage(compact_format(format_args!(
-                "{self:?}"
-            )))),
+            (id, method, result, error) => {
+                let message = RawMessage {
+                    jsonrpc: self.jsonrpc,
+                    id,
+                    method,
+                    params: self.params,
+                    result,
+                    error,
+                };
+                Err(CorsaError::UnexpectedMessage(compact_format(format_args!(
+                    "{message:?}"
+                ))))
+            }
         }
     }
 }

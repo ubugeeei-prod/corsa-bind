@@ -459,7 +459,7 @@ impl Inner {
                     return;
                 }
             };
-            match message.kind() {
+            match message.into_kind() {
                 Ok(MessageKind::Response { id, result, error }) => {
                     if let Some(tx) = self.pending.lock().remove(&id) {
                         let _ = tx.send(match error {
