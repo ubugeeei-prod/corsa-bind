@@ -607,6 +607,101 @@ describe("corsa oxlint native rules", () => {
       ],
     });
   });
+
+  integrationCase("runs no-misused-spread through RuleTester", () => {
+    createTester().run("no-misused-spread", corsaOxlintRules["no-misused-spread"] as never, {
+      valid: [
+        { code: "const parts = ['a', 'b']; const merged = [...parts];" },
+        { code: "const source = { value: 1 }; const clone = { ...source };" },
+      ],
+      invalid: [
+        { code: "const text = 'hello'; const letters = [...text];", errors: 1 },
+        {
+          code: "const lookup = new Map<string, number>(); const clone = { ...lookup };",
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs no-duplicate-type-constituents through RuleTester", () => {
+    createTester().run(
+      "no-duplicate-type-constituents",
+      corsaOxlintRules["no-duplicate-type-constituents"] as never,
+      {
+        valid: [{ code: "type Fine = string | number; declare const value: Fine;" }],
+        invalid: [
+          { code: "type Duplicated = string | string; declare const value: Duplicated;", errors: 1 },
+          {
+            code: "type Aliased = string; type Duplicated = Aliased | string; declare const value: Duplicated;",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs strict-boolean-expressions through RuleTester", () => {
+    createTester().run(
+      "strict-boolean-expressions",
+      corsaOxlintRules["strict-boolean-expressions"] as never,
+      {
+        valid: [
+          { code: "declare const flag: boolean; if (flag) { console.log(1); }" },
+        ],
+        invalid: [
+          {
+            code: "declare const greeting: string | undefined; if (greeting) { console.log(1); }",
+            options: [{ allowNullableString: false }],
+            errors: 1,
+          },
+          {
+            code: "declare const count: number; if (count) { console.log(1); }",
+            options: [{ allowNumber: false }],
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs switch-exhaustiveness-check through RuleTester", () => {
+    createTester().run(
+      "switch-exhaustiveness-check",
+      corsaOxlintRules["switch-exhaustiveness-check"] as never,
+      {
+        valid: [
+          {
+            code: "type Kind = 'a' | 'b'; declare const kind: Kind; switch (kind) { case 'a': break; case 'b': break; }",
+          },
+        ],
+        invalid: [
+          {
+            code: "type Kind = 'a' | 'b' | 'c'; declare const kind: Kind; switch (kind) { case 'a': break; }",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs prefer-nullish-coalescing through RuleTester", () => {
+    createTester().run(
+      "prefer-nullish-coalescing",
+      corsaOxlintRules["prefer-nullish-coalescing"] as never,
+      {
+        valid: [
+          { code: "declare const nickname: string | undefined; const label = nickname ?? 'anonymous';" },
+        ],
+        invalid: [
+          {
+            code: "declare const nickname: string | undefined; const label = nickname || 'anonymous';",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
 });
 
 function createTester(): RuleTester {

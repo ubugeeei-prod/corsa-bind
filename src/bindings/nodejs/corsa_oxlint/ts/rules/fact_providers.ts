@@ -827,6 +827,443 @@ function annotateDestructuredProperties(
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// no-misused-spread
+// ---------------------------------------------------------------------------
+
+const SYMBOL_FLAG_CLASS = 1 << 5;
+const TYPE_FLAG_UNDEFINED = 1 << 2;
+
+function specifierNamesFromOption(options: unknown, key: string): string[] {
+  const list = (options as Record<string, unknown> | undefined)?.[key];
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  const names: string[] = [];
+  for (const entry of list) {
+    if (typeof entry === "string") {
+      names.push(entry);
+    } else if (entry && typeof entry === "object") {
+      const name = (entry as { name?: unknown }).name;
+      if (typeof name === "string") {
+        names.push(name);
+      } else if (Array.isArray(name)) {
+        names.push(...name.filter((item): item is string => typeof item === "string"));
+      }
+    }
+  }
+  return names;
+}
+
+const misusedSpreadFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "SpreadElement" && node.type !== "JSXSpreadAttribute") {
+    return;
+  }
+  const argument = node.argument;
+  if (!argument) {
+    return;
+  }
+  const checker = checkerFor(context);
+  const type = typeAtNode(context, argument);
+  if (!type) {
+    return;
+  }
+  const parts = unionPartsOfType(context, type);
+
+  const allowNames = specifierNamesFromOption(
+    (context as { options?: readonly unknown[] }).options?.[0],
+    "allow",
+  );
+  if (allowNames.length > 0) {
+    const matches = parts.some((part) => {
+      const text = renderedTypeText(context, part).trim();
+      const name = text.slice(0, text.search(/[<\s|&]/) === -1 ? text.length : text.search(/[<\s|&]/));
+      return allowNames.includes(name || text);
+    });
+    if (matches) {
+      sink.fields.__spreadAllowed = true;
+      return;
+    }
+  }
+
+  let isString = false;
+  let isPromiseLike = false;
+  let isFunctionWithoutProps = false;
+  let isMapType = false;
+  let allPartsMap = parts.length > 0;
+  let isArray = false;
+  let isIterable = false;
+  let isClassInstance = false;
+  let isClassDeclaration = false;
+
+  for (const part of parts) {
+    const text = renderedTypeText(context, part).trim();
+    if (part.flags & TYPE_FLAG_STRING_LIKE) {
+      isString = true;
+    }
+    const partIsMap =
+      text.startsWith("Map<") || text.startsWith("ReadonlyMap<") || text.startsWith("WeakMap<");
+    if (partIsMap) {
+      isMapType = true;
+    } else {
+      allPartsMap = false;
+    }
+    if (text.startsWith("Promise<") || text.startsWith("PromiseLike<")) {
+      isPromiseLike = true;
+    }
+    if (isArrayLikeTypeText(text)) {
+      isArray = true;
+    }
+    const properties = checker.getPropertiesOfType(part);
+    const propertyNames = properties.map((property) => property.name);
+    if (propertyNames.includes("then")) {
+      isPromiseLike = true;
+    }
+    if (propertyNames.some((name) => name.startsWith("__@iterator"))) {
+      isIterable = true;
+    }
+    const hasCallSignatures =
+      checker.getSignaturesOfType(part, 0).length > 0 ||
+      checker.getSignaturesOfType(part, 1).length > 0;
+    if (hasCallSignatures && properties.length === 0) {
+      isFunctionWithoutProps = true;
+    }
+    const symbol = checker.getSymbolOfType(part);
+    if (symbol && (symbol.flags & SYMBOL_FLAG_CLASS) !== 0) {
+      if (text.startsWith("typeof ")) {
+        isClassDeclaration = true;
+      } else {
+        isClassInstance = true;
+      }
+    }
+  }
+
+  if (isString) sink.fields.__spreadIsString = true;
+  if (isPromiseLike) sink.fields.__spreadIsPromise = true;
+  if (isFunctionWithoutProps) sink.fields.__spreadIsFunctionWithoutProps = true;
+  if (isMapType) sink.fields.__spreadIsMap = true;
+  sink.fields.__spreadAllUnionPartsMap = allPartsMap && isMapType;
+  if (isArray) sink.fields.__spreadIsArray = true;
+  if (isIterable) sink.fields.__spreadIsIterable = true;
+  if (isClassInstance) sink.fields.__spreadIsClassInstance = true;
+  if (isClassDeclaration) sink.fields.__spreadIsClassDeclaration = true;
+
+  // The facts live on the ARGUMENT node in the Rust rule.
+  for (const key of Object.keys(sink.fields)) {
+    if (key.startsWith("__spread")) {
+      argument[key] = sink.fields[key];
+      delete sink.fields[key];
+    }
+  }
+
+  // Sole-property object-literal suggestion facts.
+  const parent = node.parent;
+  if (parent?.type === "ObjectExpression" && Array.isArray(parent.properties)) {
+    sink.fields.__objectPropertyCount = parent.properties.length;
+    if (Array.isArray(parent.range)) {
+      sink.fields.__objectStart = parent.range[0];
+      sink.fields.__objectEnd = parent.range[1];
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// no-duplicate-type-constituents
+// ---------------------------------------------------------------------------
+
+const duplicateTypeConstituentsFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "TSUnionType" && node.type !== "TSIntersectionType") {
+    return;
+  }
+  let ancestor = node.parent;
+  while (ancestor?.type === "TSParenthesizedType") {
+    ancestor = ancestor.parent;
+  }
+  if (ancestor?.type === node.type) {
+    sink.fields.__sameKindAncestor = true;
+  }
+  if (node.type === "TSUnionType") {
+    // `param?: A | undefined` — the parent annotation's holder is optional.
+    const holder = node.parent?.type === "TSTypeAnnotation" ? node.parent.parent : undefined;
+    if (holder?.optional === true) {
+      sink.fields.__parentOptionalParam = true;
+    }
+  }
+  for (const constituent of Array.isArray(node.types) ? node.types : []) {
+    if (!constituent || constituent.__resolvedTypeId) {
+      continue;
+    }
+    const type = typeAtNode(context, constituent);
+    if (!type) {
+      continue;
+    }
+    const text = renderedTypeText(context, type);
+    if (text === "error") {
+      continue;
+    }
+    constituent.__resolvedTypeId = type.id;
+    if (type.flags & TYPE_FLAG_UNDEFINED) {
+      constituent.__isUndefinedType = true;
+    }
+  }
+};
+
+
+// ---------------------------------------------------------------------------
+// strict-boolean-expressions
+// ---------------------------------------------------------------------------
+
+const TYPE_FLAG_NULL = 1 << 3;
+const TYPE_FLAG_VOID = 1 << 4;
+const TYPE_FLAG_ES_SYMBOL = 1 << 9;
+const TYPE_FLAG_UNIQUE_ES_SYMBOL = 1 << 14;
+const TYPE_FLAG_NON_PRIMITIVE = 1 << 17;
+const TYPE_FLAG_TYPE_PARAMETER = 1 << 19;
+const TYPE_FLAG_OBJECT = 1 << 20;
+const TYPE_FLAG_INDEX = 1 << 21;
+const TYPE_FLAG_SUBSTITUTION = 1 << 24;
+const TYPE_FLAG_INDEXED_ACCESS = 1 << 25;
+const TYPE_FLAG_CONDITIONAL = 1 << 26;
+
+interface ConditionPartDescriptor {
+  variant: string;
+  isTruthy: boolean;
+  isEnum: boolean;
+}
+
+function conditionPartDescriptor(
+  context: ContextWithParserOptions,
+  part: CorsaType,
+): ConditionPartDescriptor {
+  const flags = part.flags;
+  const isEnum = (flags & TYPE_FLAG_ENUM_LITERAL) !== 0;
+  let variant: string;
+  let isTruthy = false;
+  if (flags & (TYPE_FLAG_UNDEFINED | TYPE_FLAG_NULL | TYPE_FLAG_VOID)) {
+    variant = "nullish";
+  } else if (flags & (TYPE_FLAG_BOOLEAN | TYPE_FLAG_BOOLEAN_LITERAL)) {
+    variant = "boolean";
+    isTruthy = part.value === true || renderedTypeText(context, part) === "true";
+  } else if (flags & TYPE_FLAG_STRING_LIKE) {
+    variant = "string";
+    isTruthy =
+      (flags & TYPE_FLAG_STRING_LITERAL) !== 0 &&
+      typeof part.value === "string" &&
+      part.value.length > 0;
+  } else if (flags & (TYPE_FLAG_NUMBER | TYPE_FLAG_NUMBER_LITERAL | TYPE_FLAG_ENUM)) {
+    variant = "number";
+    isTruthy =
+      (flags & TYPE_FLAG_NUMBER_LITERAL) !== 0 &&
+      typeof part.value === "number" &&
+      part.value !== 0;
+  } else if (flags & (TYPE_FLAG_BIGINT | TYPE_FLAG_BIGINT_LITERAL)) {
+    variant = "bigint";
+    const literal = typeof part.value === "object" && part.value !== null
+      ? (part.value as { base10Value?: string }).base10Value
+      : part.value;
+    isTruthy =
+      (flags & TYPE_FLAG_BIGINT_LITERAL) !== 0 &&
+      literal !== undefined &&
+      String(literal) !== "0";
+  } else if (flags & TYPE_FLAG_ANY) {
+    variant = "any";
+  } else if (flags & TYPE_FLAG_UNKNOWN) {
+    variant = "unknown";
+  } else if (flags & TYPE_FLAG_NEVER) {
+    variant = "never";
+  } else if (
+    flags &
+    (TYPE_FLAG_TYPE_PARAMETER | TYPE_FLAG_INDEX | TYPE_FLAG_INDEXED_ACCESS | TYPE_FLAG_CONDITIONAL | TYPE_FLAG_SUBSTITUTION)
+  ) {
+    variant = "generic";
+  } else if (
+    flags &
+    (TYPE_FLAG_OBJECT | TYPE_FLAG_NON_PRIMITIVE | TYPE_FLAG_ES_SYMBOL | TYPE_FLAG_UNIQUE_ES_SYMBOL)
+  ) {
+    variant = "object";
+    isTruthy = true;
+  } else {
+    variant = "mixed";
+  }
+  return { variant, isTruthy, isEnum };
+}
+
+function annotateConditionParts(context: ContextWithParserOptions, node: any): void {
+  if (!node || typeof node !== "object" || node.__conditionTypeParts) {
+    return;
+  }
+  if (node.type === "LogicalExpression") {
+    annotateConditionParts(context, node.left);
+    annotateConditionParts(context, node.right);
+    return;
+  }
+  if (node.type === "UnaryExpression" && node.operator === "!") {
+    annotateConditionParts(context, node.argument);
+    return;
+  }
+  const inner = stripChainExpression(node);
+  const type = typeAtNode(context, inner);
+  if (!type) {
+    return;
+  }
+  const descriptors = unionPartsOfType(context, type).map((part) =>
+    conditionPartDescriptor(context, part),
+  );
+  node.__conditionTypeParts = descriptors;
+  if (inner !== node) {
+    inner.__conditionTypeParts = descriptors;
+  }
+}
+
+/** TypePredicateKind values mirror the upstream checker (asserts x is index 3). */
+const PREDICATE_KIND_ASSERTS_IDENTIFIER = 3;
+
+const strictBooleanExpressionsFacts: FactProvider = (context, node, sink) => {
+  switch (node.type) {
+    case "IfStatement":
+    case "WhileStatement":
+    case "DoWhileStatement":
+    case "ForStatement":
+    case "ConditionalExpression":
+      annotateConditionParts(context, node.test);
+      return;
+    case "UnaryExpression":
+      if (node.operator === "!") {
+        annotateConditionParts(context, node.argument);
+      }
+      return;
+    case "LogicalExpression":
+      annotateConditionParts(context, node);
+      return;
+    case "CallExpression": {
+      const callee = stripChainExpression(node.callee);
+      if (!callee) {
+        return;
+      }
+      const checker = checkerFor(context);
+      const calleeType = typeAtNode(context, callee);
+      const signature = calleeType ? checker.getSignaturesOfType(calleeType, 0)[0] : undefined;
+      if (signature) {
+        const predicate = checker.getTypePredicateOfSignature(signature);
+        if (
+          predicate &&
+          predicate.kind === PREDICATE_KIND_ASSERTS_IDENTIFIER &&
+          predicate.parameterIndex >= 0 &&
+          Array.isArray(node.arguments) &&
+          node.arguments[predicate.parameterIndex]
+        ) {
+          sink.fields.__truthinessAssertedArgumentIndex = predicate.parameterIndex;
+          annotateConditionParts(context, node.arguments[predicate.parameterIndex]);
+        }
+      }
+      if (
+        callee.type === "MemberExpression" &&
+        ARRAY_PREDICATE_METHODS.has(memberPropertyName(callee) ?? "") &&
+        typeTextsAtNode(context, callee.object).some(isArrayLikeTypeText)
+      ) {
+        sink.fields.__arrayMethodPredicateCall = true;
+        const predicateArg = node.arguments?.[0];
+        if (predicateArg && typeof predicateArg === "object") {
+          const argType = typeAtNode(context, predicateArg);
+          const argSignature = argType
+            ? checkerFor(context).getSignaturesOfType(argType, 0)[0]
+            : undefined;
+          const returnType = argSignature
+            ? checkerFor(context).getReturnTypeOfSignature(argSignature)
+            : undefined;
+          if (returnType) {
+            predicateArg.__predicateReturnTypeParts = unionPartsOfType(context, returnType).map(
+              (part) => conditionPartDescriptor(context, part),
+            );
+          }
+        }
+      }
+      return;
+    }
+    default:
+  }
+};
+
+// ---------------------------------------------------------------------------
+// switch-exhaustiveness-check
+// ---------------------------------------------------------------------------
+
+const TYPE_FLAG_LITERAL_LIKE =
+  TYPE_FLAG_STRING_LITERAL |
+  TYPE_FLAG_NUMBER_LITERAL |
+  TYPE_FLAG_BIGINT_LITERAL |
+  TYPE_FLAG_BOOLEAN_LITERAL |
+  TYPE_FLAG_ENUM_LITERAL |
+  TYPE_FLAG_UNDEFINED |
+  TYPE_FLAG_NULL;
+
+const switchExhaustivenessFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "SwitchStatement" || !node.discriminant) {
+    return;
+  }
+  const type = typeAtNode(context, node.discriminant);
+  if (!type) {
+    return;
+  }
+  const parts = unionPartsOfType(context, type);
+  sink.fields.__discriminantContainsNonLiteral = parts.some(
+    (part) => (part.flags & TYPE_FLAG_LITERAL_LIKE) === 0,
+  );
+
+  const coveredTypeIds = new Set<string>();
+  for (const switchCase of Array.isArray(node.cases) ? node.cases : []) {
+    if (!switchCase?.test) {
+      continue;
+    }
+    const testType = typeAtNode(context, switchCase.test);
+    if (testType) {
+      coveredTypeIds.add(testType.id);
+    }
+  }
+  const missing = parts.filter((part) => !coveredTypeIds.has(part.id));
+  sink.fields.__missingBranchTexts = missing.map((part) => renderedTypeText(context, part));
+  sink.fields.__missingBranchCaseTests = missing.map((part) => renderedTypeText(context, part));
+
+  const source = context.sourceCode.text;
+  const blockStart = source.indexOf("{", node.discriminant.range[1]);
+  if (blockStart !== -1 && Array.isArray(node.range)) {
+    sink.fields.__caseBlockRange = [blockStart, node.range[1]];
+  }
+  const anchor = node.cases?.[0] ?? node;
+  if (Array.isArray(anchor.range)) {
+    const lineStart = source.lastIndexOf("\n", anchor.range[0]) + 1;
+    const indent = source.slice(lineStart, anchor.range[0]);
+    if (/^\s*$/.test(indent)) {
+      sink.fields.__caseIndent = indent;
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// prefer-nullish-coalescing (syntactic facts)
+// ---------------------------------------------------------------------------
+
+const preferNullishCoalescingFacts: FactProvider = (_context, node, sink) => {
+  const parent = node.parent;
+  if (parent?.type === "LogicalExpression" && typeof parent.operator === "string") {
+    sink.fields.__parentLogicalOperator = parent.operator;
+  }
+  for (let current = parent; current; current = current.parent) {
+    if (
+      current.type === "CallExpression" &&
+      current.callee?.type === "Identifier" &&
+      current.callee.name === "Boolean"
+    ) {
+      sink.fields.__inBooleanConstructorCall = true;
+      break;
+    }
+    if (typeof current.type === "string" && current.type.endsWith("Statement")) {
+      break;
+    }
+  }
+};
+
 // ---------------------------------------------------------------------------
 // compiler-option facts
 // ---------------------------------------------------------------------------
@@ -858,10 +1295,15 @@ export function attachConfigFacts(
 // ---------------------------------------------------------------------------
 
 export const ruleFactProviders: Record<string, readonly FactProvider[]> = {
+  "no-duplicate-type-constituents": [duplicateTypeConstituentsFacts],
   "no-misused-promises": [misusedPromisesFacts],
+  "no-misused-spread": [misusedSpreadFacts],
   "no-redundant-type-constituents": [redundantTypeConstituentsFacts],
   "no-unsafe-argument": [unsafeArgumentFacts],
   "no-unsafe-enum-comparison": [unsafeEnumComparisonFacts],
+  "prefer-nullish-coalescing": [preferNullishCoalescingFacts],
   "require-await": [requireAwaitFacts],
+  "strict-boolean-expressions": [strictBooleanExpressionsFacts],
+  "switch-exhaustiveness-check": [switchExhaustivenessFacts],
   "unbound-method": [unboundMethodFacts],
 };
