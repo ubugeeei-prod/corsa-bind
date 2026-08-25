@@ -66,7 +66,13 @@ impl RustLintRule for SwitchExhaustivenessCheckRule {
         let allow_default_case_for_exhaustive_switch =
             rule_option_bool(node, "allowDefaultCaseForExhaustiveSwitch").unwrap_or(true);
         let consider_default_exhaustive_for_unions =
-            rule_option_bool(node, "considerDefaultExhaustiveForUnions").unwrap_or(false);
+            rule_option_bool(node, "considerDefaultExhaustiveForUnions").unwrap_or(false)
+                // `defaultCaseCommentPattern`: a default case whose leading
+                // comment matches the configured pattern also satisfies
+                // exhaustiveness for unions. The host evaluates the pattern
+                // (a JS regular expression) and reports the raw match.
+                || (has_default_case_comment_pattern(node)
+                    && node.field_bool("__defaultCaseCommentMatches") == Some(true));
         let require_default_for_non_union =
             rule_option_bool(node, "requireDefaultForNonUnion").unwrap_or(false);
 
@@ -149,6 +155,18 @@ fn switch_metadata(node: &LintNode) -> SwitchMetadata {
         missing_branch_texts: string_array_field(node, "__missingBranchTexts"),
         missing_case_tests: string_array_field(node, "__missingBranchCaseTests"),
     }
+}
+
+
+/// Whether the `defaultCaseCommentPattern` option is configured.
+fn has_default_case_comment_pattern(node: &LintNode) -> bool {
+    node.fields
+        .get("__ruleOptions")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|options| options.first())
+        .and_then(|options| options.get("defaultCaseCommentPattern"))
+        .and_then(serde_json::Value::as_str)
+        .is_some()
 }
 
 /// Builds the `addMissingCases` suggestion. When `require_default` is true the

@@ -130,6 +130,9 @@ fn bridge_requirements_for_rule(name: &str, requires_type_texts: bool) -> RuleBr
         "prefer-reduce-type-parameter" => {
             RuleBridgeRequirements::type_texts(3, NodeMetadataDepth::exact(2))
         }
+        "prefer-string-starts-ends-with" => {
+            RuleBridgeRequirements::type_texts(4, NodeMetadataDepth::range(2, 3))
+        }
         "require-array-sort-compare" => {
             RuleBridgeRequirements::type_texts(2, NodeMetadataDepth::exact(2))
         }

@@ -3,6 +3,7 @@ use crate::lint::helpers::{
     callee_property_name, child_list, identifier_name, is_zero_literal, member_object,
     member_property_name, strip_chain_expression,
 };
+use crate::utils::is_string_like_type_texts;
 
 /// Rule that prefers startsWith()/endsWith() over manual string checks.
 #[derive(Clone, Copy, Debug, Default)]
@@ -38,7 +39,9 @@ impl RustLintRule for PreferStringStartsEndsWithRule {
     }
 
     fn requires_type_texts(&self) -> bool {
-        false
+        // The single-element-equality patterns gate on the target being
+        // string-typed; the slice/indexOf patterns stay syntax-only.
+        true
     }
 
     fn check(&self, ctx: &mut RuleContext<'_>, node: &LintNode) {
@@ -60,8 +63,95 @@ impl RustLintRule for PreferStringStartsEndsWithRule {
             .or_else(|| detect_manual_string_check(right, left))
         {
             ctx.report(message_id, node.range);
+            return;
+        }
+        let allow_single_element_equality = self_allow_single_element_equality(node);
+        if !allow_single_element_equality {
+            if let Some(message_id) = detect_single_element_equality(left, right)
+                .or_else(|| detect_single_element_equality(right, left))
+            {
+                ctx.report(message_id, node.range);
+            }
         }
     }
+}
+
+/// `allowSingleElementEquality` option (default `"never"`); `"always"` skips
+/// the `s[0] === "a"` / `s.charAt(0)` family.
+fn self_allow_single_element_equality(node: &LintNode) -> bool {
+    node.fields
+        .get("__ruleOptions")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|options| options.first())
+        .and_then(|options| options.get("allowSingleElementEquality"))
+        .and_then(serde_json::Value::as_str)
+        == Some("always")
+}
+
+/// Detects the upstream single-element-equality patterns:
+/// `s[0] === "a"`, `s.charAt(0) === "a"` (startsWith) and their
+/// `s[s.length - 1]` / `s.charAt(s.length - 1)` counterparts (endsWith).
+fn detect_single_element_equality(
+    candidate: &LintNode,
+    compared: &LintNode,
+) -> Option<&'static str> {
+    if !is_single_character_literal(compared) {
+        return None;
+    }
+    let current = strip_chain_expression(candidate);
+
+    // `s.charAt(index)`
+    if current.kind == "CallExpression"
+        && callee_property_name(Some(current)).as_deref() == Some("charAt")
+    {
+        let target = current.child("callee").and_then(member_object)?;
+        if !is_string_like_type_texts(&target.type_texts) && target.type_texts.is_empty() {
+            return None;
+        }
+        let index = child_list(current, "arguments").first()?;
+        return classify_element_index(index, target);
+    }
+
+    // `s[index]`
+    if current.kind == "MemberExpression" && current.field_bool("computed").unwrap_or(false) {
+        let target = member_object(current)?;
+        if !is_string_like_type_texts(&target.type_texts) {
+            return None;
+        }
+        let index = current.child("property")?;
+        return classify_element_index(index, target);
+    }
+
+    None
+}
+
+fn classify_element_index(index: &LintNode, target: &LintNode) -> Option<&'static str> {
+    if is_zero_literal(index) {
+        return Some("startsWith");
+    }
+    // `target.length - 1`
+    let index = strip_chain_expression(index);
+    if index.kind == "BinaryExpression" && index.field_str("operator") == Some("-") {
+        let length = index.child("left")?;
+        let one = index.child("right")?;
+        if member_property_name(length).as_deref() == Some("length")
+            && member_object(length).is_some_and(|object| same_expression(object, target))
+            && one.field_f64("value") == Some(1.0)
+        {
+            return Some("endsWith");
+        }
+    }
+    None
+}
+
+fn is_single_character_literal(node: &LintNode) -> bool {
+    let node = strip_chain_expression(node);
+    node.kind == "Literal"
+        && node
+            .fields
+            .get("value")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value.chars().count() == 1)
 }
 
 fn detect_manual_string_check(candidate: &LintNode, compared: &LintNode) -> Option<&'static str> {

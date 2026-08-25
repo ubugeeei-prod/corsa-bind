@@ -1239,6 +1239,29 @@ const switchExhaustivenessFacts: FactProvider = (context, node, sink) => {
       sink.fields.__caseIndent = indent;
     }
   }
+
+  const options = (context as { options?: readonly unknown[] }).options?.[0] as
+    | { defaultCaseCommentPattern?: string }
+    | undefined;
+  if (options?.defaultCaseCommentPattern) {
+    const cases: any[] = Array.isArray(node.cases) ? node.cases : [];
+    const defaultIndex = cases.findIndex((switchCase) => switchCase && !switchCase.test);
+    if (defaultIndex !== -1) {
+      const defaultCase = cases[defaultIndex];
+      const previousEnd =
+        defaultIndex > 0 ? cases[defaultIndex - 1]?.range?.[1] : blockStart + 1;
+      if (typeof previousEnd === "number" && Array.isArray(defaultCase.range)) {
+        const leading = source.slice(previousEnd, defaultCase.range[0]);
+        try {
+          if (new RegExp(options.defaultCaseCommentPattern, "u").test(leading)) {
+            sink.fields.__defaultCaseCommentMatches = true;
+          }
+        } catch {
+          // Invalid pattern: never matches.
+        }
+      }
+    }
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -2615,6 +2638,10 @@ function typeTextLooksReadonly(text: string): boolean {
 
 const preferReadonlyParameterTypesFacts: FactProvider = (context, node, sink) => {
   void sink;
+  const options = (context as { options?: readonly unknown[] }).options?.[0] as
+    | { treatMethodsAsReadonly?: boolean }
+    | undefined;
+  const treatMethodsAsReadonly = options?.treatMethodsAsReadonly === true;
   const params: any[] = Array.isArray(node.params)
     ? node.params
     : Array.isArray(node.value?.params)
@@ -2635,7 +2662,10 @@ const preferReadonlyParameterTypesFacts: FactProvider = (context, node, sink) =>
     }
     const parts = unionPartsOfType(context, type);
     const texts = parts.map((part) => renderedTypeText(context, part));
-    if (texts.length > 0 && texts.every(typeTextLooksReadonly)) {
+    const readonlyText = (text: string) =>
+      typeTextLooksReadonly(text) ||
+      (treatMethodsAsReadonly && /^\{[^}]*\(/.test(text.trim()));
+    if (texts.length > 0 && texts.every(readonlyText)) {
       rawParam.__typeIsReadonly = true;
       param.__typeIsReadonly = true;
     }

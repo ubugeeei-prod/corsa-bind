@@ -1,5 +1,5 @@
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
-use crate::lint::helpers::{child_list, rule_option_bool};
+use crate::lint::helpers::{child_list, rule_option_bool, rule_allow_list_names, type_texts_match_names};
 
 /// Type-aware rule that requires function parameters to use readonly types.
 ///
@@ -63,12 +63,12 @@ impl RustLintRule for PreferReadonlyParameterTypesRule {
         let options = Options::from_node(node);
 
         for parameter in parameters_of(node) {
-            check_parameter(ctx, parameter, options);
+            check_parameter(ctx, parameter, &options);
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Options {
     /// `checkParameterProperties` (default `true`): whether to check class
     /// constructor parameter properties (e.g. `private foo: string[]`).
@@ -76,6 +76,8 @@ struct Options {
     /// `ignoreInferredTypes` (default `false`): skip parameters with no explicit
     /// type annotation.
     ignore_inferred_types: bool,
+    /// `allow`: TypeOrValueSpecifier names that never report.
+    allow: Vec<String>,
 }
 
 impl Options {
@@ -84,6 +86,7 @@ impl Options {
             check_parameter_properties: rule_option_bool(node, "checkParameterProperties")
                 .unwrap_or(true),
             ignore_inferred_types: rule_option_bool(node, "ignoreInferredTypes").unwrap_or(false),
+            allow: rule_allow_list_names(node, "allow"),
         }
     }
 }
@@ -104,7 +107,7 @@ fn parameters_of(node: &LintNode) -> &[LintNode] {
     direct
 }
 
-fn check_parameter(ctx: &mut RuleContext<'_>, parameter: &LintNode, options: Options) {
+fn check_parameter(ctx: &mut RuleContext<'_>, parameter: &LintNode, options: &Options) {
     // In TS-ESTree, a constructor parameter property is a `TSParameterProperty`
     // wrapping the actual parameter. The host marks such nodes with
     // `__isParameterProperty`.
@@ -127,6 +130,10 @@ fn check_parameter(ctx: &mut RuleContext<'_>, parameter: &LintNode, options: Opt
     // `isTypeBrandedLiteralLike(...)`. Absent facts default to "not readonly /
     // not branded" so the rule fails closed (reports) only when the host could
     // not prove readonly-ness.
+    // `allow` option: a type matched by a configured specifier never reports.
+    if type_texts_match_names(&actual.type_texts, &options.allow) {
+        return;
+    }
     if read_type_fact(actual, "__typeIsReadonly") {
         return;
     }

@@ -982,6 +982,71 @@ describe("corsa oxlint native rules", () => {
       ],
     });
   });
+
+  integrationCase("runs restrict-template-expressions allow list through RuleTester", () => {
+    createTester().run(
+      "restrict-template-expressions",
+      corsaOxlintRules["restrict-template-expressions"] as never,
+      {
+        valid: [
+          { code: "declare const failure: Error; const label = `${failure}`;" },
+          {
+            code: "class Custom { toString() { return 'x'; } } declare const custom: Custom; const label = `${custom}`;",
+            options: [{ allow: [{ from: "file", name: "Custom" }] }],
+          },
+        ],
+        invalid: [
+          {
+            code: "declare const failure: Error; const label = `${failure}`;",
+            options: [{ allow: [] }],
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs prefer-string-starts-ends-with element equality through RuleTester", () => {
+    createTester().run(
+      "prefer-string-starts-ends-with",
+      corsaOxlintRules["prefer-string-starts-ends-with"] as never,
+      {
+        valid: [
+          { code: "declare const text: string; text.startsWith('a');" },
+          {
+            code: "declare const text: string; text[0] === 'a';",
+            options: [{ allowSingleElementEquality: "always" }],
+          },
+        ],
+        invalid: [
+          { code: "declare const text: string; text[0] === 'a';", errors: 1 },
+          { code: "declare const text: string; text[text.length - 1] === 'z';", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs switch-exhaustiveness-check defaultCaseCommentPattern through RuleTester", () => {
+    createTester().run(
+      "switch-exhaustiveness-check",
+      corsaOxlintRules["switch-exhaustiveness-check"] as never,
+      {
+        valid: [
+          {
+            code: "type Kind = 'a' | 'b'; declare const kind: Kind; switch (kind) { case 'a': break; // skip exhaustiveness\n default: break; }",
+            options: [{ defaultCaseCommentPattern: "skip exhaustiveness" }],
+          },
+        ],
+        invalid: [
+          {
+            code: "type Kind = 'a' | 'b'; declare const kind: Kind; switch (kind) { case 'a': break; default: break; }",
+            options: [{ defaultCaseCommentPattern: "skip exhaustiveness" }],
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
 });
 
 function createTester(): RuleTester {

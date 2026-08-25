@@ -254,3 +254,55 @@ pub(super) fn is_unary_minus_type_safe<T: AsRef<str>>(type_texts: &[T]) -> bool 
             })
         })
 }
+
+/// Reads the names out of a `TypeOrValueSpecifier` list option
+/// (string entries and object entries with a `name` string or string array).
+pub(super) fn rule_allow_list_names(node: &LintNode, key: &str) -> Vec<String> {
+    let Some(entries) = node
+        .fields
+        .get("__ruleOptions")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|options| options.first())
+        .and_then(|options| options.get(key))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut names = Vec::new();
+    for entry in entries {
+        match entry {
+            serde_json::Value::String(name) => names.push(name.clone()),
+            serde_json::Value::Object(spec) => match spec.get("name") {
+                Some(serde_json::Value::String(name)) => names.push(name.clone()),
+                Some(serde_json::Value::Array(name_list)) => {
+                    names.extend(
+                        name_list
+                            .iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .map(String::from),
+                    );
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    names
+}
+
+/// Whether any rendered type text's bare reference name matches one of the
+/// allow-listed names.
+pub(super) fn type_texts_match_names<T: AsRef<str>>(type_texts: &[T], names: &[String]) -> bool {
+    if names.is_empty() {
+        return false;
+    }
+    type_texts.iter().any(|text| {
+        crate::utils::split_top_level_type_text(text.as_ref(), '|')
+            .iter()
+            .any(|part| {
+                let part = part.trim();
+                let name = &part[..part.find('<').unwrap_or(part.len())];
+                names.iter().any(|allowed| allowed == name || allowed == part)
+            })
+    })
+}
