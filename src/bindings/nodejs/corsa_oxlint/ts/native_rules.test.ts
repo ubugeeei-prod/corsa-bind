@@ -865,6 +865,123 @@ describe("corsa oxlint native rules", () => {
       },
     );
   });
+
+  integrationCase("runs dot-notation through RuleTester", () => {
+    createTester().run("dot-notation", corsaOxlintRules["dot-notation"] as never, {
+      valid: [
+        { code: "const record = { value: 1 }; record.value;" },
+        {
+          code: "const record = { snake_case: 1 } as Record<string, number>; record['snake_case'];",
+          options: [{ allowPattern: "^[a-z]+(_[a-z]+)+$" }],
+        },
+      ],
+      invalid: [{ code: "const record = { value: 1 }; record['value'];", errors: 1 }],
+    });
+  });
+
+  integrationCase("runs consistent-type-exports through RuleTester", () => {
+    createTester().run(
+      "consistent-type-exports",
+      corsaOxlintRules["consistent-type-exports"] as never,
+      {
+        valid: [
+          { code: "const runtimeValue = 1; export { runtimeValue };" },
+          { code: "type Shape = { size: number }; export type { Shape };" },
+        ],
+        invalid: [
+          { code: "type Shape = { size: number }; export { Shape };", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-confusing-void-expression through RuleTester", () => {
+    createTester().run(
+      "no-confusing-void-expression",
+      corsaOxlintRules["no-confusing-void-expression"] as never,
+      {
+        valid: [
+          { code: "declare function log(): void; log();" },
+        ],
+        invalid: [
+          { code: "declare function log(): void; const result = log();", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-unnecessary-template-expression through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-template-expression",
+      corsaOxlintRules["no-unnecessary-template-expression"] as never,
+      {
+        valid: [
+          { code: "declare const count: number; const label = `${count}`;" },
+        ],
+        invalid: [
+          { code: "declare const already: string; const copy = `${already}`;", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-unnecessary-type-conversion through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-type-conversion",
+      corsaOxlintRules["no-unnecessary-type-conversion"] as never,
+      {
+        valid: [
+          { code: "declare const count: number; const text = String(count);" },
+        ],
+        invalid: [
+          { code: "declare const already: string; const copy = String(already);", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-unnecessary-type-parameters through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-type-parameters",
+      corsaOxlintRules["no-unnecessary-type-parameters"] as never,
+      {
+        valid: [
+          { code: "function pick<Value>(items: Value[], index: number): Value { return items[index]; }" },
+        ],
+        invalid: [
+          { code: "function only<Value>(value: Value): void { console.log(value); }", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-useless-default-assignment through RuleTester", () => {
+    createTester().run(
+      "no-useless-default-assignment",
+      corsaOxlintRules["no-useless-default-assignment"] as never,
+      {
+        valid: [
+          { code: "function greet(who: string | undefined = 'world') { return who; }" },
+        ],
+        invalid: [
+          { code: "function greet(who: string = 'world') { return who; }", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs prefer-readonly through RuleTester", () => {
+    createTester().run("prefer-readonly", corsaOxlintRules["prefer-readonly"] as never, {
+      valid: [
+        {
+          code: "class Counter { private count = 0; increment() { this.count += 1; } }",
+        },
+      ],
+      invalid: [
+        { code: "class Counter { private count = 0; read() { return this.count; } }", errors: 1 },
+      ],
+    });
+  });
 });
 
 function createTester(): RuleTester {

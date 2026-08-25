@@ -1946,6 +1946,709 @@ const nonNullableAssertionStyleFacts: FactProvider = (context, node, sink) => {
   }
 };
 
+
+// ---------------------------------------------------------------------------
+// dot-notation
+// ---------------------------------------------------------------------------
+
+const dotNotationFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "MemberExpression") {
+    return;
+  }
+  const source = context.sourceCode.text;
+  const objectEnd = node.object?.range?.[1];
+  const propertyStart = node.property?.range?.[0];
+  if (typeof objectEnd === "number" && typeof propertyStart === "number") {
+    const between = source.slice(objectEnd, propertyStart);
+    if (node.computed) {
+      const bracket = between.indexOf("[");
+      if (bracket !== -1) {
+        sink.fields.__leftBracketStart = objectEnd + bracket;
+      }
+    } else {
+      const dot = between.lastIndexOf(".");
+      if (dot !== -1) {
+        sink.fields.__dotStart = objectEnd + dot;
+      }
+    }
+  }
+  if (compilerOption(context, "noPropertyAccessFromIndexSignature") === true) {
+    sink.fields.__noPropertyAccessFromIndexSignature = true;
+  }
+
+  const options = (context as { options?: readonly unknown[] }).options?.[0] as
+    | { allowPattern?: string }
+    | undefined;
+  const propertyName =
+    node.computed && node.property?.type === "Literal" && typeof node.property.value === "string"
+      ? node.property.value
+      : undefined;
+  if (options?.allowPattern && propertyName !== undefined) {
+    try {
+      if (new RegExp(options.allowPattern, "u").test(propertyName)) {
+        sink.fields.__propertyMatchesAllowPattern = true;
+      }
+    } catch {
+      // An invalid pattern never matches, mirroring ESLint's behavior.
+    }
+  }
+
+  if (propertyName !== undefined) {
+    const checker = checkerFor(context);
+    const symbol = checker.getSymbolAtLocation(node.property);
+    if (symbol) {
+      const modifier = declarationAccessModifier(context, symbol);
+      if (modifier) {
+        sink.fields.__propertyDeclarationModifier = modifier;
+      }
+    } else {
+      const objectType = node.object ? typeAtNode(context, node.object) : undefined;
+      const objectText = objectType ? renderedTypeText(context, objectType) : "";
+      if (objectText.startsWith("Record<") || /\{\s*\[/.test(objectText)) {
+        sink.fields.__propertyIsIndexSignature = true;
+      }
+    }
+  }
+};
+
+/** Reads a private/protected modifier off a same-file declaration. */
+function declarationAccessModifier(
+  context: ContextWithParserOptions,
+  symbol: { readonly valueDeclaration?: string; readonly declarations: readonly string[] },
+): string | undefined {
+  const declaration = symbol.valueDeclaration ?? symbol.declarations[0];
+  if (!declaration) {
+    return undefined;
+  }
+  const [posPart, , ...pathParts] = declaration.split(".");
+  const path = pathParts.join(".");
+  const filename = String(context.filename ?? "");
+  if (!path || !(path === filename || filename.endsWith(path) || path.endsWith(filename))) {
+    return undefined;
+  }
+  const pos = Number(posPart);
+  const source = context.sourceCode.text;
+  if (!Number.isFinite(pos) || pos < 0 || pos > source.length) {
+    return undefined;
+  }
+  const lineStart = source.lastIndexOf("\n", pos) + 1;
+  const prefix = source.slice(lineStart, pos + 1);
+  if (/\bprivate\b/.test(prefix)) {
+    return "private";
+  }
+  if (/\bprotected\b/.test(prefix)) {
+    return "protected";
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// consistent-type-exports
+// ---------------------------------------------------------------------------
+
+const consistentTypeExportsFacts: FactProvider = (context, node, sink) => {
+  if (node.type === "ExportAllDeclaration") {
+    if (node.exported) {
+      sink.fields.__isNamespaceExport = true;
+    }
+    return;
+  }
+  if (node.type !== "ExportNamedDeclaration" || node.declaration) {
+    return;
+  }
+  for (const specifier of Array.isArray(node.specifiers) ? node.specifiers : []) {
+    if (specifier?.local?.type !== "Identifier" || node.source) {
+      // Re-exports resolve through the module's symbol table, which the
+      // position-based lookup cannot reach; leave the fact absent.
+      continue;
+    }
+    // An export specifier's own symbol is the alias; classify through the
+    // same-file declaration instead.
+    const kind = sameFileDeclarationKind(context, specifier.local.name);
+    if (kind === "type") {
+      specifier.__isTypeBasedSymbol = true;
+    } else if (kind === "value") {
+      specifier.__isTypeBasedSymbol = false;
+    }
+  }
+};
+
+/** Classifies a same-file top-level declaration as type-only or value. */
+function sameFileDeclarationKind(
+  context: ContextWithParserOptions,
+  name: string,
+): "type" | "value" | undefined {
+  const program = (context.sourceCode as { ast?: { body?: readonly any[] } }).ast;
+  let result: "type" | "value" | undefined;
+  for (const statement of program?.body ?? []) {
+    const declaration = statement?.declaration ?? statement;
+    if (!declaration || typeof declaration !== "object") {
+      continue;
+    }
+    switch (declaration.type) {
+      case "TSTypeAliasDeclaration":
+      case "TSInterfaceDeclaration":
+        if (declaration.id?.name === name) {
+          result = "type";
+        }
+        break;
+      case "ClassDeclaration":
+      case "FunctionDeclaration":
+      case "TSEnumDeclaration":
+      case "TSModuleDeclaration":
+        if (declaration.id?.name === name) {
+          // Classes/enums/namespaces are values (and types); a value export
+          // is always legitimate for them.
+          result = "value";
+        }
+        break;
+      case "VariableDeclaration":
+        for (const declarator of declaration.declarations ?? []) {
+          if (declarator?.id?.name === name) {
+            result = "value";
+          }
+        }
+        break;
+      default:
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// no-confusing-void-expression
+// ---------------------------------------------------------------------------
+
+const confusingVoidExpressionFacts: FactProvider = (context, node, sink) => {
+  const ancestors: any[] = (context.sourceCode as any)?.getAncestors?.(node) ?? [];
+  if (ancestors.length === 0) {
+    return;
+  }
+  const chain: Record<string, unknown>[] = [];
+  let child: any = node;
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const ancestor = ancestors[index];
+    const entry: Record<string, unknown> = { kind: ancestor.type };
+    if (Array.isArray(ancestor.range)) {
+      entry.start = ancestor.range[0];
+      entry.end = ancestor.range[1];
+    }
+    if (typeof ancestor.operator === "string") {
+      entry.operator = ancestor.operator;
+    }
+    if (ancestor.type === "LogicalExpression" || ancestor.type === "BinaryExpression") {
+      entry.childIsLeft = ancestor.left === child;
+      entry.childIsRight = ancestor.right === child;
+    }
+    if (ancestor.type === "ConditionalExpression") {
+      entry.childIsBranch = ancestor.consequent === child || ancestor.alternate === child;
+    }
+    if (ancestor.type === "ReturnStatement") {
+      const fn = nearestFunctionNode(context, ancestor);
+      const body = fn?.body;
+      if (body?.type === "BlockStatement" && Array.isArray(body.body)) {
+        entry.isFinalReturn = body.body[body.body.length - 1] === ancestor;
+      }
+      if (fn) {
+        entry.enclosingFunctionIsVoidReturning = functionDeclaresVoidReturn(context, fn);
+      }
+    }
+    if (typeof ancestor.type === "string" && ancestor.type.includes("Function")) {
+      entry.isVoidReturningFunction = functionDeclaresVoidReturn(context, ancestor);
+    }
+    chain.push(entry);
+    child = ancestor;
+    if (typeof ancestor.type === "string" && ancestor.type.endsWith("Statement")) {
+      break;
+    }
+  }
+  sink.fields.__ancestorChain = chain;
+};
+
+function functionDeclaresVoidReturn(context: ContextWithParserOptions, fn: any): boolean {
+  const texts = functionLiteralReturnTexts(context, fn);
+  return isVoidReturnTextList(texts);
+}
+
+// ---------------------------------------------------------------------------
+// no-deprecated (declaration-name positions)
+// ---------------------------------------------------------------------------
+
+const deprecatedDeclarationNameFacts: FactProvider = (_context, node, sink) => {
+  const parent = node.parent;
+  if (!parent) {
+    return;
+  }
+  const isName =
+    parent.id === node ||
+    (parent.key === node && parent.computed !== true) ||
+    (parent.type === "ImportSpecifier" && parent.imported === node);
+  if (isName) {
+    sink.fields.__declarationName = true;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// no-unnecessary-qualifier
+// ---------------------------------------------------------------------------
+
+const unnecessaryQualifierFacts: FactProvider = (context, node, sink) => {
+  const qualifier = node.type === "TSQualifiedName" ? node.left : node.object;
+  const qualifierName =
+    qualifier?.type === "Identifier"
+      ? qualifier.name
+      : qualifier?.type === "TSQualifiedName" && qualifier.right?.type === "Identifier"
+        ? qualifier.right.name
+        : undefined;
+  if (!qualifierName) {
+    return;
+  }
+  const accessed = node.type === "TSQualifiedName" ? node.right : node.property;
+  const accessedName = accessed?.type === "Identifier" ? accessed.name : undefined;
+
+  let namespaceBody: any;
+  for (let current = node.parent; current; current = current.parent) {
+    if (
+      current.type === "TSModuleDeclaration" &&
+      (current.id?.name === qualifierName ||
+        (current.id?.type === "Literal" && current.id.value === qualifierName))
+    ) {
+      namespaceBody = current.body;
+      break;
+    }
+    if (
+      current.type === "TSEnumDeclaration" &&
+      current.id?.name === qualifierName &&
+      node.type === "TSQualifiedName"
+    ) {
+      namespaceBody = current;
+      break;
+    }
+  }
+  if (!namespaceBody) {
+    return;
+  }
+  sink.fields.__qualifierNamespaceInScope = true;
+  if (accessedName && namespaceDeclaresName(namespaceBody, accessedName)) {
+    sink.fields.__accessedNameAlreadyInScope = true;
+  }
+  // Suppress nested reports inside an outer qualified name that this rule
+  // already reports on.
+  for (let current = node.parent; current; current = current.parent) {
+    if (current.type === "TSQualifiedName" || current.type === "MemberExpression") {
+      sink.fields.__qualifierReportSuppressed = true;
+      break;
+    }
+    if (typeof current.type !== "string" || current.type.endsWith("Statement")) {
+      break;
+    }
+  }
+};
+
+function namespaceDeclaresName(body: any, name: string): boolean {
+  const statements: any[] = Array.isArray(body?.body)
+    ? body.body
+    : Array.isArray(body?.members)
+      ? body.members
+      : [];
+  return statements.some((statement) => {
+    const declaration = statement?.declaration ?? statement;
+    if (declaration?.id?.name === name) {
+      return true;
+    }
+    if (declaration?.type === "VariableDeclaration") {
+      return (declaration.declarations ?? []).some(
+        (declarator: any) => declarator?.id?.name === name,
+      );
+    }
+    return declaration?.type === "TSEnumMember" && declaration.id?.name === name;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// no-unnecessary-template-expression
+// ---------------------------------------------------------------------------
+
+const unnecessaryTemplateExpressionFacts: FactProvider = (context, node, sink) => {
+  const expressions: any[] = Array.isArray(node.expressions) ? node.expressions : [];
+  const quasis: any[] = Array.isArray(node.quasis) ? node.quasis : [];
+  const source = context.sourceCode.text;
+  const commentIndices: number[] = [];
+  expressions.forEach((expression, index) => {
+    annotateTypeParameterConstraint(context, expression);
+    const type = typeAtNode(context, stripChainExpression(expression));
+    if (type && (type.flags & TYPE_FLAG_ENUM_LITERAL) !== 0) {
+      expression.__isEnumMemberType = true;
+    }
+    if (type && !expression.__constraintTypeTexts) {
+      // For non-type-parameter spans the "constraint" is the type itself.
+      expression.__constraintTypeTexts = unionPartsOfType(context, type).map((part) =>
+        renderedTypeText(context, part),
+      );
+    }
+    const following = quasis[index + 1];
+    if (Array.isArray(expression.range) && Array.isArray(following?.range)) {
+      const before = source.slice(
+        quasis[index]?.range?.[1] ?? expression.range[0],
+        expression.range[0],
+      );
+      const after = source.slice(expression.range[1], following.range[0]);
+      if (
+        before.includes("//") ||
+        before.includes("/*") ||
+        after.includes("//") ||
+        after.includes("/*")
+      ) {
+        commentIndices.push(index);
+      }
+    }
+  });
+  if (commentIndices.length > 0) {
+    sink.fields.__spanCommentIndices = commentIndices;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// no-unnecessary-type-conversion
+// ---------------------------------------------------------------------------
+
+const GLOBAL_CONVERSION_BUILTINS = new Set(["String", "Number", "Boolean", "BigInt"]);
+
+const unnecessaryTypeConversionFacts: FactProvider = (context, node, sink) => {
+  const parent = node.parent;
+  if (
+    node.type === "UnaryExpression" &&
+    parent?.type === "UnaryExpression" &&
+    parent.operator === node.operator &&
+    (node.operator === "!" || node.operator === "~")
+  ) {
+    sink.fields.__doubleNegation = true;
+    if (Array.isArray(parent.range)) {
+      sink.fields.__outerRange = [parent.range[0], parent.range[1]];
+    }
+  }
+  for (let current = parent; current; current = current.parent) {
+    if (current.type === "ExpressionStatement") {
+      if (Array.isArray(current.range)) {
+        sink.fields.__statementRange = [current.range[0], current.range[1]];
+      }
+      break;
+    }
+    if (typeof current.type !== "string" || current.type.endsWith("Statement")) {
+      break;
+    }
+  }
+  if (Array.isArray(node.range)) {
+    const source = context.sourceCode.text;
+    const before = source.slice(0, node.range[0]).trimEnd();
+    if (before.endsWith("(") && source.slice(node.range[1]).trimStart().startsWith(")")) {
+      sink.fields.__parenthesized = true;
+    }
+  }
+  if (node.type === "CallExpression") {
+    const callee = stripChainExpression(node.callee);
+    if (callee?.type === "Identifier" && GLOBAL_CONVERSION_BUILTINS.has(callee.name)) {
+      const symbol = checkerFor(context).getSymbolAtLocation(callee);
+      const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+      if (declaration) {
+        const path = declaration.split(".").slice(2).join(".");
+        const filename = String(context.filename ?? "");
+        sink.fields.__calleeIsGlobalBuiltin = !(
+          path && (path === filename || filename.endsWith(path))
+        );
+      }
+    }
+  }
+  if (node.type === "CallExpression" || node.type === "BinaryExpression") {
+    const callee = node.type === "CallExpression" ? stripChainExpression(node.callee) : undefined;
+    const object = callee?.type === "MemberExpression" ? callee.object : undefined;
+    if (object) {
+      const type = typeAtNode(context, object);
+      if (
+        type &&
+        unionPartsOfType(context, type).some(
+          (part) => (part.flags & (TYPE_FLAG_ENUM | TYPE_FLAG_ENUM_LITERAL)) !== 0,
+        )
+      ) {
+        object.__objectTypeIsEnumLike = true;
+      }
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// no-unnecessary-type-parameters
+// ---------------------------------------------------------------------------
+
+const unnecessaryTypeParametersFacts: FactProvider = (context, node, sink) => {
+  void sink;
+  if (node.type !== "TSTypeParameterDeclaration" || !Array.isArray(node.params)) {
+    return;
+  }
+  const owner = node.parent;
+  if (!owner) {
+    return;
+  }
+  for (const param of node.params) {
+    if (!param || typeof param !== "object") {
+      continue;
+    }
+    const name = param.name?.name ?? param.name;
+    if (typeof name !== "string") {
+      continue;
+    }
+    param.__typeParameterName = name;
+    param.__ownerKind = owner.type;
+    if (param.constraint) {
+      const constraintText = context.sourceCode.getText(param.constraint);
+      if (constraintText) {
+        param.__constraintText = constraintText;
+        param.__constraintIsComplex = !(
+          param.constraint.type === "TSTypeReference" ||
+          param.constraint.type.endsWith("Keyword")
+        );
+      }
+    }
+    if (node.params.length === 1 && Array.isArray(node.range)) {
+      param.__listRemovalRange = [node.range[0], node.range[1]];
+    }
+    // Count identifier references to the parameter across the owner,
+    // excluding the declaration itself (the +1 below accounts for it).
+    let references = 0;
+    forEachNodeOfType(
+      owner,
+      "Identifier",
+      (identifier: any) => {
+        if (identifier.name !== name || !Array.isArray(identifier.range)) {
+          return;
+        }
+        if (
+          Array.isArray(param.range) &&
+          identifier.range[0] >= param.range[0] &&
+          identifier.range[1] <= param.range[1]
+        ) {
+          return;
+        }
+        references += 1;
+      },
+      10,
+    );
+    param.__typeParameterUsageCount = references + 1;
+    if (references >= 2) {
+      param.__repeatedInAst = true;
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// no-useless-default-assignment
+// ---------------------------------------------------------------------------
+
+const uselessDefaultAssignmentFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "AssignmentPattern" || !node.left) {
+    return;
+  }
+  const left = node.left;
+  if (left.optional === true || node.parent?.optional === true) {
+    sink.fields.__targetOptional = true;
+  }
+  if (left.typeAnnotation) {
+    const annotation = left.typeAnnotation.typeAnnotation ?? left.typeAnnotation;
+    const text = context.sourceCode.getText(annotation);
+    if (
+      text
+        .split("|")
+        .map((part: string) => part.trim())
+        .includes("undefined")
+    ) {
+      sink.fields.__annotationCanBeUndefined = true;
+    }
+    if (Array.isArray(left.typeAnnotation.range)) {
+      sink.fields.__nameEnd = left.typeAnnotation.range[0];
+    }
+  } else if (left.type === "Identifier" && typeof left.name === "string" && Array.isArray(left.range)) {
+    sink.fields.__nameEnd = left.range[0] + left.name.length;
+  }
+  const targetType = typeAtNode(context, left);
+  if (targetType) {
+    sink.fields.__targetTypeTexts = unionPartsOfType(context, targetType).map((part) =>
+      renderedTypeText(context, part),
+    );
+  }
+};
+
+// ---------------------------------------------------------------------------
+// prefer-readonly
+// ---------------------------------------------------------------------------
+
+const reassignedMembersByClass = new WeakMap<object, Set<string>>();
+
+function reassignedPrivateMembers(classNode: any): Set<string> {
+  const cached = reassignedMembersByClass.get(classNode);
+  if (cached) {
+    return cached;
+  }
+  const reassigned = new Set<string>();
+  const record = (memberExpression: any) => {
+    if (memberExpression?.type !== "MemberExpression") {
+      return;
+    }
+    const object = memberExpression.object;
+    if (object?.type !== "ThisExpression") {
+      return;
+    }
+    const property = memberExpression.property;
+    const name =
+      property?.type === "Identifier"
+        ? property.name
+        : property?.type === "PrivateIdentifier"
+          ? `#${property.name}`
+          : undefined;
+    if (name) {
+      reassigned.add(name);
+    }
+  };
+  const visit = (current: any, insideConstructor: boolean, depth: number) => {
+    if (!current || typeof current !== "object" || depth < 0) {
+      return;
+    }
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        visit(item, insideConstructor, depth);
+      }
+      return;
+    }
+    const kind = current.type;
+    let nextInsideConstructor = insideConstructor;
+    if (kind === "MethodDefinition") {
+      nextInsideConstructor = current.kind === "constructor";
+    } else if (typeof kind === "string" && kind.includes("Function") && !insideConstructor) {
+      nextInsideConstructor = false;
+    }
+    if (kind === "AssignmentExpression" && !nextInsideConstructor) {
+      record(stripChainExpression(current.left));
+    }
+    if (kind === "UpdateExpression" && !nextInsideConstructor) {
+      record(stripChainExpression(current.argument));
+    }
+    if (
+      kind === "AssignmentExpression" &&
+      nextInsideConstructor &&
+      typeof current.__insideNestedFunction === "boolean"
+    ) {
+      record(stripChainExpression(current.left));
+    }
+    for (const [key, value] of Object.entries(current)) {
+      if (key === "parent" || value === null || typeof value !== "object") {
+        continue;
+      }
+      visit(value, nextInsideConstructor, depth - 1);
+    }
+  };
+  visit(classNode.body, false, 12);
+  reassignedMembersByClass.set(classNode, reassigned);
+  return reassigned;
+}
+
+const preferReadonlyFacts: FactProvider = (_context, node, sink) => {
+  const classNode = findEnclosingClass(node) ?? node.parent?.parent;
+  if (!classNode || (classNode.type !== "ClassDeclaration" && classNode.type !== "ClassExpression")) {
+    return;
+  }
+  const key = node.key ?? node.parameter?.left ?? node.parameter;
+  const name =
+    key?.type === "Identifier"
+      ? key.name
+      : key?.type === "PrivateIdentifier"
+        ? `#${key.name}`
+        : undefined;
+  if (!name) {
+    return;
+  }
+  if (reassignedPrivateMembers(classNode).has(name)) {
+    sink.fields.__memberIsReassigned = true;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// prefer-readonly-parameter-types
+// ---------------------------------------------------------------------------
+
+function typeTextLooksReadonly(text: string): boolean {
+  const current = text.trim();
+  if (current.length === 0) {
+    return false;
+  }
+  if (
+    current.startsWith("readonly ") ||
+    current.startsWith("Readonly<") ||
+    current.startsWith("ReadonlyArray<") ||
+    current.startsWith("ReadonlyMap<") ||
+    current.startsWith("ReadonlySet<") ||
+    current.includes("=>")
+  ) {
+    return true;
+  }
+  if (current.startsWith("{")) {
+    // Every property in a rendered object type must be readonly.
+    return !/\{\s*[a-zA-Z_$#[]/.test(current) || !/[;{,]\s*[a-zA-Z_$[]/.test(current);
+  }
+  const primitive = [
+    "string",
+    "number",
+    "boolean",
+    "bigint",
+    "symbol",
+    "null",
+    "undefined",
+    "void",
+    "never",
+  ].includes(current);
+  return (
+    primitive ||
+    /^['"`]/.test(current) ||
+    /^-?\d/.test(current) ||
+    current === "true" ||
+    current === "false"
+  );
+}
+
+const preferReadonlyParameterTypesFacts: FactProvider = (context, node, sink) => {
+  void sink;
+  const params: any[] = Array.isArray(node.params)
+    ? node.params
+    : Array.isArray(node.value?.params)
+      ? node.value.params
+      : [];
+  for (const rawParam of params) {
+    if (!rawParam || typeof rawParam !== "object") {
+      continue;
+    }
+    let param = rawParam;
+    if (rawParam.type === "TSParameterProperty") {
+      rawParam.__isParameterProperty = true;
+      param = rawParam.parameter ?? rawParam;
+    }
+    const type = typeAtNode(context, param);
+    if (!type) {
+      continue;
+    }
+    const parts = unionPartsOfType(context, type);
+    const texts = parts.map((part) => renderedTypeText(context, part));
+    if (texts.length > 0 && texts.every(typeTextLooksReadonly)) {
+      rawParam.__typeIsReadonly = true;
+      param.__typeIsReadonly = true;
+    }
+    if (
+      texts.some((text) => text.includes("&")) &&
+      parts.some((part) => (part.flags & (TYPE_FLAG_STRING_LIKE | TYPE_FLAG_NUMBER_LIKE)) !== 0)
+    ) {
+      rawParam.__typeIsBrandedLiteralLike = true;
+      param.__typeIsBrandedLiteralLike = true;
+    }
+  }
+};
+
 // ---------------------------------------------------------------------------
 // compiler-option facts
 // ---------------------------------------------------------------------------
@@ -1978,17 +2681,28 @@ export function attachConfigFacts(
 
 export const ruleFactProviders: Record<string, readonly FactProvider[]> = {
   "consistent-return": [consistentReturnFacts],
+  "consistent-type-exports": [consistentTypeExportsFacts],
+  "dot-notation": [dotNotationFacts],
+  "no-confusing-void-expression": [confusingVoidExpressionFacts],
+  "no-deprecated": [deprecatedDeclarationNameFacts],
   "no-duplicate-type-constituents": [duplicateTypeConstituentsFacts],
   "no-misused-promises": [misusedPromisesFacts],
   "no-misused-spread": [misusedSpreadFacts],
   "no-redundant-type-constituents": [redundantTypeConstituentsFacts],
   "no-unnecessary-boolean-literal-compare": [booleanLiteralCompareFacts],
+  "no-unnecessary-qualifier": [unnecessaryQualifierFacts],
+  "no-unnecessary-template-expression": [unnecessaryTemplateExpressionFacts],
+  "no-unnecessary-type-conversion": [unnecessaryTypeConversionFacts],
+  "no-unnecessary-type-parameters": [unnecessaryTypeParametersFacts],
   "no-unnecessary-type-assertion": [unnecessaryTypeAssertionFacts],
   "non-nullable-type-assertion-style": [nonNullableAssertionStyleFacts],
   "no-unsafe-argument": [unsafeArgumentFacts],
   "no-unsafe-enum-comparison": [unsafeEnumComparisonFacts],
+  "no-useless-default-assignment": [uselessDefaultAssignmentFacts],
   "prefer-nullish-coalescing": [preferNullishCoalescingFacts],
   "prefer-optional-chain": [preferOptionalChainFacts],
+  "prefer-readonly": [preferReadonlyFacts],
+  "prefer-readonly-parameter-types": [preferReadonlyParameterTypesFacts],
   "prefer-return-this-type": [preferReturnThisTypeFacts],
   "promise-function-async": [promiseFunctionAsyncFacts],
   "related-getter-setter-pairs": [relatedGetterSetterFacts],
