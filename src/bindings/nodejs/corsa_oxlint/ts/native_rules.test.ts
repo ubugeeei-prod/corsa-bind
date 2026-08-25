@@ -1047,6 +1047,92 @@ describe("corsa oxlint native rules", () => {
       },
     );
   });
+
+  integrationCase("runs no-deprecated through RuleTester", () => {
+    createTester().run("no-deprecated", corsaOxlintRules["no-deprecated"] as never, {
+      valid: [
+        { code: "const fresh = () => 1; fresh();" },
+      ],
+      invalid: [
+        {
+          code: "/** @deprecated Use replacement() instead. */\nconst legacy = () => 1;\nlegacy();",
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs no-unnecessary-condition through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-condition",
+      corsaOxlintRules["no-unnecessary-condition"] as never,
+      {
+        valid: [
+          { code: "declare const flag: boolean; if (flag) { console.log(1); }" },
+        ],
+        invalid: [
+          { code: "declare const label: 'ready'; if (label) { console.log(1); }", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-unnecessary-qualifier through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-qualifier",
+      corsaOxlintRules["no-unnecessary-qualifier"] as never,
+      {
+        valid: [
+          {
+            code: "namespace Outer { export const value = 1; } const read = Outer.value;",
+          },
+        ],
+        invalid: [
+          {
+            code: "namespace Wrapper { export type Inner = number; export const usage: Wrapper.Inner = 1; }",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-unnecessary-type-arguments through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-type-arguments",
+      corsaOxlintRules["no-unnecessary-type-arguments"] as never,
+      {
+        valid: [
+          { code: "function keep<Value = string>(value: Value): Value { return value; } keep<number>(1);" },
+        ],
+        invalid: [
+          {
+            code: "function drop<Value = string>(value: Value): Value { return value; } drop<string>('x');",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs prefer-readonly-parameter-types through RuleTester", () => {
+    createTester().run(
+      "prefer-readonly-parameter-types",
+      corsaOxlintRules["prefer-readonly-parameter-types"] as never,
+      {
+        valid: [
+          { code: "function fine(values: readonly number[]) { return values.length; }" },
+          {
+            code: "function allowed(values: number[]) { return values.length; }",
+            options: [{ allow: ["Array"] }],
+          },
+        ],
+        invalid: [
+          { code: "function nope(values: number[]) { return values.length; }", errors: 1 },
+        ],
+      },
+    );
+  });
 });
 
 function createTester(): RuleTester {

@@ -199,7 +199,15 @@ fn check_node(
         return;
     }
 
-    let (is_truthy, is_falsy) = check_type_condition(type_texts);
+    // The host may render the same type more than once (the narrowed literal
+    // plus its widened base). Each text describes the SAME type, so the first
+    // rendering that yields a definite verdict wins; merging them as if they
+    // were union parts would dissolve narrowed literals back into their base.
+    let (is_truthy, is_falsy) = type_texts
+        .iter()
+        .map(|text| check_type_condition(std::slice::from_ref(text)))
+        .find(|(truthy, falsy)| *truthy || *falsy)
+        .unwrap_or((false, false));
 
     if is_never_type(type_texts) {
         ctx.report("never", expression.range);

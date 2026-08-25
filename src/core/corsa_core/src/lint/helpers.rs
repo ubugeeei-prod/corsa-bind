@@ -301,7 +301,15 @@ pub(super) fn type_texts_match_names<T: AsRef<str>>(type_texts: &[T], names: &[S
             .iter()
             .any(|part| {
                 let part = part.trim();
-                let name = &part[..part.find('<').unwrap_or(part.len())];
+                let name = if part.ends_with("[]") {
+                    if part.starts_with("readonly ") {
+                        "ReadonlyArray"
+                    } else {
+                        "Array"
+                    }
+                } else {
+                    &part[..part.find('<').unwrap_or(part.len())]
+                };
                 names.iter().any(|allowed| allowed == name || allowed == part)
             })
     })
