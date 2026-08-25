@@ -10,7 +10,7 @@ in
       pkgs = import nixpkgs { inherit system; };
       nodejsForVp = pkgs.nodejs_24;
       pnpmForVp = pkgs.pnpm_10;
-      vitePlusVersion = "0.1.14";
+      vitePlusVersion = "0.2.9";
       vitePlusRuntimeSrc = ./vite-plus;
       moonbit =
         pkgs.stdenvNoCC.mkDerivation {
@@ -18,7 +18,7 @@ in
           version = "latest";
           src = pkgs.fetchzip {
             url = "https://cli.moonbitlang.com/binaries/latest/moonbit-darwin-aarch64.tar.gz";
-            sha256 = "sha256-iYuvOpa4DK08AZQ5H3FM10W+SQWD6tb9S8UbQqd0ciY=";
+            sha256 = "sha256-VFVhf0JdDYIUz93DNI0KDq9yI5RETmzj5AQzge4P1T4=";
             stripRoot = false;
           };
           dontBuild = true;
@@ -38,7 +38,7 @@ in
         version = "latest";
         src = pkgs.fetchurl {
           url = "https://clireleases.blacksmith.sh/cli/latest/darwin/arm64/blacksmith";
-          hash = "sha256-ozZ6tBUbEqTqdxUVwxSg1ItiKUwLZxMl1Ccx8r6XP2Y=";
+          hash = "sha256-YHsPRBPkJldFJ0RsdxjqMlh9V7JKPqB0nhq0E4pCZYQ=";
         };
         dontUnpack = true;
         installPhase = ''
@@ -53,7 +53,7 @@ in
         src = vitePlusRuntimeSrc;
         pnpm = pnpmForVp;
         fetcherVersion = 3;
-        hash = "sha256-RW9sV9IEKHPojm9aX8ULJjlm7BuWrcHCb63rJhSc8hM=";
+        hash = "sha256-HPxZdQo1tRqe5sL6cBy6wGZiQXsIedf27HE5eU4vw9o=";
       };
       vitePlusRuntime = pkgs.stdenvNoCC.mkDerivation {
         pname = "vite-plus-runtime";
