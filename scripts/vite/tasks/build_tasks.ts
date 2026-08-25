@@ -39,7 +39,7 @@ export const buildTasks = {
   },
   build_node_release: {
     cache: false,
-    command: "napi build --platform --release",
+    command: "napi build --platform --profile release-napi",
     cwd: "src/bindings/nodejs/corsa_node",
     dependsOn: ["build_rust"],
   },

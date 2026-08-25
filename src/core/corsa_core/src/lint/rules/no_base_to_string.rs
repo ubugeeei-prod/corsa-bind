@@ -283,10 +283,7 @@ mod tests {
         serde_json::from_value(value).expect("valid LintNode")
     }
 
-    fn template_with_expression(
-        type_text: &str,
-        options: Option<serde_json::Value>,
-    ) -> LintNode {
+    fn template_with_expression(type_text: &str, options: Option<serde_json::Value>) -> LintNode {
         template_with_typed_expression(type_text, json!([]), options)
     }
 
@@ -322,8 +319,10 @@ mod tests {
 
     #[test]
     fn check_unknown_reports_unknown_values() {
-        let diagnostics =
-            run(&template_with_expression("unknown", Some(json!({ "checkUnknown": true }))));
+        let diagnostics = run(&template_with_expression(
+            "unknown",
+            Some(json!({ "checkUnknown": true })),
+        ));
         assert_eq!(diagnostics, vec!["unexpected"]);
     }
 
@@ -331,7 +330,11 @@ mod tests {
     fn ignored_type_names_suppress_reports() {
         let members = json!(["rows", "cols"]);
         assert_eq!(
-            run(&template_with_typed_expression("Matrix", members.clone(), None)),
+            run(&template_with_typed_expression(
+                "Matrix",
+                members.clone(),
+                None
+            )),
             vec!["unexpected"]
         );
         assert!(

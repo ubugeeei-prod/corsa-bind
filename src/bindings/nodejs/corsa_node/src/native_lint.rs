@@ -9,7 +9,8 @@ use crate::util::{from_value, into_napi_error, to_value};
 #[napi]
 pub fn run_native_lint_rule(rule_name: String, node: Value) -> Result<Value> {
     let node = from_value::<corsa::lint::LintNode>(node)?;
-    let Some(diagnostics) = corsa::lint::run_default_type_aware_rule_owned(rule_name.as_str(), node)
+    let Some(diagnostics) =
+        corsa::lint::run_default_type_aware_rule_owned(rule_name.as_str(), node)
     else {
         return Err(into_napi_error(format!(
             "unknown native lint rule: {rule_name}"

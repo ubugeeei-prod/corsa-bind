@@ -262,7 +262,11 @@ mod tests {
 
     #[test]
     fn reports_object_for_plain_value() {
-        let diagnostics = run(&throw_statement(typed_identifier("value", "string"), None, None));
+        let diagnostics = run(&throw_statement(
+            typed_identifier("value", "string"),
+            None,
+            None,
+        ));
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].0, "object");
         assert_eq!(diagnostics[0].1, TextRange::new(6, 11));
@@ -282,13 +286,34 @@ mod tests {
 
     #[test]
     fn allows_error_like_values() {
-        assert!(run(&throw_statement(typed_identifier("err", "TypeError"), None, None)).is_empty());
+        assert!(
+            run(&throw_statement(
+                typed_identifier("err", "TypeError"),
+                None,
+                None
+            ))
+            .is_empty()
+        );
     }
 
     #[test]
     fn any_and_unknown_are_allowed_by_default() {
-        assert!(run(&throw_statement(typed_identifier("value", "any"), None, None)).is_empty());
-        assert!(run(&throw_statement(typed_identifier("value", "unknown"), None, None)).is_empty());
+        assert!(
+            run(&throw_statement(
+                typed_identifier("value", "any"),
+                None,
+                None
+            ))
+            .is_empty()
+        );
+        assert!(
+            run(&throw_statement(
+                typed_identifier("value", "unknown"),
+                None,
+                None
+            ))
+            .is_empty()
+        );
     }
 
     #[test]

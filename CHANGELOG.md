@@ -7,8 +7,33 @@ published versions.
 
 ## Unreleased
 
+### Fixed
+
+- the JSON driver mirrored numeric handles into `objectId` for only 26 of the 33 upstream methods that read it, so `getReturnTypeOfSignature`, `getApparentType`, `getApparentPropertiesOfType`, `getNonNullableType`, `getReducedType`, `getConstraintOfTypeParameter`, and `getDefaultFromTypeParameter` silently returned `null` on stable TypeScript 7 runtimes. `isTypeAssignableTo`'s `source`/`target` handles are now numeric-encoded as well.
+- `checker.getTypeAtLocation(callExpression)` resolved the touching token (the callee leaf) instead of the call result; call expressions now resolve through the callee's call signatures, `await` expressions unwrap the promise reference, and compound (`typeof A | typeof B`) constructor types keep their compound instance types through `new` expressions.
+- 33 of the 59 native rules were authored against a checker-fact vocabulary the JS bridge never produced, leaving whole rule paths silent in production (only synthetic-fact unit tests exercised them). Every rule's documented facts are now wired through per-rule fact providers, and all 59 rules carry `RuleTester` valid/invalid suites that run against the real pinned binary.
+- the orchestrator's `fleet()` had a check-then-insert race that could orphan freshly spawned worker processes, `prewarm()` could overshoot the replica target under concurrency, and the experimental Raft layer's configured `snapshot_threshold` never triggered compaction because `maybe_compact_log` was implemented but never called.
+- `no-deprecated` no longer re-derives JSDoc deprecation by reading source files off disk and scanning for `@deprecated` markers; the bridge asks the checker's `getJsDocTags` and forwards the deprecation (and its reason) as facts.
+- `no-base-to-string` no longer false-positives on functions and arrays of safe element types; array/tuple element types are inspected the way upstream's join-certainty walk does, and nominal types are judged by their checker-provided member lists.
+- the Nix dev shell builds again: the `blacksmith` and `moonbit` latest-channel hashes had drifted, and `nix/vite-plus` pinned a lockfile for vite-plus 0.1.21 against a manifest asking for 0.2.9.
+
+### Added
+
+- full typescript-eslint option parity for the native rule set, including `ignoreVoid`/`ignoreIIFE`/`checkThenables`/`allowForKnownSafeCalls`/`allowForKnownSafePromises` (no-floating-promises), `allow`/`allowRethrowing`/`allowThrowingAny`/`allowThrowingUnknown` (only-throw-error), `checkUnknown`/`ignoredTypeNames` (no-base-to-string), `allow` lists for restrict-template-expressions, prefer-promise-reject-errors, and prefer-readonly-parameter-types (plus `treatMethodsAsReadonly`), `allowSingleElementEquality` with the `s[0] === "a"` detection family (prefer-string-starts-ends-with), and `defaultCaseCommentPattern` (switch-exhaustiveness-check). [`docs/typescript_eslint_parity.md`](./docs/typescript_eslint_parity.md) tracks the per-rule status.
+- `no-floating-promises` and `only-throw-error` moved to the upstream message catalogs (`floating*`, `object`/`undef`); their previous local `unexpected` IDs no longer exist.
+- the corsa-oxlint checker shim exposes `getJsDocTags` and `isTypeAssignableTo`, backed by the corresponding upstream endpoints with per-snapshot caching.
+- `LintRuleRegistry::run_rule_owned`, `run_default_type_aware_rule_owned`, and the shared `default_type_aware_registry()` avoid rebuilding the 59-rule registry and deep-cloning the node on every bridge call; JSON-RPC envelopes classify via the new consuming `RawMessage::into_kind`.
+
+### Changed
+
+- the napi addon builds with the new `release-napi` cargo profile (`panic = "unwind"`): with the previous `panic = "abort"`, any Rust panic inside the addon aborted the host Node.js process instead of surfacing as a JS exception.
+- native rule metas declare a permissive options schema so Oxlint accepts configured rule options end to end.
+- the upstream pin moved to microsoft/TypeScript `0c8f63f745ec` (2026-08-25, past Content mappers round 2); the full real-Corsa validation matrix is green with no binding adaptations.
+- per-query overheads trimmed across the stack: optional responses decode in one pass (no intermediate `serde_json::Value`), the per-type-query `statSync` is throttled, cross-file source reads are memoized, and signature parameter symbols resolve through one batched `getTypesOfSymbols` call.
+
 ### Removed
 
+- `corsa_core::fast` no longer re-exports `Bump`/`BumpString`, and the workspace no longer depends on `bumpalo`; `corsa_lsp` drops its unused `log` dependency; `corsa_orchestrator` only pulls `lsp-types` when the `experimental-distributed` feature is enabled.
 - default runtime discovery no longer looks for `@typescript/native-preview`. TypeScript 7 ships the same native binary through the same mechanism — `typescript` declares `@typescript/typescript-<platform>-<arch>` as an optional dependency and reads `lib/tsc` out of it, exactly as the preview channel did with `lib/tsgo` — so the preview lookup only ever won on machines with no TypeScript 7 installed. Resolution is now `typescript` 7 or newer, then `.cache/corsa`. Consumers still on the preview package can point at it with `CORSA_EXECUTABLE`, `parserOptions.corsa.executable`, or `resolveFrom`. This supersedes the `@typescript/native-preview` discovery entries in 1.0.0-beta.2 and 1.6.0.
 
 ## 1.9.0 - 2026-08-18

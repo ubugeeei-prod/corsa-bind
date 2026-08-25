@@ -1412,11 +1412,7 @@ fn shared_default_registry_is_reused_across_lookups() {
     let second = super::default_type_aware_registry() as *const LintRuleRegistry;
     assert_eq!(first, second);
     assert!(
-        super::run_default_type_aware_rule_owned(
-            "no-array-delete",
-            array_delete_node()
-        )
-        .is_some()
+        super::run_default_type_aware_rule_owned("no-array-delete", array_delete_node()).is_some()
     );
     assert!(super::run_default_type_aware_rule_owned("not-a-rule", array_delete_node()).is_none());
 }

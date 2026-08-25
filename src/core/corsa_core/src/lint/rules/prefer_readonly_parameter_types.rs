@@ -1,5 +1,7 @@
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
-use crate::lint::helpers::{child_list, rule_option_bool, rule_allow_list_names, type_texts_match_names};
+use crate::lint::helpers::{
+    child_list, rule_allow_list_names, rule_option_bool, type_texts_match_names,
+};
 
 /// Type-aware rule that requires function parameters to use readonly types.
 ///

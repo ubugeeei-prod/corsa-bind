@@ -1,5 +1,7 @@
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
-use crate::lint::helpers::{child_list, rule_allow_list_names, rule_option_bool, type_texts_match_names};
+use crate::lint::helpers::{
+    child_list, rule_allow_list_names, rule_option_bool, type_texts_match_names,
+};
 use crate::utils::{
     TypeTextKind, classify_type_text, is_array_like_type_texts, split_top_level_type_text,
 };
@@ -77,7 +79,9 @@ impl RestrictTemplateExpressionsOptions {
                     configured
                 } else {
                     // Upstream default allow list.
-                    ["Error", "URL", "URLSearchParams"].map(String::from).to_vec()
+                    ["Error", "URL", "URLSearchParams"]
+                        .map(String::from)
+                        .to_vec()
                 }
             },
             allow_any: rule_option_bool(node, "allowAny").unwrap_or(true),

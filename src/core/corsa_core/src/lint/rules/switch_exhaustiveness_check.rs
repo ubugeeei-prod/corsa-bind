@@ -65,8 +65,7 @@ impl RustLintRule for SwitchExhaustivenessCheckRule {
         // is `true`, while the other two booleans default to `false`.
         let allow_default_case_for_exhaustive_switch =
             rule_option_bool(node, "allowDefaultCaseForExhaustiveSwitch").unwrap_or(true);
-        let consider_default_exhaustive_for_unions =
-            rule_option_bool(node, "considerDefaultExhaustiveForUnions").unwrap_or(false)
+        let consider_default_exhaustive_for_unions = rule_option_bool(node, "considerDefaultExhaustiveForUnions").unwrap_or(false)
                 // `defaultCaseCommentPattern`: a default case whose leading
                 // comment matches the configured pattern also satisfies
                 // exhaustiveness for unions. The host evaluates the pattern
@@ -156,7 +155,6 @@ fn switch_metadata(node: &LintNode) -> SwitchMetadata {
         missing_case_tests: string_array_field(node, "__missingBranchCaseTests"),
     }
 }
-
 
 /// Whether the `defaultCaseCommentPattern` option is configured.
 fn has_default_case_comment_pattern(node: &LintNode) -> bool {

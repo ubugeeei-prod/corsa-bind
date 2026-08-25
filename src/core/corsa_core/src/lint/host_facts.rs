@@ -291,4 +291,3 @@ fn copy_call_fact(
         insert_if_absent(&mut node.fields, target_key, value.clone());
     }
 }
-

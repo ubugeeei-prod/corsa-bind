@@ -174,8 +174,7 @@ impl ApiOrchestrator {
             let client = ApiClient::spawn(profile.spawn.clone()).await?;
             let accepted = {
                 let mut clients = fleet.clients.write();
-                if clients.len() < replicas && clients.len() < self.config.max_workers_per_profile
-                {
+                if clients.len() < replicas && clients.len() < self.config.max_workers_per_profile {
                     clients.push(client.clone());
                     true
                 } else {

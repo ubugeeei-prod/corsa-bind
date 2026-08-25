@@ -1,11 +1,9 @@
-use serde_json::Value;
-
 use super::super::{
     LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule, TextRange,
 };
 use crate::lint::helpers::{
-    child_list, is_identifier_named, member_object, member_property_name, rule_option_bool,
-    strip_chain_expression,
+    child_list, is_identifier_named, member_object, member_property_name, rule_allow_list_names,
+    rule_option_bool, strip_chain_expression,
 };
 use crate::utils::split_top_level_type_text;
 
@@ -23,33 +21,27 @@ pub struct NoFloatingPromisesRule;
 const MESSAGES: &[RuleMessage] = &[
     RuleMessage {
         id: "floating",
-        description:
-            "Promises must be awaited, end with a call to .catch, or end with a call to .then with a rejection handler.",
+        description: "Promises must be awaited, end with a call to .catch, or end with a call to .then with a rejection handler.",
     },
     RuleMessage {
         id: "floatingVoid",
-        description:
-            "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator.",
+        description: "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator.",
     },
     RuleMessage {
         id: "floatingUselessRejectionHandler",
-        description:
-            "Promises must be awaited, end with a call to .catch, or end with a call to .then with a rejection handler. A rejection handler that is not a function will be ignored.",
+        description: "Promises must be awaited, end with a call to .catch, or end with a call to .then with a rejection handler. A rejection handler that is not a function will be ignored.",
     },
     RuleMessage {
         id: "floatingUselessRejectionHandlerVoid",
-        description:
-            "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator. A rejection handler that is not a function will be ignored.",
+        description: "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator. A rejection handler that is not a function will be ignored.",
     },
     RuleMessage {
         id: "floatingPromiseArray",
-        description:
-            "An array of Promises may be unintentional. Consider handling the promises' fulfillment or rejection with Promise.all or similar.",
+        description: "An array of Promises may be unintentional. Consider handling the promises' fulfillment or rejection with Promise.all or similar.",
     },
     RuleMessage {
         id: "floatingPromiseArrayVoid",
-        description:
-            "An array of Promises may be unintentional. Consider handling the promises' fulfillment or rejection with Promise.all or similar, or explicitly marking the expression as ignored with the `void` operator.",
+        description: "An array of Promises may be unintentional. Consider handling the promises' fulfillment or rejection with Promise.all or similar, or explicitly marking the expression as ignored with the `void` operator.",
     },
     RuleMessage {
         id: "floatingFixAwait",
@@ -77,42 +69,10 @@ impl Options {
             ignore_void: rule_option_bool(node, "ignoreVoid").unwrap_or(true),
             ignore_iife: rule_option_bool(node, "ignoreIIFE").unwrap_or(false),
             check_thenables: rule_option_bool(node, "checkThenables").unwrap_or(false),
-            allow_for_known_safe_calls: specifier_names(node, "allowForKnownSafeCalls"),
-            allow_for_known_safe_promises: specifier_names(node, "allowForKnownSafePromises"),
+            allow_for_known_safe_calls: rule_allow_list_names(node, "allowForKnownSafeCalls"),
+            allow_for_known_safe_promises: rule_allow_list_names(node, "allowForKnownSafePromises"),
         }
     }
-}
-
-/// Extracts the names from a `TypeOrValueSpecifier` list option.
-///
-/// String entries are used directly; object entries contribute their `name`
-/// (string or string array).
-fn specifier_names(node: &LintNode, key: &str) -> Vec<String> {
-    let Some(entries) = node
-        .fields
-        .get("__ruleOptions")
-        .and_then(Value::as_array)
-        .and_then(|options| options.first())
-        .and_then(|options| options.get(key))
-        .and_then(Value::as_array)
-    else {
-        return Vec::new();
-    };
-    let mut names = Vec::new();
-    for entry in entries {
-        match entry {
-            Value::String(name) => names.push(name.clone()),
-            Value::Object(spec) => match spec.get("name") {
-                Some(Value::String(name)) => names.push(name.clone()),
-                Some(Value::Array(name_list)) => {
-                    names.extend(name_list.iter().filter_map(Value::as_str).map(String::from));
-                }
-                _ => {}
-            },
-            _ => {}
-        }
-    }
-    names
 }
 
 struct UnhandledPromise {
@@ -404,8 +364,12 @@ fn is_promise_array(node: &LintNode, options: &Options) -> bool {
         any_union_part(text, |part| {
             promise_array_element(part)
                 .is_some_and(|element| any_union_part(element, is_promise_atom))
-                && !name_of_type_part(part)
-                    .is_some_and(|name| options.allow_for_known_safe_promises.iter().any(|allowed| allowed == name))
+                && !name_of_type_part(part).is_some_and(|name| {
+                    options
+                        .allow_for_known_safe_promises
+                        .iter()
+                        .any(|allowed| allowed == name)
+                })
         })
     })
 }
@@ -418,7 +382,11 @@ fn promise_array_element(part: &str) -> Option<&str> {
     }
     for wrapper in ["Array<", "ReadonlyArray<", "readonly "] {
         if let Some(rest) = part.strip_prefix(wrapper) {
-            return Some(rest.strip_suffix('>').unwrap_or(rest).trim_end_matches("[]"));
+            return Some(
+                rest.strip_suffix('>')
+                    .unwrap_or(rest)
+                    .trim_end_matches("[]"),
+            );
         }
     }
     if part.starts_with('[') && part.ends_with(']') {
@@ -471,11 +439,9 @@ fn is_known_safe_call(expression: &LintNode, options: &Options) -> bool {
     let Some(callee) = expression.child("callee").map(strip_chain_expression) else {
         return false;
     };
-    let callee_name = crate::lint::helpers::identifier_name(callee)
-        .or_else(|| member_property_name(callee));
-    if callee_name
-        .is_some_and(|name| options.allow_for_known_safe_calls.contains(&name))
-    {
+    let callee_name =
+        crate::lint::helpers::identifier_name(callee).or_else(|| member_property_name(callee));
+    if callee_name.is_some_and(|name| options.allow_for_known_safe_calls.contains(&name)) {
         return true;
     }
     type_matches_names(callee, &options.allow_for_known_safe_calls)
@@ -582,12 +548,18 @@ mod tests {
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].0, "floatingVoid");
         assert_eq!(diagnostics[0].1, TextRange::new(0, 9));
-        assert_eq!(diagnostics[0].2, vec!["floatingFixVoid", "floatingFixAwait"]);
+        assert_eq!(
+            diagnostics[0].2,
+            vec!["floatingFixVoid", "floatingFixAwait"]
+        );
     }
 
     #[test]
     fn ignore_void_false_reports_plain_floating_with_await_fix_only() {
-        let diagnostics = run(&statement(promise_identifier(), Some(json!({ "ignoreVoid": false }))));
+        let diagnostics = run(&statement(
+            promise_identifier(),
+            Some(json!({ "ignoreVoid": false })),
+        ));
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].0, "floating");
         assert_eq!(diagnostics[0].2, vec!["floatingFixAwait"]);
@@ -602,7 +574,10 @@ mod tests {
             "children": { "argument": promise_identifier() }
         });
         assert!(run(&statement(void_wrapped.clone(), None)).is_empty());
-        let diagnostics = run(&statement(void_wrapped, Some(json!({ "ignoreVoid": false }))));
+        let diagnostics = run(&statement(
+            void_wrapped,
+            Some(json!({ "ignoreVoid": false })),
+        ));
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].0, "floating");
     }
@@ -635,7 +610,10 @@ mod tests {
             "fields": { "name": "thenable" }
         });
         assert!(run(&statement(thenable.clone(), None)).is_empty());
-        let diagnostics = run(&statement(thenable, Some(json!({ "checkThenables": true }))));
+        let diagnostics = run(&statement(
+            thenable,
+            Some(json!({ "checkThenables": true })),
+        ));
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].0, "floatingVoid");
     }

@@ -310,7 +310,9 @@ pub(super) fn type_texts_match_names<T: AsRef<str>>(type_texts: &[T], names: &[S
                 } else {
                     &part[..part.find('<').unwrap_or(part.len())]
                 };
-                names.iter().any(|allowed| allowed == name || allowed == part)
+                names
+                    .iter()
+                    .any(|allowed| allowed == name || allowed == part)
             })
     })
 }

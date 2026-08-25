@@ -209,7 +209,7 @@ jobs:
         shell: bash
         working-directory: src/bindings/nodejs/corsa_node
         run: |
-          args=(build --platform --release --target "${{ matrix.target }}")
+          args=(build --platform --profile release-napi --target "${{ matrix.target }}")
           cross_arg=""
           case "${{ matrix.target }}" in
             *-unknown-linux-gnu)
