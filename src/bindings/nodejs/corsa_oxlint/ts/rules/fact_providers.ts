@@ -1059,12 +1059,13 @@ function conditionPartDescriptor(
       part.value !== 0;
   } else if (flags & (TYPE_FLAG_BIGINT | TYPE_FLAG_BIGINT_LITERAL)) {
     variant = "bigint";
-    const literal = typeof part.value === "object" && part.value !== null
-      ? (part.value as { base10Value?: string }).base10Value
-      : part.value;
+    const literal =
+      typeof part.value === "object" && part.value !== null
+        ? (part.value as { base10Value?: string }).base10Value
+        : part.value;
     isTruthy =
       (flags & TYPE_FLAG_BIGINT_LITERAL) !== 0 &&
-      literal !== undefined &&
+      (typeof literal === "string" || typeof literal === "number") &&
       String(literal) !== "0";
   } else if (flags & TYPE_FLAG_ANY) {
     variant = "any";
@@ -1264,6 +1265,687 @@ const preferNullishCoalescingFacts: FactProvider = (_context, node, sink) => {
   }
 };
 
+
+// ---------------------------------------------------------------------------
+// no-unnecessary-type-assertion
+// ---------------------------------------------------------------------------
+
+const TYPE_FLAG_LITERAL =
+  TYPE_FLAG_STRING_LITERAL |
+  TYPE_FLAG_NUMBER_LITERAL |
+  TYPE_FLAG_BIGINT_LITERAL |
+  TYPE_FLAG_BOOLEAN_LITERAL;
+
+function nullishTopFlagLabels(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+): string[] {
+  const labels = new Set<string>();
+  for (const part of unionPartsOfType(context, type)) {
+    if (part.flags & TYPE_FLAG_ANY) labels.add("any");
+    if (part.flags & TYPE_FLAG_UNKNOWN) labels.add("unknown");
+    if (part.flags & TYPE_FLAG_NULL) labels.add("null");
+    if (part.flags & TYPE_FLAG_UNDEFINED) labels.add("undefined");
+    if (part.flags & TYPE_FLAG_VOID) labels.add("void");
+  }
+  return [...labels];
+}
+
+/** Best-effort contextual type for an expression position. */
+function contextualTypeForNode(context: ContextWithParserOptions, node: any): CorsaType | undefined {
+  const parent = node.parent;
+  if (!parent) {
+    return undefined;
+  }
+  if (parent.type === "VariableDeclarator" && parent.init === node && parent.id?.typeAnnotation) {
+    return typeAtNode(context, parent.id);
+  }
+  if (parent.type === "AssignmentExpression" && parent.right === node) {
+    return typeAtNode(context, parent.left);
+  }
+  return undefined;
+}
+
+const unnecessaryTypeAssertionFacts: FactProvider = (context, node, sink) => {
+  if (
+    node.type !== "TSAsExpression" &&
+    node.type !== "TSTypeAssertion" &&
+    node.type !== "TSNonNullExpression"
+  ) {
+    return;
+  }
+  const expression = node.expression;
+  if (!expression) {
+    return;
+  }
+
+  if (node.type === "TSNonNullExpression") {
+    sink.fields.__exclamationRange = [expression.range[1], node.range[1]];
+    const parent = node.parent;
+    if (parent?.type === "AssignmentExpression" && parent.left === node) {
+      sink.fields.__isAssignmentLeft = true;
+    }
+    const expressionType = typeAtNode(context, expression);
+    if (expressionType) {
+      sink.fields.__expressionTypeFlags = nullishTopFlagLabels(context, expressionType);
+    }
+    const contextualType = contextualTypeForNode(context, node);
+    if (contextualType) {
+      sink.fields.__contextualTypeFlags = nullishTopFlagLabels(context, contextualType);
+    }
+    if (expression.type === "Identifier") {
+      if (letDeclarationWithoutInitializer(context, expression)) {
+        sink.fields.__possiblyUsedBeforeAssigned = true;
+      }
+    }
+    return;
+  }
+
+  // `expr as T` / `<T>expr`
+  if (node.type === "TSAsExpression") {
+    sink.fields.__assertionRange = [expression.range[1], node.range[1]];
+    sink.fields.__removeRange = [expression.range[1], node.range[1]];
+  } else {
+    sink.fields.__assertionRange = [node.range[0], expression.range[0]];
+    sink.fields.__removeRange = [node.range[0], expression.range[0]];
+  }
+
+  const castType = typeAtNode(context, node);
+  const uncastType = typeAtNode(context, expression);
+  if (castType && (castType.flags & TYPE_FLAG_LITERAL) !== 0) {
+    sink.fields.__castTypeIsLiteral = true;
+  }
+  if (castType && uncastType && castType.id === uncastType.id) {
+    sink.fields.__typeIsUnchanged = true;
+  }
+
+  const parent = node.parent;
+  const declarator = parent?.type === "VariableDeclarator" ? parent : undefined;
+  if (
+    (declarator && declarator.parent?.kind === "const" && !declarator.id?.typeAnnotation) ||
+    (parent?.type === "PropertyDefinition" && parent.readonly === true)
+  ) {
+    sink.fields.__implicitlyNarrowedLiteralDeclaration = true;
+  }
+};
+
+/**
+ * Whether the identifier resolves to a same-file `let`/`var` declaration
+ * without an initializer (the definite-assignment pattern `x!`).
+ */
+function letDeclarationWithoutInitializer(
+  context: ContextWithParserOptions,
+  identifier: any,
+): boolean {
+  const symbol = checkerFor(context).getSymbolAtLocation(identifier);
+  const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+  if (!declaration) {
+    return false;
+  }
+  const [posPart, , ...pathParts] = declaration.split(".");
+  const path = pathParts.join(".");
+  const filename = String(context.filename ?? "");
+  if (!path || !(path === filename || filename.endsWith(path) || path.endsWith(filename))) {
+    return false;
+  }
+  const pos = Number(posPart);
+  const source = context.sourceCode.text;
+  if (!Number.isFinite(pos) || pos < 0 || pos > source.length) {
+    return false;
+  }
+  const statementEnd = source.indexOf(";", pos);
+  const statement = source.slice(
+    Math.max(0, source.lastIndexOf("\n", pos)),
+    statementEnd === -1 ? source.length : statementEnd,
+  );
+  return /\b(?:let|var)\b/.test(statement) && !statement.includes("=");
+}
+
+
+// ---------------------------------------------------------------------------
+// related-getter-setter-pairs
+// ---------------------------------------------------------------------------
+
+const relatedGetterSetterFacts: FactProvider = (context, node, _sink) => {
+  void _sink;
+  const members: any[] = node.body?.body ?? node.members ?? [];
+  if (!Array.isArray(members) || members.length === 0) {
+    return;
+  }
+  const checker = checkerFor(context);
+  const setterParamTypes = new Map<string, CorsaType>();
+  for (const member of members) {
+    if (member?.kind !== "set" || member.key?.type !== "Identifier") {
+      continue;
+    }
+    const param = member.value?.params?.[0];
+    if (!param) {
+      continue;
+    }
+    const paramType = typeAtNode(context, param);
+    if (paramType) {
+      setterParamTypes.set(member.key.name, paramType);
+    }
+  }
+  if (setterParamTypes.size === 0) {
+    return;
+  }
+  for (const member of members) {
+    if (member?.kind !== "get" || member.key?.type !== "Identifier") {
+      continue;
+    }
+    const setterType = setterParamTypes.get(member.key.name);
+    if (!setterType) {
+      continue;
+    }
+    const annotation = member.value?.returnType;
+    const getterType = annotation
+      ? typeAtNode(context, annotation.typeAnnotation ?? annotation)
+      : undefined;
+    if (!getterType) {
+      continue;
+    }
+    const assignable = checker.isTypeAssignableTo(getterType, setterType);
+    if (assignable !== undefined) {
+      member.__getterTypeAssignableToSetter = assignable;
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// strict-void-return
+// ---------------------------------------------------------------------------
+
+function isVoidReturnTextList(texts: readonly string[]): boolean {
+  return (
+    texts.length > 0 &&
+    texts.every((text) => {
+      const trimmed = text.trim();
+      return trimmed === "void" || trimmed === "undefined" || trimmed === "Promise<void>";
+    })
+  );
+}
+
+const strictVoidReturnFacts: FactProvider = (context, node, sink) => {
+  if (node.type === "CallExpression" || node.type === "NewExpression") {
+    const callFacts = sink.fields.__callFacts as
+      | { expectedArgumentTypeTexts?: readonly (readonly string[])[] }
+      | undefined;
+    const expected = callFacts?.expectedArgumentTypeTexts;
+    if (!expected) {
+      return;
+    }
+    const args = Array.isArray(node.arguments) ? node.arguments : [];
+    expected.forEach((slotTexts, index) => {
+      const argument = args[index];
+      if (!argument || typeof argument !== "object") {
+        return;
+      }
+      const returnTexts: string[] = [];
+      for (const text of slotTexts) {
+        const returnText = returnTextOfFunctionTypeText(text);
+        if (returnText) {
+          returnTexts.push(returnText);
+        }
+      }
+      if (isVoidReturnTextList(returnTexts)) {
+        argument.__voidReturnExpected = true;
+        annotateApparentReturnTexts(context, argument);
+      }
+    });
+    return;
+  }
+
+  if (node.type === "VariableDeclarator" && node.init && node.id?.typeAnnotation) {
+    const expectedTexts = returnTypeTextsOfType(context, typeAtNode(context, node.id));
+    if (isVoidReturnTextList(expectedTexts)) {
+      node.init.__voidReturnExpected = true;
+      annotateApparentReturnTexts(context, node.init);
+    }
+    return;
+  }
+
+  if (node.type === "AssignmentExpression" && node.right) {
+    const expectedTexts = returnTypeTextsOfType(context, typeAtNode(context, node.left));
+    if (isVoidReturnTextList(expectedTexts)) {
+      node.right.__voidReturnExpected = true;
+      annotateApparentReturnTexts(context, node.right);
+    }
+  }
+};
+
+function annotateApparentReturnTexts(context: ContextWithParserOptions, value: any): void {
+  if (value.__functionApparentReturnTypeTexts) {
+    return;
+  }
+  const inner = stripChainExpression(value);
+  if (inner.type === "ArrowFunctionExpression" || inner.type === "FunctionExpression") {
+    // Function literals have no position-addressable checker type; derive the
+    // apparent return texts from the literal itself.
+    const texts = functionLiteralReturnTexts(context, inner);
+    if (texts.length > 0) {
+      value.__functionApparentReturnTypeTexts = texts;
+    }
+    return;
+  }
+  const valueType = typeAtNode(context, inner);
+  const texts = returnTypeTextsOfType(context, valueType);
+  if (texts.length > 0) {
+    value.__functionApparentReturnTypeTexts = texts;
+  }
+}
+
+function functionLiteralReturnTexts(context: ContextWithParserOptions, fn: any): string[] {
+  if (fn.returnType) {
+    const annotation = fn.returnType.typeAnnotation ?? fn.returnType;
+    const text = context.sourceCode.getText(annotation);
+    if (text) {
+      return fn.async === true ? [`Promise<${text}>`] : [text];
+    }
+  }
+  if (fn.async === true) {
+    return ["Promise<unknown>"];
+  }
+  if (fn.body && fn.body.type !== "BlockStatement") {
+    const bodyType = typeAtNode(context, stripChainExpression(fn.body));
+    if (bodyType) {
+      return unionPartsOfType(context, bodyType).map((part) => renderedTypeText(context, part));
+    }
+    return [];
+  }
+  const returnTexts = new Set<string>();
+  let sawValueReturn = false;
+  forEachNodeOfType(fn.body, "ReturnStatement", (returnNode: any) => {
+    if (!returnNode.argument) {
+      returnTexts.add("void");
+      return;
+    }
+    sawValueReturn = true;
+    const argumentType = typeAtNode(context, stripChainExpression(returnNode.argument));
+    if (argumentType) {
+      for (const part of unionPartsOfType(context, argumentType)) {
+        returnTexts.add(renderedTypeText(context, part));
+      }
+    }
+  });
+  if (!sawValueReturn) {
+    return ["void"];
+  }
+  return [...returnTexts];
+}
+
+// ---------------------------------------------------------------------------
+// prefer-optional-chain
+// ---------------------------------------------------------------------------
+
+function nullishPartsDescriptor(
+  context: ContextWithParserOptions,
+  type: CorsaType,
+): Record<string, boolean> {
+  const parts = unionPartsOfType(context, type);
+  const descriptor = {
+    hasNull: false,
+    hasUndefined: false,
+    hasAny: false,
+    hasUnknown: false,
+    hasBigIntLike: false,
+    hasBooleanLike: false,
+    hasNumberLike: false,
+    hasStringLike: false,
+    hasFalsyNonNullishLiteral: false,
+  };
+  for (const part of parts) {
+    const flags = part.flags;
+    if (flags & TYPE_FLAG_NULL) descriptor.hasNull = true;
+    if (flags & (TYPE_FLAG_UNDEFINED | TYPE_FLAG_VOID)) descriptor.hasUndefined = true;
+    if (flags & TYPE_FLAG_ANY) descriptor.hasAny = true;
+    if (flags & TYPE_FLAG_UNKNOWN) descriptor.hasUnknown = true;
+    if (flags & (TYPE_FLAG_BIGINT | TYPE_FLAG_BIGINT_LITERAL)) descriptor.hasBigIntLike = true;
+    if (flags & (TYPE_FLAG_BOOLEAN | TYPE_FLAG_BOOLEAN_LITERAL)) descriptor.hasBooleanLike = true;
+    if (flags & (TYPE_FLAG_NUMBER | TYPE_FLAG_NUMBER_LITERAL | TYPE_FLAG_ENUM))
+      descriptor.hasNumberLike = true;
+    if (flags & TYPE_FLAG_STRING_LIKE) descriptor.hasStringLike = true;
+    const falsyLiteral =
+      (flags & TYPE_FLAG_STRING_LITERAL && part.value === "") ||
+      (flags & TYPE_FLAG_NUMBER_LITERAL && part.value === 0) ||
+      ((flags & TYPE_FLAG_BOOLEAN_LITERAL) !== 0 &&
+        renderedTypeText(context, part) === "false");
+    if (falsyLiteral) descriptor.hasFalsyNonNullishLiteral = true;
+  }
+  return descriptor;
+}
+
+function annotateNullishParts(context: ContextWithParserOptions, target: any, depth = 4): void {
+  if (!target || typeof target !== "object" || depth < 0) {
+    return;
+  }
+  const kind = target.type;
+  if (kind === "LogicalExpression" || kind === "BinaryExpression") {
+    annotateNullishParts(context, target.left, depth - 1);
+    annotateNullishParts(context, target.right, depth - 1);
+    return;
+  }
+  if (kind === "UnaryExpression") {
+    annotateNullishParts(context, target.argument, depth - 1);
+    return;
+  }
+  if (kind === "ChainExpression") {
+    annotateNullishParts(context, target.expression, depth);
+    return;
+  }
+  if (kind !== "Identifier" && kind !== "MemberExpression" && kind !== "CallExpression") {
+    return;
+  }
+  if (target.__nullishParts) {
+    return;
+  }
+  const type = typeAtNode(context, target);
+  if (type) {
+    target.__nullishParts = nullishPartsDescriptor(context, type);
+  }
+  if (kind === "MemberExpression") {
+    annotateNullishParts(context, target.object, depth - 1);
+  }
+}
+
+const preferOptionalChainFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "LogicalExpression") {
+    return;
+  }
+  for (let current = node.parent; current; current = current.parent) {
+    if (typeof current.type === "string" && current.type.startsWith("JSX")) {
+      sink.fields.__insideJsx = true;
+      break;
+    }
+    if (typeof current.type === "string" && current.type.endsWith("Statement")) {
+      break;
+    }
+  }
+  const parent = node.parent;
+  if (parent?.type === "LogicalExpression" && typeof parent.operator === "string") {
+    sink.fields.__parentOperator = parent.operator;
+  }
+  annotateNullishParts(context, node);
+};
+
+// ---------------------------------------------------------------------------
+// no-unnecessary-boolean-literal-compare
+// ---------------------------------------------------------------------------
+
+function annotateTypeParameterConstraint(context: ContextWithParserOptions, operand: any): void {
+  if (!operand || typeof operand !== "object" || operand.__constraintTypeTexts) {
+    return;
+  }
+  const type = typeAtNode(context, stripChainExpression(operand));
+  if (!type || (type.flags & TYPE_FLAG_TYPE_PARAMETER) === 0) {
+    return;
+  }
+  const constraint = checkerFor(context).getConstraintOfType(type);
+  if (!constraint) {
+    operand.__isUnconstrainedTypeParameter = true;
+    return;
+  }
+  operand.__constraintTypeTexts = unionPartsOfType(context, constraint).map((part) =>
+    renderedTypeText(context, part),
+  );
+}
+
+const booleanLiteralCompareFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "BinaryExpression") {
+    return;
+  }
+  const parent = node.parent;
+  if (parent?.type === "UnaryExpression") {
+    sink.fields.__parentUnaryOperator = parent.operator;
+    if (Array.isArray(parent.range)) {
+      sink.fields.__unaryParentStart = parent.range[0];
+      sink.fields.__unaryParentEnd = parent.range[1];
+    }
+  }
+  annotateTypeParameterConstraint(context, node.left);
+  annotateTypeParameterConstraint(context, node.right);
+};
+
+// ---------------------------------------------------------------------------
+// return-await
+// ---------------------------------------------------------------------------
+
+const STRONG_PRECEDENCE_KINDS = new Set([
+  "Identifier",
+  "Literal",
+  "MemberExpression",
+  "CallExpression",
+  "NewExpression",
+  "TemplateLiteral",
+  "TaggedTemplateExpression",
+  "ThisExpression",
+  "ArrayExpression",
+  "ObjectExpression",
+  "ArrowFunctionExpression",
+  "FunctionExpression",
+  "ClassExpression",
+  "ParenthesizedExpression",
+]);
+
+const returnAwaitFacts: FactProvider = (context, node, _sink) => {
+  void _sink;
+  const targets: any[] = [];
+  if (node.type === "ReturnStatement" && node.argument) {
+    targets.push(node.argument);
+  } else if (node.type === "ArrowFunctionExpression" && node.body?.type !== "BlockStatement") {
+    targets.push(node.body);
+  }
+  for (const rawTarget of targets) {
+    const target = stripChainExpression(rawTarget);
+    const value = target?.type === "AwaitExpression" ? target.argument : target;
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+    const inner = stripChainExpression(value);
+    if (!inner.__awaitableCertainty) {
+      const type = typeAtNode(context, inner);
+      if (type) {
+        const parts = unionPartsOfType(context, type);
+        const thenableParts = parts.filter((part) => {
+          const text = renderedTypeText(context, part);
+          return (
+            text.startsWith("Promise<") ||
+            text.startsWith("PromiseLike<") ||
+            text === "Promise" ||
+            (part.flags & (TYPE_FLAG_ANY | TYPE_FLAG_UNKNOWN)) !== 0
+          );
+        });
+        const certainty =
+          thenableParts.length === parts.length && parts.length > 0
+            ? "always"
+            : thenableParts.length > 0
+              ? "may"
+              : "never";
+        inner.__awaitableCertainty = certainty;
+        if (inner !== value) {
+          value.__awaitableCertainty = certainty;
+        }
+      }
+    }
+    if (STRONG_PRECEDENCE_KINDS.has(inner.type)) {
+      inner.__isHigherPrecedenceThanAwait = true;
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// promise-function-async / consistent-return / prefer-return-this-type
+// ---------------------------------------------------------------------------
+
+function functionSignatureReturnTexts(context: ContextWithParserOptions, node: any): string[] {
+  // Prefer the declared annotation; fall back to the checker through an
+  // addressable lookup node (the function name or the annotation itself).
+  if (node.returnType) {
+    const annotation = node.returnType.typeAnnotation ?? node.returnType;
+    const text = context.sourceCode.getText(annotation);
+    if (text) {
+      return [text];
+    }
+  }
+  const lookup = node.id ?? node.key;
+  if (!lookup) {
+    return [];
+  }
+  return returnTypeTextsOfType(context, typeAtNode(context, lookup));
+}
+
+const promiseFunctionAsyncFacts: FactProvider = (context, node, sink) => {
+  const fn = node.type === "MethodDefinition" ? node.value : node;
+  if (!fn || typeof fn !== "object") {
+    return;
+  }
+  if (node.type === "MethodDefinition" || node.type === "TSAbstractMethodDefinition") {
+    if (node.type === "TSAbstractMethodDefinition" || node.abstract === true) {
+      sink.fields.__isAbstract = true;
+    }
+  }
+  if (fn.returnType) {
+    sink.fields.__hasExplicitReturnType = true;
+  }
+  const texts = functionSignatureReturnTexts(context, node.type === "MethodDefinition" ? { ...fn, key: node.key, returnType: fn.returnType } : node);
+  if (texts.length > 0) {
+    sink.fields.__signatureReturnTypeTexts = [texts];
+  }
+};
+
+const consistentReturnFacts: FactProvider = (context, node, sink) => {
+  const texts = functionSignatureReturnTexts(context, node);
+  if (
+    texts.length > 0 &&
+    texts.every((text) => {
+      const trimmed = text.trim();
+      return (
+        trimmed === "void" ||
+        trimmed === "undefined" ||
+        trimmed === "Promise<void>" ||
+        trimmed === "Promise<undefined>"
+      );
+    })
+  ) {
+    sink.fields.__allowsVoidReturn = true;
+  }
+  const body = node.body;
+  if (body?.type === "BlockStatement" && Array.isArray(body.body)) {
+    const last = body.body[body.body.length - 1];
+    const terminal =
+      last &&
+      (last.type === "ReturnStatement" ||
+        last.type === "ThrowStatement" ||
+        (last.type === "ForStatement" && !last.test) ||
+        (last.type === "WhileStatement" && last.test?.value === true));
+    if (!terminal) {
+      sink.fields.__hasImplicitReturn = true;
+    }
+  }
+};
+
+const preferReturnThisTypeFacts: FactProvider = (context, node, sink) => {
+  const classNode = findEnclosingClass(node);
+  const classType = classNode?.id ? typeAtNode(context, classNode.id) : undefined;
+  let containsThisReturn = false;
+  let containsClassTypeReturn = false;
+  const body = node.body;
+  if (body && body.type !== "BlockStatement") {
+    if (body.type === "ThisExpression") {
+      sink.fields.__conciseBodyIsThisType = true;
+    }
+  }
+  forEachNodeOfType(body, "ReturnStatement", (returnNode: any) => {
+    const argument = stripChainExpression(returnNode.argument);
+    if (!argument) {
+      return;
+    }
+    if (argument.type === "ThisExpression") {
+      containsThisReturn = true;
+      return;
+    }
+    if (classType) {
+      const returnedType = typeAtNode(context, argument);
+      if (returnedType && returnedType.id === classType.id) {
+        containsClassTypeReturn = true;
+      }
+    }
+  });
+  if (containsThisReturn) {
+    sink.fields.__returnsContainThisType = true;
+  }
+  if (containsClassTypeReturn) {
+    sink.fields.__returnsContainClassType = true;
+  }
+};
+
+function findEnclosingClass(node: any): any {
+  for (let current = node?.parent; current; current = current.parent) {
+    if (current.type === "ClassDeclaration" || current.type === "ClassExpression") {
+      return current;
+    }
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// non-nullable-type-assertion-style
+// ---------------------------------------------------------------------------
+
+const nonNullableAssertionStyleFacts: FactProvider = (context, node, sink) => {
+  if (node.type !== "TSAsExpression" && node.type !== "TSTypeAssertion") {
+    return;
+  }
+  const annotation = node.typeAnnotation;
+  if (
+    annotation?.type === "TSTypeReference" &&
+    annotation.typeName?.type === "Identifier" &&
+    annotation.typeName.name === "const"
+  ) {
+    sink.fields.__isConstAssertion = true;
+    return;
+  }
+  const expression = node.expression;
+  const expressionType = expression ? typeAtNode(context, stripChainExpression(expression)) : undefined;
+  if (expressionType) {
+    const parts = unionPartsOfType(context, expressionType);
+    if (parts.some((part) => (part.flags & (TYPE_FLAG_ANY | TYPE_FLAG_UNKNOWN)) !== 0)) {
+      sink.fields.__expressionLoose = true;
+    } else {
+      sink.fields.__expressionUnionTypeTexts = parts.map((part) =>
+        renderedTypeText(context, part),
+      );
+    }
+  }
+  const assertedType = annotation ? typeAtNode(context, annotation) : undefined;
+  if (assertedType) {
+    const parts = unionPartsOfType(context, assertedType);
+    if (parts.some((part) => (part.flags & (TYPE_FLAG_ANY | TYPE_FLAG_UNKNOWN)) !== 0)) {
+      sink.fields.__assertedLoose = true;
+    } else {
+      sink.fields.__assertedUnionTypeTexts = parts.map((part) => renderedTypeText(context, part));
+      sink.fields.__assertedPartCouldBeNullable = parts.map((part) => {
+        if ((part.flags & TYPE_FLAG_TYPE_PARAMETER) === 0) {
+          return false;
+        }
+        const constraint = checkerFor(context).getConstraintOfType(part);
+        if (!constraint) {
+          return true;
+        }
+        return unionPartsOfType(context, constraint).some(
+          (constraintPart) =>
+            (constraintPart.flags &
+              (TYPE_FLAG_NULL | TYPE_FLAG_UNDEFINED | TYPE_FLAG_VOID | TYPE_FLAG_ANY | TYPE_FLAG_UNKNOWN)) !==
+            0,
+        );
+      });
+    }
+  }
+  if (expression && STRONG_PRECEDENCE_KINDS.has(stripChainExpression(expression).type)) {
+    sink.fields.__higherPrecedenceThanUnary = true;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // compiler-option facts
 // ---------------------------------------------------------------------------
@@ -1295,15 +1977,25 @@ export function attachConfigFacts(
 // ---------------------------------------------------------------------------
 
 export const ruleFactProviders: Record<string, readonly FactProvider[]> = {
+  "consistent-return": [consistentReturnFacts],
   "no-duplicate-type-constituents": [duplicateTypeConstituentsFacts],
   "no-misused-promises": [misusedPromisesFacts],
   "no-misused-spread": [misusedSpreadFacts],
   "no-redundant-type-constituents": [redundantTypeConstituentsFacts],
+  "no-unnecessary-boolean-literal-compare": [booleanLiteralCompareFacts],
+  "no-unnecessary-type-assertion": [unnecessaryTypeAssertionFacts],
+  "non-nullable-type-assertion-style": [nonNullableAssertionStyleFacts],
   "no-unsafe-argument": [unsafeArgumentFacts],
   "no-unsafe-enum-comparison": [unsafeEnumComparisonFacts],
   "prefer-nullish-coalescing": [preferNullishCoalescingFacts],
+  "prefer-optional-chain": [preferOptionalChainFacts],
+  "prefer-return-this-type": [preferReturnThisTypeFacts],
+  "promise-function-async": [promiseFunctionAsyncFacts],
+  "related-getter-setter-pairs": [relatedGetterSetterFacts],
+  "return-await": [returnAwaitFacts],
   "require-await": [requireAwaitFacts],
   "strict-boolean-expressions": [strictBooleanExpressionsFacts],
+  "strict-void-return": [strictVoidReturnFacts],
   "switch-exhaustiveness-check": [switchExhaustivenessFacts],
   "unbound-method": [unboundMethodFacts],
 };

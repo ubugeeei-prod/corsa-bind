@@ -314,6 +314,33 @@ export class CorsaProjectSession {
    * `getJsDocTags` endpoint. Results are cached per symbol handle for the
    * lifetime of the current snapshot.
    */
+  /**
+   * Asks the checker whether `source` is assignable to `target`, through the
+   * upstream `isTypeAssignableTo` endpoint. Returns undefined when either
+   * handle cannot be resolved.
+   */
+  isTypeAssignableTo(source: CorsaType, target: CorsaType): boolean | undefined {
+    return this.withTransportRecovery(() => {
+      if (!this.#snapshot || !source.id || !target.id) {
+        return undefined;
+      }
+      try {
+        const result = this.client().callJson<boolean | null>("isTypeAssignableTo", {
+          snapshot: this.#snapshot,
+          project: this.projectIdForType(source),
+          source: source.id,
+          target: target.id,
+        });
+        return typeof result === "boolean" ? result : undefined;
+      } catch (error) {
+        if (isMissingTypeHandleError(error)) {
+          return undefined;
+        }
+        throw error;
+      }
+    }, "checking type assignability");
+  }
+
   getJsDocTags(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[] {
     return (
       this.withTransportRecovery(() => this.getJsDocTagsUnchecked(symbol), "reading JSDoc tags") ??

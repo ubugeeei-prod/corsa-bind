@@ -130,6 +130,7 @@ export interface CorsaTypeCheckerShape {
   getSymbolById(id: string): CorsaSymbol | undefined;
   getSymbolOfType(type: CorsaType): CorsaSymbol | undefined;
   getJsDocTags(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[];
+  isTypeAssignableTo(source: CorsaType, target: CorsaType): boolean | undefined;
   getNode(node: string | CorsaNode): CorsaNode | undefined;
   getNodeById(id: string): CorsaNode | undefined;
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined;

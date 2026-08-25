@@ -117,6 +117,9 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
     getJsDocTags(symbol) {
       return sessionForContext(context).session.getJsDocTags(symbol);
     },
+    isTypeAssignableTo(source, target) {
+      return sessionForContext(context).session.isTypeAssignableTo(source, target);
+    },
     getNode(node) {
       return sessionForContext(context).session.getNode(node);
     },

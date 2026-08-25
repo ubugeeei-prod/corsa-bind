@@ -415,7 +415,16 @@ fn encode_numeric_api_handle_value(value: &mut Value) {
 fn is_numeric_api_handle_field(key: &str) -> bool {
     matches!(
         key,
-        "snapshot" | "symbol" | "symbols" | "type" | "types" | "signature" | "signatures"
+        "snapshot"
+            | "symbol"
+            | "symbols"
+            | "type"
+            | "types"
+            | "signature"
+            | "signatures"
+            // isTypeAssignableTo carries its two type handles as source/target.
+            | "source"
+            | "target"
     )
 }
 

@@ -702,6 +702,169 @@ describe("corsa oxlint native rules", () => {
       },
     );
   });
+
+  integrationCase("runs no-unnecessary-type-assertion through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-type-assertion",
+      corsaOxlintRules["no-unnecessary-type-assertion"] as never,
+      {
+        valid: [
+          { code: "declare const wide: string | undefined; const narrowed = wide as string;" },
+        ],
+        invalid: [
+          { code: "declare const narrow: string; const same = narrow as string;", errors: 1 },
+          { code: "declare const definite: string; const asserted = definite!;", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs related-getter-setter-pairs through RuleTester", () => {
+    createTester().run(
+      "related-getter-setter-pairs",
+      corsaOxlintRules["related-getter-setter-pairs"] as never,
+      {
+        valid: [
+          {
+            code: "class Box { #value = ''; get value(): string { return this.#value; } set value(next: string) { this.#value = next; } }",
+          },
+        ],
+        invalid: [
+          {
+            code: "class Box { #value = ''; get value(): string { return this.#value; } set value(next: number) { this.#value = String(next); } }",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs strict-void-return through RuleTester", () => {
+    createTester().run("strict-void-return", corsaOxlintRules["strict-void-return"] as never, {
+      valid: [
+        { code: "declare function on(cb: () => void): void; on(() => undefined);" },
+      ],
+      invalid: [
+        { code: "declare function on(cb: () => void): void; on(() => 123);", errors: 1 },
+      ],
+    });
+  });
+
+  integrationCase("runs prefer-optional-chain through RuleTester", () => {
+    createTester().run(
+      "prefer-optional-chain",
+      corsaOxlintRules["prefer-optional-chain"] as never,
+      {
+        valid: [
+          { code: "declare const holder: { value?: { size: number } }; holder.value?.size;" },
+        ],
+        invalid: [
+          {
+            code: "declare const holder: { value?: { size: number } } | undefined; holder && holder.value;",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs no-unnecessary-boolean-literal-compare through RuleTester", () => {
+    createTester().run(
+      "no-unnecessary-boolean-literal-compare",
+      corsaOxlintRules["no-unnecessary-boolean-literal-compare"] as never,
+      {
+        valid: [
+          {
+            code: "declare const maybe: boolean | undefined; if (maybe === true) { console.log(1); }",
+          },
+        ],
+        invalid: [
+          {
+            code: "declare const definitely: boolean; if (definitely === true) { console.log(1); }",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs return-await through RuleTester", () => {
+    createTester().run("return-await", corsaOxlintRules["return-await"] as never, {
+      valid: [
+        {
+          code: "async function ok() { try { return await Promise.resolve(1); } catch { return 0; } }",
+        },
+      ],
+      invalid: [
+        {
+          code: "async function nope() { try { return Promise.resolve(1); } catch { return 0; } }",
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs promise-function-async through RuleTester", () => {
+    createTester().run(
+      "promise-function-async",
+      corsaOxlintRules["promise-function-async"] as never,
+      {
+        valid: [
+          { code: "async function fine(): Promise<number> { return 1; }" },
+        ],
+        invalid: [
+          { code: "function nope(): Promise<number> { return Promise.resolve(1); }", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs consistent-return through RuleTester", () => {
+    createTester().run("consistent-return", corsaOxlintRules["consistent-return"] as never, {
+      valid: [
+        { code: "function fine(flag: boolean): number { if (flag) { return 1; } return 0; }" },
+      ],
+      invalid: [
+        {
+          code: "function nope(flag: boolean) { if (flag) { return 1; } return; }",
+          errors: 1,
+        },
+      ],
+    });
+  });
+
+  integrationCase("runs prefer-return-this-type through RuleTester", () => {
+    createTester().run(
+      "prefer-return-this-type",
+      corsaOxlintRules["prefer-return-this-type"] as never,
+      {
+        valid: [
+          { code: "class Builder { build(): this { return this; } }" },
+        ],
+        invalid: [
+          { code: "class Builder { build(): Builder { return this; } }", errors: 1 },
+        ],
+      },
+    );
+  });
+
+  integrationCase("runs non-nullable-type-assertion-style through RuleTester", () => {
+    createTester().run(
+      "non-nullable-type-assertion-style",
+      corsaOxlintRules["non-nullable-type-assertion-style"] as never,
+      {
+        valid: [
+          { code: "declare const wide: string | number; const narrowed = wide as string;" },
+        ],
+        invalid: [
+          {
+            code: "declare const maybe: string | undefined; const definite = maybe as string;",
+            errors: 1,
+          },
+        ],
+      },
+    );
+  });
 });
 
 function createTester(): RuleTester {
