@@ -3,8 +3,8 @@ version = 1
 [corsa_upstream]
 path = "ref/corsa-upstream"
 repository = "https://github.com/microsoft/TypeScript.git"
-commit = "c087644e82dc3d48cf87e4c5519eeaaea9daf35c"
-tree = "0ff705d2c52d2c6f05b53be8ee72223bb96b2168"
-committer_date = "2026-08-20T20:21:21Z"
-author = "Jake Bailey"
-subject = "Downgrade too-new npm deps (#63925)"
+commit = "0c8f63f745ec8c8243c7d43d13e3f2fe8e04bc53"
+tree = "5454a5e45644ae655ae1bfd95cc92578a77ed35e"
+committer_date = "2026-08-25T17:32:50+00:00"
+author = "Rafli Surya Wijaya"
+subject = "docs(readme): update blog link to devblogs and use relative CONTRIBUTING.md links (#63994)"
