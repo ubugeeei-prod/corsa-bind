@@ -10,7 +10,10 @@ mod tests;
 mod types;
 
 pub use context::{RuleContext, RustLintRule};
-pub use registry::{LintRuleRegistry, run_default_type_aware_rule};
+pub use registry::{
+    LintRuleRegistry, default_type_aware_registry, run_default_type_aware_rule,
+    run_default_type_aware_rule_owned,
+};
 pub use rules::{
     AwaitThenableRule, ConsistentReturnRule, ConsistentTypeExportsRule, DotNotationRule,
     NoArrayDeleteRule, NoBaseToStringRule, NoConfusingVoidExpressionRule, NoDeprecatedRule,

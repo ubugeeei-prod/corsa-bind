@@ -8,14 +8,13 @@ use serde_json::{Map, Value, json};
 
 use super::{LintNode, TextRange};
 
-pub(crate) fn prepare_node_for_rule(node: &LintNode) -> LintNode {
-    let mut prepared = node.clone();
-    apply_ancestor_facts(&mut prepared);
-    apply_call_facts(&mut prepared);
-    apply_symbol_facts(&mut prepared);
-    apply_type_parameter_facts(&mut prepared);
-    apply_return_type_facts(&mut prepared);
-    prepared
+pub(crate) fn prepare_node_for_rule_owned(mut node: LintNode) -> LintNode {
+    apply_ancestor_facts(&mut node);
+    apply_call_facts(&mut node);
+    apply_symbol_facts(&mut node);
+    apply_type_parameter_facts(&mut node);
+    apply_return_type_facts(&mut node);
+    node
 }
 
 fn apply_ancestor_facts(node: &mut LintNode) {
