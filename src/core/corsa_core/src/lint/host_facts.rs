@@ -127,6 +127,18 @@ fn apply_call_facts(node: &mut LintNode) {
         "lastTypeArgumentIdenticalToDefault",
         "__lastTypeArgumentIdenticalToDefault",
     );
+    copy_call_fact(
+        node,
+        &call_facts,
+        "lastTypeArgumentIsAny",
+        "__lastTypeArgumentIsAny",
+    );
+    copy_call_fact(
+        node,
+        &call_facts,
+        "lastTypeParameterDefaultIsAny",
+        "__lastTypeParameterDefaultIsAny",
+    );
 }
 
 fn apply_symbol_facts(node: &mut LintNode) {

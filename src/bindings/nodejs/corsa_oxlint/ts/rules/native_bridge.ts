@@ -660,7 +660,14 @@ function typeArgumentFactsOfCall(
   const defaultTexts =
     declaredDefaults ?? signatureFacts.signature?.typeParameterDefaultTexts ?? [];
   const lastIndex = typeArguments.length - 1;
+  const lastArgumentText = context.sourceCode.getText(typeArguments[lastIndex])?.trim();
+  if (lastArgumentText === "any") {
+    facts.lastTypeArgumentIsAny = true;
+  }
   const lastDefaultText = defaultTexts[lastIndex];
+  if (lastDefaultText?.trim() === "any") {
+    facts.lastTypeParameterDefaultIsAny = true;
+  }
   if (lastDefaultText !== undefined) {
     const hasDefault = lastDefaultText.trim().length > 0;
     facts.lastTypeParameterHasDefault = hasDefault;
