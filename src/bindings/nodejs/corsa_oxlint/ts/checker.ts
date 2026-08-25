@@ -97,6 +97,9 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
     getSymbolOfType(type) {
       return sessionForContext(context).session.getSymbolOfType(type);
     },
+    getJsDocTags(symbol) {
+      return sessionForContext(context).session.getJsDocTags(symbol);
+    },
     getNode(node) {
       return sessionForContext(context).session.getNode(node);
     },

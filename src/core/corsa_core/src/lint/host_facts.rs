@@ -1,8 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeMap;
 
 use serde_json::{Map, Value, json};
 
@@ -137,13 +133,20 @@ fn apply_symbol_facts(node: &mut LintNode) {
     let Some(symbol_facts) = node.fields.get("__symbolFacts").and_then(Value::as_object) else {
         return;
     };
-    if symbol_facts
+    if !symbol_facts
         .get("deprecated")
         .and_then(Value::as_bool)
         .unwrap_or(false)
-        || declaration_has_deprecated_jsdoc(symbol_facts)
     {
-        insert_if_absent(&mut node.fields, "__deprecated", json!(true));
+        return;
+    }
+    let reason = symbol_facts
+        .get("deprecationReason")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    insert_if_absent(&mut node.fields, "__deprecated", json!(true));
+    if let Some(reason) = reason {
+        insert_if_absent(&mut node.fields, "__deprecationReason", json!(reason));
     }
 }
 
@@ -277,99 +280,3 @@ fn copy_call_fact(
     }
 }
 
-struct ParsedNodeHandle {
-    pos: usize,
-    path: String,
-}
-
-fn declaration_has_deprecated_jsdoc(symbol_facts: &Map<String, Value>) -> bool {
-    let Some(declarations) = symbol_facts.get("declarations").and_then(Value::as_array) else {
-        return false;
-    };
-    declarations.iter().any(|declaration| {
-        declaration
-            .as_str()
-            .and_then(parse_node_handle)
-            .and_then(|handle| source_for_handle(symbol_facts, handle))
-            .is_some_and(|(source, pos)| has_deprecated_marker_before(&source, pos))
-    })
-}
-
-fn parse_node_handle(value: &str) -> Option<ParsedNodeHandle> {
-    let mut parts = value.split('.');
-    let pos = parts.next()?.parse().ok()?;
-    parts.next()?;
-    parts.next()?;
-    let path = parts.collect::<Vec<_>>().join(".");
-    Some(ParsedNodeHandle { pos, path })
-}
-
-fn source_for_handle(
-    symbol_facts: &Map<String, Value>,
-    handle: ParsedNodeHandle,
-) -> Option<(String, usize)> {
-    let filename = symbol_facts
-        .get("filename")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if path_matches_current_source(handle.path.as_str(), filename) {
-        let source = symbol_facts
-            .get("sourceText")
-            .and_then(Value::as_str)?
-            .to_owned();
-        let pos = utf16_offset_to_byte_index(&source, handle.pos)?;
-        return Some((source, pos));
-    }
-
-    let cwd = symbol_facts
-        .get("cwd")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let path = resolve_source_path(cwd, handle.path.as_str())?;
-    let source = fs::read_to_string(path).ok()?;
-    let pos = utf16_offset_to_byte_index(&source, handle.pos)?;
-    Some((source, pos))
-}
-
-fn path_matches_current_source(path: &str, filename: &str) -> bool {
-    path.is_empty() || path == filename || filename.ends_with(path)
-}
-
-fn resolve_source_path(cwd: &str, path: &str) -> Option<PathBuf> {
-    if path.is_empty() {
-        return None;
-    }
-    let direct = Path::new(path);
-    if direct.exists() {
-        return Some(direct.to_path_buf());
-    }
-    if cwd.is_empty() {
-        return None;
-    }
-    let joined = Path::new(cwd).join(path);
-    joined.exists().then_some(joined)
-}
-
-fn has_deprecated_marker_before(source: &str, pos: usize) -> bool {
-    let start = source[..pos]
-        .char_indices()
-        .rev()
-        .nth(500)
-        .map(|(index, _)| index)
-        .unwrap_or(0);
-    source[start..pos].contains("@deprecated")
-}
-
-fn utf16_offset_to_byte_index(source: &str, offset: usize) -> Option<usize> {
-    let mut utf16_units = 0usize;
-    for (byte_index, ch) in source.char_indices() {
-        if utf16_units == offset {
-            return Some(byte_index);
-        }
-        utf16_units = utf16_units.saturating_add(ch.len_utf16());
-        if utf16_units > offset {
-            return None;
-        }
-    }
-    (utf16_units == offset).then_some(source.len())
-}

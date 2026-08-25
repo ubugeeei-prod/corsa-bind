@@ -68,6 +68,12 @@ export interface CorsaSymbol {
   readonly valueDeclaration?: string;
 }
 
+/** One JSDoc tag on a symbol, mirroring the upstream `JSDocTagInfo` shape. */
+export interface CorsaJsDocTagInfo {
+  readonly name: string;
+  readonly text?: string;
+}
+
 export interface CorsaSignature {
   readonly id: string;
   readonly flags: number;
@@ -123,6 +129,7 @@ export interface CorsaTypeCheckerShape {
   getSymbol(symbol: string | CorsaSymbol): CorsaSymbol | undefined;
   getSymbolById(id: string): CorsaSymbol | undefined;
   getSymbolOfType(type: CorsaType): CorsaSymbol | undefined;
+  getJsDocTags(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[];
   getNode(node: string | CorsaNode): CorsaNode | undefined;
   getNodeById(id: string): CorsaNode | undefined;
   getTypeOfSymbol(symbol: CorsaSymbol): CorsaType | undefined;

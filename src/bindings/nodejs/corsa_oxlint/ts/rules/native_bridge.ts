@@ -68,6 +68,7 @@ export function createRustNativeRule(
                   true,
                   includePropertyNamesOption(bridgeOptions, meta),
                   includeText,
+                  meta.bridge.symbolFacts === true,
                 ),
               ),
             );
@@ -85,6 +86,7 @@ export function toNativeNode(
   includeRuleOptions = true,
   includePropertyNames: NodeMetadataOption = includeTypeTexts,
   includeText: NodeMetadataOption = false,
+  includeSymbolFacts = false,
   depth = 0,
 ): NativeLintNode {
   const fields: Record<string, unknown> = {};
@@ -105,6 +107,7 @@ export function toNativeNode(
           false,
           includePropertyNames,
           includeText,
+          includeSymbolFacts,
           depth + 1,
         );
       }
@@ -121,6 +124,7 @@ export function toNativeNode(
             false,
             includePropertyNames,
             includeText,
+            includeSymbolFacts,
             depth + 1,
           ),
         );
@@ -148,7 +152,7 @@ export function toNativeNode(
     fields.__ruleOptions = options;
   }
   if (includeRuleOptions) {
-    addHostInputs(context, node, fields);
+    addHostInputs(context, node, fields, includeSymbolFacts);
   }
 
   const nativeNode: NativeLintNode = {
@@ -319,6 +323,7 @@ function addHostInputs(
   context: ContextWithParserOptions,
   node: RangedNode,
   fields: Record<string, unknown>,
+  includeSymbolFacts: boolean,
 ): void {
   const current = node as any;
   const ancestors = ancestorFacts(context, current);
@@ -334,9 +339,11 @@ function addHostInputs(
   if (current.parent?.type) {
     fields.__parentKind = current.parent.type;
   }
-  const symbolFacts = symbolFactsOfNode(context, current);
-  if (Object.keys(symbolFacts).length > 0) {
-    fields.__symbolFacts = symbolFacts;
+  if (includeSymbolFacts) {
+    const symbolFacts = symbolFactsOfNode(context, current);
+    if (Object.keys(symbolFacts).length > 0) {
+      fields.__symbolFacts = symbolFacts;
+    }
   }
   const typeParameterFacts = typeParameterFactsOfNode(context, current);
   if (Object.keys(typeParameterFacts).length > 0) {
@@ -376,19 +383,17 @@ function symbolFactsOfNode(context: ContextWithParserOptions, node: any): Record
   if (target?.type !== "Identifier") {
     return {};
   }
-  const symbol = checkerFor(context).getSymbolAtLocation(target);
-  const declarations = symbol?.declarations?.filter(
-    (declaration): declaration is string => typeof declaration === "string",
-  );
-  if (!declarations || declarations.length === 0) {
+  const checker = checkerFor(context);
+  const symbol = checker.getSymbolAtLocation(target);
+  if (!symbol) {
     return {};
   }
-  return {
-    declarations,
-    filename: context.filename,
-    cwd: context.cwd,
-    sourceText: context.sourceCode.text,
-  };
+  const deprecatedTag = checker.getJsDocTags(symbol).find((tag) => tag.name === "deprecated");
+  if (!deprecatedTag) {
+    return {};
+  }
+  const reason = deprecatedTag.text?.trim();
+  return reason ? { deprecated: true, deprecationReason: reason } : { deprecated: true };
 }
 
 function typeParameterFactsOfNode(

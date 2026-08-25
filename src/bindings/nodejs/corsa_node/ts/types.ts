@@ -192,6 +192,8 @@ export interface NativeRuleBridgeRequirements {
   typeTexts?: NativeNodeMetadataDepth;
   propertyNames?: NativeNodeMetadataDepth;
   text?: NativeNodeMetadataDepth;
+  /** Whether the host should resolve checker symbol facts (e.g. deprecation). */
+  symbolFacts?: boolean;
 }
 
 export interface NativeLintRuleMeta {

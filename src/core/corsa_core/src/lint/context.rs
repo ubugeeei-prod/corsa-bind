@@ -66,12 +66,12 @@ fn bridge_requirements_for_rule(name: &str, requires_type_texts: bool) -> RuleBr
         "consistent-return"
         | "consistent-type-exports"
         | "dot-notation"
-        | "no-deprecated"
         | "no-unnecessary-qualifier"
         | "no-unnecessary-template-expression"
         | "no-unnecessary-type-parameters"
         | "no-useless-default-assignment"
         | "prefer-optional-chain" => RuleBridgeRequirements::syntax_only(5),
+        "no-deprecated" => RuleBridgeRequirements::syntax_only(5).with_symbol_facts(),
         "no-duplicate-type-constituents" | "no-redundant-type-constituents" => {
             RuleBridgeRequirements::syntax_only(5).with_text(NodeMetadataDepth::through(1))
         }

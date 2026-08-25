@@ -1349,3 +1349,76 @@ fn for_in_array_node(right_type_text: &str) -> LintNode {
         child_lists: BTreeMap::new(),
     }
 }
+
+fn deprecated_use_node(symbol_facts: serde_json::Value) -> LintNode {
+    LintNode {
+        kind: "Identifier".to_owned(),
+        range: TextRange::new(10, 17),
+        text: None,
+        type_texts: Vec::new(),
+        property_names: Vec::new(),
+        fields: BTreeMap::from([
+            ("__parentKind".to_owned(), json!("CallExpression")),
+            ("__symbolFacts".to_owned(), symbol_facts),
+        ]),
+        children: BTreeMap::new(),
+        child_lists: BTreeMap::new(),
+    }
+}
+
+#[test]
+fn reports_deprecated_symbol_from_checker_facts() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-deprecated",
+            &deprecated_use_node(json!({ "deprecated": true })),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "deprecated");
+    assert_eq!(diagnostics[0].range, TextRange::new(10, 17));
+}
+
+#[test]
+fn reports_deprecation_reason_from_checker_facts() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-deprecated",
+            &deprecated_use_node(json!({
+                "deprecated": true,
+                "deprecationReason": "Use replacement().",
+            })),
+        )
+        .unwrap();
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "deprecatedWithReason");
+}
+
+#[test]
+fn ignores_symbol_facts_without_deprecation() {
+    let diagnostics = registry()
+        .run_rule(
+            "no-deprecated",
+            &deprecated_use_node(json!({ "deprecated": false })),
+        )
+        .unwrap();
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn shared_default_registry_is_reused_across_lookups() {
+    let first = super::default_type_aware_registry() as *const LintRuleRegistry;
+    let second = super::default_type_aware_registry() as *const LintRuleRegistry;
+    assert_eq!(first, second);
+    assert!(
+        super::run_default_type_aware_rule_owned(
+            "no-array-delete",
+            array_delete_node()
+        )
+        .is_some()
+    );
+    assert!(super::run_default_type_aware_rule_owned("not-a-rule", array_delete_node()).is_none());
+}

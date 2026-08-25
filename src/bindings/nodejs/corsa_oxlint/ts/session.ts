@@ -4,6 +4,7 @@ import { type ProjectResponse, CorsaApiClient } from "@corsa-bind/napi";
 
 import type {
   CorsaCallSignatureFacts,
+  CorsaJsDocTagInfo,
   CorsaNode,
   CorsaSignature,
   CorsaSymbol,
@@ -89,6 +90,7 @@ export class CorsaProjectSession {
   #symbolSearchRangeByTypeId = new Map<string, SourceRange>();
   #sourceLengthByPath = new Map<string, number>();
   #typeTextById = new Map<string, string>();
+  #jsDocTagsBySymbolId = new Map<string, readonly CorsaJsDocTagInfo[]>();
   #lastRefreshMs = 0;
   #snapshotHasIssuedHandles = false;
   #supportsOverlayChanges?: boolean;
@@ -305,6 +307,46 @@ export class CorsaProjectSession {
     }
     this.#symbolsByTypeId.set(type.id, null);
     return undefined;
+  }
+
+  /**
+   * Returns the JSDoc tags attached to a symbol, straight from the checker's
+   * `getJsDocTags` endpoint. Results are cached per symbol handle for the
+   * lifetime of the current snapshot.
+   */
+  getJsDocTags(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[] {
+    return (
+      this.withTransportRecovery(() => this.getJsDocTagsUnchecked(symbol), "reading JSDoc tags") ??
+      []
+    );
+  }
+
+  private getJsDocTagsUnchecked(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[] {
+    if (!this.#snapshot) {
+      return [];
+    }
+    const cached = this.#jsDocTagsBySymbolId.get(symbol.id);
+    if (cached) {
+      return cached;
+    }
+    let tags: readonly CorsaJsDocTagInfo[];
+    try {
+      tags =
+        this.client().callJson<readonly CorsaJsDocTagInfo[] | null>("getJsDocTags", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          symbol: symbol.id,
+        }) ?? [];
+    } catch (error) {
+      // A stale or foreign-project symbol handle means "no tag data", not a
+      // lint failure; anything else keeps propagating.
+      if (!isMissingTypeHandleError(error)) {
+        throw error;
+      }
+      tags = [];
+    }
+    this.#jsDocTagsBySymbolId.set(symbol.id, tags);
+    return tags;
   }
 
   /**
@@ -1314,6 +1356,7 @@ export class CorsaProjectSession {
     this.#classDeclarationByTypeId.clear();
     this.#symbolSearchRangeByTypeId.clear();
     this.#sourceLengthByPath.clear();
+    this.#jsDocTagsBySymbolId.clear();
     this.#snapshotHasIssuedHandles = false;
   }
 
