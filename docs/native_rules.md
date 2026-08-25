@@ -68,9 +68,10 @@ export default [
 ];
 ```
 
-If a rule needs a type fact that the bridge does not yet surface, it **degrades
-conservatively** — it stays silent rather than emit a false positive — until
-that fact lands. This keeps the native lane safe to enable incrementally.
+Every rule's documented fact vocabulary is produced by the bridge; where a
+fact is fundamentally unprovable over the upstream stdio API (see the
+[parity tracker](./typescript_eslint_parity.md) notes), the rule **degrades
+conservatively** — it stays silent rather than emit a false positive.
 
 ## Supported rules
 
@@ -174,5 +175,6 @@ pendingNativeRuleNames` exactly equals the upstream `tsgolint/internal/rules`
 
 ## See also
 
+- [typescript-eslint parity](./typescript_eslint_parity.md) — per-rule status tracker
 - [Type-aware Oxlint](./oxlint_guide.md) — authoring model and native rules
 - [Node.js binding](./nodejs_binding.md) — the underlying `@corsa-bind/napi` surface
