@@ -718,9 +718,32 @@ function staticMemberFromAst(
   if (!propertyName || !objectName) {
     return undefined;
   }
+  const lexicalStatic = lexicalClassStaticMember(
+    context,
+    memberExpression,
+    objectName,
+    propertyName,
+  );
+  if (lexicalStatic !== undefined) {
+    return lexicalStatic;
+  }
   const objectSymbol = checkerFor(context).getSymbolAtLocation(memberExpression.object);
   const objectPositions = objectSymbol ? sameFileDeclarationPositions(context, objectSymbol) : [];
   const memberPositions = sameFileDeclarationPositions(context, symbol);
+  const root = rootOf(memberExpression);
+  const memberClass =
+    memberPositions.length > 0
+      ? findClassDeclarationContainingMember(root, propertyName, memberPositions)
+      : undefined;
+  if (memberClass) {
+    const className = identifierLikeName(memberClass.id);
+    const objectMatchesClass =
+      objectPositions.some((position) => rangeContains(memberClass, position)) ||
+      (className ? objectTypeReferencesClass(context, memberExpression.object, className) : false);
+    return objectMatchesClass
+      ? (classMemberStaticness(context, memberClass, propertyName) ?? false)
+      : false;
+  }
   const bindingPositions = [...objectPositions, ...memberPositions];
   const objectTypeMatchesClass = objectTypeReferencesClass(
     context,
@@ -730,7 +753,6 @@ function staticMemberFromAst(
   if (bindingPositions.length === 0 && !objectTypeMatchesClass) {
     return undefined;
   }
-  const root = rootOf(memberExpression);
   const classNode =
     (bindingPositions.length > 0
       ? findClassDeclarationByNameAndPosition(root, objectName, bindingPositions)
@@ -749,6 +771,45 @@ function staticMemberFromAst(
         continue;
       }
       return classMemberHasStaticModifier(context, member);
+    }
+  }
+  return undefined;
+}
+
+function findClassDeclarationContainingMember(
+  root: any,
+  propertyName: string,
+  positions: readonly number[],
+): any {
+  if (!root || typeof root !== "object") {
+    return undefined;
+  }
+  if (root.type === "ClassDeclaration" || root.type === "ClassExpression") {
+    for (const member of root.body?.body ?? []) {
+      if (
+        identifierLikeName(member?.key) === propertyName &&
+        positions.some((position) => rangeContains(member, position))
+      ) {
+        return root;
+      }
+    }
+  }
+  if (Array.isArray(root)) {
+    for (const item of root) {
+      const match = findClassDeclarationContainingMember(item, propertyName, positions);
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
+  }
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "parent" || value === null || typeof value !== "object") {
+      continue;
+    }
+    const match = findClassDeclarationContainingMember(value, propertyName, positions);
+    if (match) {
+      return match;
     }
   }
   return undefined;
@@ -899,6 +960,147 @@ function classMemberHasStaticModifier(context: ContextWithParserOptions, member:
     return false;
   }
   return /\bstatic\b/.test(context.sourceCode.text.slice(rangeStart, keyStart));
+}
+
+function lexicalClassStaticMember(
+  context: ContextWithParserOptions,
+  memberExpression: any,
+  objectName: string,
+  propertyName: string,
+): boolean | undefined {
+  for (let scope = memberExpression.parent; scope; scope = scope.parent) {
+    const classNode = classBindingInScope(scope, objectName, memberExpression.range?.[0]);
+    if (classNode !== undefined) {
+      return classMemberStaticness(context, classNode, propertyName);
+    }
+    if (hasNonClassBindingInScope(scope, objectName, memberExpression.range?.[0])) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function classBindingInScope(scope: any, name: string, before: number | undefined): any {
+  const statements = Array.isArray(scope?.body)
+    ? scope.body
+    : Array.isArray(scope?.body?.body)
+      ? scope.body.body
+      : [];
+  for (const statement of statements) {
+    if (!statementBefore(statement, before)) {
+      continue;
+    }
+    if (statement?.type === "ClassDeclaration" && statement.id?.name === name) {
+      return statement;
+    }
+    if (statement?.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const declarator of statement.declarations ?? []) {
+      if (
+        declarator?.id?.type === "Identifier" &&
+        declarator.id.name === name &&
+        (declarator.init?.type === "ClassExpression" ||
+          declarator.init?.type === "ClassDeclaration")
+      ) {
+        return declarator.init;
+      }
+    }
+  }
+  return undefined;
+}
+
+function hasNonClassBindingInScope(scope: any, name: string, before: number | undefined): boolean {
+  if (isFunctionLikeNode(scope)) {
+    for (const parameter of scope.params ?? []) {
+      if (bindingPatternContainsName(parameter, name)) {
+        return true;
+      }
+    }
+  }
+  if (scope?.type === "CatchClause" && bindingPatternContainsName(scope.param, name)) {
+    return true;
+  }
+  const statements = Array.isArray(scope?.body)
+    ? scope.body
+    : Array.isArray(scope?.body?.body)
+      ? scope.body.body
+      : [];
+  for (const statement of statements) {
+    if (!statementBefore(statement, before)) {
+      continue;
+    }
+    if (statement?.type === "FunctionDeclaration" && statement.id?.name === name) {
+      return true;
+    }
+    if (statement?.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const declarator of statement.declarations ?? []) {
+      if (
+        bindingPatternContainsName(declarator?.id, name) &&
+        declarator?.init?.type !== "ClassExpression" &&
+        declarator?.init?.type !== "ClassDeclaration"
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function classMemberStaticness(
+  context: ContextWithParserOptions,
+  classNode: any,
+  propertyName: string,
+): boolean | undefined {
+  for (const member of classNode?.body?.body ?? []) {
+    if (identifierLikeName(member?.key) === propertyName) {
+      return classMemberHasStaticModifier(context, member);
+    }
+  }
+  return undefined;
+}
+
+function statementBefore(statement: any, before: number | undefined): boolean {
+  if (before === undefined || !Array.isArray(statement?.range)) {
+    return true;
+  }
+  return statement.range[0] <= before;
+}
+
+function isFunctionLikeNode(node: any): boolean {
+  return (
+    node?.type === "FunctionDeclaration" ||
+    node?.type === "FunctionExpression" ||
+    node?.type === "ArrowFunctionExpression"
+  );
+}
+
+function bindingPatternContainsName(pattern: any, name: string): boolean {
+  if (!pattern || typeof pattern !== "object") {
+    return false;
+  }
+  if (pattern.type === "Identifier") {
+    return pattern.name === name;
+  }
+  if (pattern.type === "AssignmentPattern") {
+    return bindingPatternContainsName(pattern.left, name);
+  }
+  if (pattern.type === "RestElement") {
+    return bindingPatternContainsName(pattern.argument, name);
+  }
+  if (pattern.type === "ArrayPattern") {
+    return (pattern.elements ?? []).some((element: any) =>
+      bindingPatternContainsName(element, name),
+    );
+  }
+  if (pattern.type === "ObjectPattern") {
+    return (pattern.properties ?? []).some((property: any) =>
+      bindingPatternContainsName(property?.value ?? property?.argument, name),
+    );
+  }
+  return false;
 }
 
 /**
