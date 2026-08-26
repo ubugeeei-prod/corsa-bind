@@ -727,10 +727,19 @@ function staticMemberFromAst(
   if (lexicalStatic !== undefined) {
     return lexicalStatic;
   }
+  const root = rootOf(memberExpression);
+  const typeBackedStatic = staticMemberFromObjectType(
+    context,
+    memberExpression.object,
+    root,
+    propertyName,
+  );
+  if (typeBackedStatic !== undefined) {
+    return typeBackedStatic;
+  }
   const objectSymbol = checkerFor(context).getSymbolAtLocation(memberExpression.object);
   const objectPositions = objectSymbol ? sameFileDeclarationPositions(context, objectSymbol) : [];
   const memberPositions = sameFileDeclarationPositions(context, symbol);
-  const root = rootOf(memberExpression);
   const memberClass =
     memberPositions.length > 0
       ? findClassDeclarationContainingMember(root, propertyName, memberPositions)
@@ -813,6 +822,46 @@ function findClassDeclarationContainingMember(
     }
   }
   return undefined;
+}
+
+function staticMemberFromObjectType(
+  context: ContextWithParserOptions,
+  objectNode: any,
+  root: any,
+  propertyName: string,
+): boolean | undefined {
+  for (const className of objectTypeClassNames(context, objectNode)) {
+    const classNode = uniqueClassDeclarationByName(root, className);
+    const staticness = classNode
+      ? classMemberStaticness(context, classNode, propertyName)
+      : undefined;
+    if (staticness !== undefined) {
+      return staticness;
+    }
+  }
+  return undefined;
+}
+
+function objectTypeClassNames(context: ContextWithParserOptions, node: any): readonly string[] {
+  const type = typeAtNode(context, node);
+  if (!type) {
+    return [];
+  }
+  const checker = checkerFor(context);
+  const texts = new Set(type.texts ?? []);
+  try {
+    texts.add(checker.typeToString(type));
+  } catch {
+    // Fall back to any text that came with the type handle.
+  }
+  const names = new Set<string>();
+  for (const text of texts) {
+    const match = /^typeof\s+([A-Za-z_$][\w$]*)$/.exec(text.trim());
+    if (match) {
+      names.add(match[1]);
+    }
+  }
+  return [...names];
 }
 
 function objectTypeReferencesClass(
