@@ -325,6 +325,8 @@ fn object_relation_legacy_key(method: &str) -> Option<&'static str> {
         | "getBaseTypeOfType"
         | "getCheckTypeOfType"
         | "getConstraintOfType"
+        | "getConstraintOfTypeParameter"
+        | "getDefaultFromTypeParameter"
         | "getExtendsTypeOfType"
         | "getIndexTypeOfType"
         | "getObjectTypeOfType"
@@ -332,11 +334,16 @@ fn object_relation_legacy_key(method: &str) -> Option<&'static str> {
         | "getTypeParametersOfType"
         | "getOuterTypeParametersOfType"
         | "getLocalTypeParametersOfType"
-        | "getAliasTypeArgumentsOfType" => Some("type"),
+        | "getAliasTypeArgumentsOfType"
+        | "getApparentType"
+        | "getApparentPropertiesOfType"
+        | "getNonNullableType"
+        | "getReducedType" => Some("type"),
         "getTypeParametersOfSignature"
         | "getParametersOfSignature"
         | "getThisParameterOfSignature"
-        | "getTargetOfSignature" => Some("signature"),
+        | "getTargetOfSignature"
+        | "getReturnTypeOfSignature" => Some("signature"),
         "getParentOfSymbol"
         | "getExportSymbolOfSymbol"
         | "getMembersOfSymbol"
@@ -408,7 +415,16 @@ fn encode_numeric_api_handle_value(value: &mut Value) {
 fn is_numeric_api_handle_field(key: &str) -> bool {
     matches!(
         key,
-        "snapshot" | "symbol" | "symbols" | "type" | "types" | "signature" | "signatures"
+        "snapshot"
+            | "symbol"
+            | "symbols"
+            | "type"
+            | "types"
+            | "signature"
+            | "signatures"
+            // isTypeAssignableTo carries its two type handles as source/target.
+            | "source"
+            | "target"
     )
 }
 

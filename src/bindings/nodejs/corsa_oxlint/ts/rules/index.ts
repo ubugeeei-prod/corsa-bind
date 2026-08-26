@@ -50,7 +50,7 @@ import {
   strictVoidReturnRule,
   switchExhaustivenessCheckRule,
   unboundMethodRule,
-} from "./pending_parity";
+} from "./checker_backed";
 import { preferFindRule } from "./prefer_find";
 import { preferIncludesRule } from "./prefer_includes";
 import { preferPromiseRejectErrorsRule } from "./prefer_promise_reject_errors";

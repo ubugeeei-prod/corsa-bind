@@ -172,7 +172,22 @@ impl ApiOrchestrator {
         let fleet = self.fleet(profile).await?;
         while fleet.clients.read().len() < replicas {
             let client = ApiClient::spawn(profile.spawn.clone()).await?;
-            fleet.clients.write().push(client);
+            let accepted = {
+                let mut clients = fleet.clients.write();
+                if clients.len() < replicas && clients.len() < self.config.max_workers_per_profile {
+                    clients.push(client.clone());
+                    true
+                } else {
+                    false
+                }
+            };
+            if !accepted {
+                // A concurrent prewarm satisfied the target while this worker
+                // was spawning; shut the extra worker down instead of leaking
+                // it past the requested replica count.
+                let _ = client.close().await;
+                break;
+            }
         }
         Ok(())
     }
@@ -351,13 +366,18 @@ impl ApiOrchestrator {
         if let Some(fleet) = self.fleets.read().get(profile.id.as_str()) {
             return Ok(fleet.clone());
         }
-        let fleet = Arc::new(ClientFleet {
-            next: AtomicUsize::new(0),
-            clients: RwLock::new(SmallVec::new()),
-        });
-        self.fleets
-            .write()
-            .insert(profile.id.clone(), fleet.clone());
+        // Re-check under the write lock so two racing callers agree on one
+        // fleet instead of the loser replacing (and orphaning) the winner's.
+        let mut fleets = self.fleets.write();
+        let fleet = fleets
+            .entry(profile.id.clone())
+            .or_insert_with(|| {
+                Arc::new(ClientFleet {
+                    next: AtomicUsize::new(0),
+                    clients: RwLock::new(SmallVec::new()),
+                })
+            })
+            .clone();
         Ok(fleet)
     }
 

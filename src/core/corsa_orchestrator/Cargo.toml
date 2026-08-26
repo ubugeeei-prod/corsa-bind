@@ -17,11 +17,11 @@ path = "src/lib.rs"
 
 [features]
 default = []
-experimental-distributed = []
+experimental-distributed = ["dep:lsp-types"]
 
 [dependencies]
 log = { workspace = true }
-lsp-types = "0.97"
+lsp-types = { version = "0.97", optional = true }
 parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

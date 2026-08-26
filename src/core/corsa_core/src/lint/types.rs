@@ -210,6 +210,10 @@ pub struct RuleBridgeRequirements {
     /// Depths where source text should be attached.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<NodeMetadataDepth>,
+    /// Whether the host should resolve checker symbol facts (for example
+    /// deprecation) for the visited node.
+    #[serde(skip_serializing_if = "core::ops::Not::not")]
+    pub symbol_facts: bool,
 }
 
 impl RuleBridgeRequirements {
@@ -223,6 +227,7 @@ impl RuleBridgeRequirements {
             type_texts: None,
             property_names: None,
             text: None,
+            symbol_facts: false,
         }
     }
 
@@ -233,6 +238,7 @@ impl RuleBridgeRequirements {
             type_texts: Some(type_texts),
             property_names: None,
             text: None,
+            symbol_facts: false,
         }
     }
 
@@ -243,12 +249,19 @@ impl RuleBridgeRequirements {
             type_texts: Some(metadata),
             property_names: Some(metadata),
             text: None,
+            symbol_facts: false,
         }
     }
 
     /// Adds source text metadata to existing requirements.
     pub const fn with_text(mut self, text: NodeMetadataDepth) -> Self {
         self.text = Some(text);
+        self
+    }
+
+    /// Requests checker symbol facts (for example deprecation) from the host.
+    pub const fn with_symbol_facts(mut self) -> Self {
+        self.symbol_facts = true;
         self
     }
 

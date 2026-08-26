@@ -4,6 +4,7 @@ import { type ProjectResponse, CorsaApiClient } from "@corsa-bind/napi";
 
 import type {
   CorsaCallSignatureFacts,
+  CorsaJsDocTagInfo,
   CorsaNode,
   CorsaSignature,
   CorsaSymbol,
@@ -89,6 +90,9 @@ export class CorsaProjectSession {
   #symbolSearchRangeByTypeId = new Map<string, SourceRange>();
   #sourceLengthByPath = new Map<string, number>();
   #typeTextById = new Map<string, string>();
+  #jsDocTagsBySymbolId = new Map<string, readonly CorsaJsDocTagInfo[]>();
+  #statByPath = new Map<string, { mtimeMs: number; at: number }>();
+  #crossFileSourceTextByPath = new Map<string, string | undefined>();
   #lastRefreshMs = 0;
   #snapshotHasIssuedHandles = false;
   #supportsOverlayChanges?: boolean;
@@ -305,6 +309,73 @@ export class CorsaProjectSession {
     }
     this.#symbolsByTypeId.set(type.id, null);
     return undefined;
+  }
+
+  /**
+   * Asks the checker whether `source` is assignable to `target`, through the
+   * upstream `isTypeAssignableTo` endpoint. Returns undefined when either
+   * handle cannot be resolved.
+   */
+  isTypeAssignableTo(source: CorsaType, target: CorsaType): boolean | undefined {
+    return this.withTransportRecovery(() => {
+      if (!this.#snapshot || !source.id || !target.id) {
+        return undefined;
+      }
+      try {
+        const result = this.client().callJson<boolean | null>("isTypeAssignableTo", {
+          snapshot: this.#snapshot,
+          project: this.projectIdForType(source),
+          source: source.id,
+          target: target.id,
+        });
+        return typeof result === "boolean" ? result : undefined;
+      } catch (error) {
+        if (isMissingTypeHandleError(error)) {
+          return undefined;
+        }
+        throw error;
+      }
+    }, "checking type assignability");
+  }
+
+  /**
+   * Returns the JSDoc tags attached to a symbol, straight from the checker's
+   * `getJsDocTags` endpoint. Results are cached per symbol handle for the
+   * lifetime of the current snapshot.
+   */
+  getJsDocTags(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[] {
+    return (
+      this.withTransportRecovery(() => this.getJsDocTagsUnchecked(symbol), "reading JSDoc tags") ??
+      []
+    );
+  }
+
+  private getJsDocTagsUnchecked(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[] {
+    if (!this.#snapshot) {
+      return [];
+    }
+    const cached = this.#jsDocTagsBySymbolId.get(symbol.id);
+    if (cached) {
+      return cached;
+    }
+    let tags: readonly CorsaJsDocTagInfo[];
+    try {
+      tags =
+        this.client().callJson<readonly CorsaJsDocTagInfo[] | null>("getJsDocTags", {
+          snapshot: this.#snapshot,
+          project: this.projectId(),
+          symbol: symbol.id,
+        }) ?? [];
+    } catch (error) {
+      // A stale or foreign-project symbol handle means "no tag data", not a
+      // lint failure; anything else keeps propagating.
+      if (!isMissingTypeHandleError(error)) {
+        throw error;
+      }
+      tags = [];
+    }
+    this.#jsDocTagsBySymbolId.set(symbol.id, tags);
+    return tags;
   }
 
   /**
@@ -1314,6 +1385,8 @@ export class CorsaProjectSession {
     this.#classDeclarationByTypeId.clear();
     this.#symbolSearchRangeByTypeId.clear();
     this.#sourceLengthByPath.clear();
+    this.#jsDocTagsBySymbolId.clear();
+    this.#crossFileSourceTextByPath.clear();
     this.#snapshotHasIssuedHandles = false;
   }
 
@@ -1345,6 +1418,31 @@ export class CorsaProjectSession {
     };
   }
 
+  /**
+   * Rate-limits the per-query `statSync`: while the same lint source text is
+   * being processed and the cache lifetime has not elapsed, the last observed
+   * mtime is authoritative. Every type query used to stat the file.
+   */
+  private statMtimeMsThrottled(
+    fileName: string,
+    sourceText: string | undefined,
+    cached: FileCache | undefined,
+    now: number,
+  ): number {
+    const entry = this.#statByPath.get(fileName);
+    if (
+      entry &&
+      now - entry.at <= this.runtime.cacheLifetimeMs &&
+      cached !== undefined &&
+      cached.lintSourceText === sourceText
+    ) {
+      return entry.mtimeMs;
+    }
+    const mtimeMs = statMtimeMs(fileName);
+    this.#statByPath.set(fileName, { mtimeMs, at: now });
+    return mtimeMs;
+  }
+
   private sourceTextForPath(path: string): string | undefined {
     const direct = this.#files.get(path);
     if (direct) {
@@ -1355,7 +1453,12 @@ export class CorsaProjectSession {
         return cached.lintSourceText ?? cached.sourceText ?? readFileOrUndefined(fileName);
       }
     }
-    return readFileOrUndefined(path) ?? readFileOrUndefined(`${this.runtime.cwd}/${path}`);
+    if (this.#crossFileSourceTextByPath.has(path)) {
+      return this.#crossFileSourceTextByPath.get(path);
+    }
+    const text = readFileOrUndefined(path) ?? readFileOrUndefined(`${this.runtime.cwd}/${path}`);
+    this.#crossFileSourceTextByPath.set(path, text);
+    return text;
   }
 
   private withTransportRecovery<T>(operation: () => T, action: string): T {
@@ -1470,7 +1573,7 @@ export class CorsaProjectSession {
     const now = Date.now();
     const expired = now - this.#lastRefreshMs > this.runtime.cacheLifetimeMs;
     const cached = this.#files.get(fileName);
-    const mtimeMs = statMtimeMs(fileName);
+    const mtimeMs = this.statMtimeMsThrottled(fileName, sourceText, cached, now);
     const overlayText = this.supportedOverlayText(fileName, sourceText, mtimeMs, cached);
     const mtimeChanged = cached !== undefined && mtimeMs !== cached.mtimeMs;
     const textChanged = overlayText !== cached?.sourceText;

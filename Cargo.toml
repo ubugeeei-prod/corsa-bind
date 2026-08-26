@@ -23,7 +23,6 @@ repository = "https://github.com/ubugeeei-prod/corsa-bind"
 rust-version = "1.85"
 
 [workspace.dependencies]
-bumpalo = { version = "3", features = ["collections"] }
 compact_str = { version = "0.10", features = ["serde"] }
 log = "0.4"
 memchr = "2"
@@ -41,3 +40,10 @@ debug = false
 debug-assertions = false
 overflow-checks = false
 incremental = false
+
+# The napi cdylib must unwind: with `panic = "abort"` a Rust panic inside the
+# addon takes down the host Node.js process instead of surfacing as a JS
+# exception through napi-rs's catch_unwind boundary.
+[profile.release-napi]
+inherits = "release"
+panic = "unwind"

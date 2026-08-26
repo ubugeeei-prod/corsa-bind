@@ -35,12 +35,13 @@ It currently has these jobs in the main workflow:
 - `js-lint-types`
 - `rust-format`
 - `rust-lint`
+- `rust-docs`
 - `build`
 - `test`
 - `public-facade`
+- `non-node-bindings`
 - `quality`
-- `real-Corsa-smoke`
-- `bench-corsa-ref` (`Corsa Ref Bench`)
+- `real-corsa-smoke`
 
 The PR performance workflow lives in
 [`../.github/workflows/pr-performance.yml`](../.github/workflows/pr-performance.yml).
@@ -98,13 +99,15 @@ vp run -w build_corsa
 cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck
 ```
 
-## `bench-corsa-ref`
+### Ubuntu-only baseline and benchmark guards
 
-The `bench-corsa-ref` job, displayed as `Corsa Ref Bench`, keeps the heavier Ubuntu-only path:
+The former `bench-corsa-ref` (`Corsa Ref Bench`) job is folded into
+`real-corsa-smoke` so the pinned Corsa binary is built once per run. On the
+Ubuntu leg only, the job additionally runs:
 
 - baseline validation against the pinned upstream server
-- benchmark report regeneration
-- benchmark guard validation
+  (`cargo test -p corsa --no-default-features --test real_corsa_baseline`)
+- benchmark guard validation (`vp run -w bench_verify`)
 
 ## Non-Node Binding Smoke Checks
 
@@ -423,7 +426,6 @@ Required status checks for `main` should include:
 - `Real Corsa Smoke (ubuntu-latest)`
 - `Real Corsa Smoke (macos-latest)`
 - `Real Corsa Smoke (windows-latest)`
-- `Corsa Ref Bench`
 - `Cargo Deny`
 - `Release Dry Run`
 

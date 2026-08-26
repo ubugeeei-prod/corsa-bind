@@ -109,40 +109,10 @@ jobs:
       - name: Sync pinned Corsa ref
         run: cargo run -p corsa_ref --target-dir .cache/corsa-ref-target -- sync
 
-      - name: Resolve benchmark compatibility
-        id: compat
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -d ref/corsa-upstream ]; then
-            echo "build_corsa_task=build_corsa" >> "$GITHUB_OUTPUT"
-            echo "build_oxlint_task=build_corsa_oxlint" >> "$GITHUB_OUTPUT"
-          elif [ -d ref/typescript-go ]; then
-            ln -s typescript-go ref/corsa-upstream
-            echo "build_corsa_task=build_tsgo" >> "$GITHUB_OUTPUT"
-            echo "build_oxlint_task=build_typescript_oxlint" >> "$GITHUB_OUTPUT"
-          else
-            echo "missing upstream checkout" >&2
-            exit 1
-          fi
-          if [ -f ref/corsa-upstream/tsc/go.mod ]; then
-            echo "go_version_file=ref/corsa-upstream/tsc/go.mod" >> "$GITHUB_OUTPUT"
-          else
-            echo "go_version_file=ref/corsa-upstream/go.mod" >> "$GITHUB_OUTPUT"
-          fi
-          if [ -f ref/corsa-upstream/packages/typescript/tsconfig.json ]; then
-            echo "dataset_path=ref/corsa-upstream/packages/typescript/tsconfig.json" >> "$GITHUB_OUTPUT"
-          elif [ -f ref/corsa-upstream/_packages/native-preview/tsconfig.json ]; then
-            echo "dataset_path=ref/corsa-upstream/_packages/native-preview/tsconfig.json" >> "$GITHUB_OUTPUT"
-          else
-            echo "missing benchmark dataset" >&2
-            exit 1
-          fi
-
       - name: Setup Go for pinned Corsa ref
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: ${{ steps.compat.outputs.go_version_file }}
+          go-version-file: ref/corsa-upstream/tsc/go.mod
           cache: false
 
       - name: Setup Vite+
@@ -153,21 +123,10 @@ jobs:
           run-install: true
 
       - name: Build pinned Corsa binary
-        run: vp run -w ${{ steps.compat.outputs.build_corsa_task }}
-
-      - name: Normalize benchmark paths
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${{ matrix.ref-role }}" = "base" ]; then
-            if [ -f .cache/tsgo ]; then
-              cp .cache/tsgo .cache/corsa
-            fi
-            ln -sfn typescript_oxlint src/bindings/nodejs/corsa_oxlint
-          fi
+        run: vp run -w build_corsa
 
       - name: Build corsa-oxlint package
-        run: vp run -w ${{ steps.compat.outputs.build_oxlint_task }}
+        run: vp run -w build_corsa_oxlint
 
       - name: Install benchmark comparison dependencies
         run: vp run -w bench_tooling_setup
@@ -198,7 +157,7 @@ jobs:
           benchmark_args=(--allow-partial-failures)
           cargo run --manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml --release -p corsa --bin bench_tooling_compare -- \
             --corsa .cache/corsa \
-            --dataset "${{ steps.compat.outputs.dataset_path }}" \
+            --dataset ref/corsa-upstream/packages/typescript/tsconfig.json \
             "${benchmark_args[@]}" \
             --iterations "$BENCH_ITERATIONS" \
             --warmup-iterations "$BENCH_WARMUP_ITERATIONS" \

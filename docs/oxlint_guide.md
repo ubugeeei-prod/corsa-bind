@@ -81,8 +81,11 @@ export const noStringPlusNumber = createRule({
 
 Setting `requiresTypeChecking: true` is what tells the framework a rule needs
 the type-aware path. The checker object behaves like the TypeScript checker
-(`getTypeAtLocation`, `typeToString`, `getBaseTypeOfLiteralType`, …), but the
-types come from the pinned Corsa binary.
+(`getTypeAtLocation`, `typeToString`, `getBaseTypeOfLiteralType`,
+`getJsDocTags`, `isTypeAssignableTo`, …), but the types come from the pinned
+Corsa binary. Call-like expressions resolve through the callee's call
+signatures and `await` expressions unwrap their promise reference, mirroring
+what `getTypeAtLocation` means in the real TypeScript API.
 
 ## Configuration: `settings.corsaOxlint`
 

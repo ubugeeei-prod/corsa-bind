@@ -7,6 +7,7 @@ import type {
   NativeNodeMetadataDepth,
 } from "@corsa-bind/napi";
 
+import { attachConfigFacts, ruleFactProviders } from "./fact_providers";
 import { createNativeRule } from "./rule_creator";
 import { checkerFor, propertyNamesOfNode, typeAtNode, typeTextsAtNode } from "./type_utils";
 import type { ContextWithParserOptions, CorsaCallSignatureFacts } from "../types";
@@ -68,6 +69,9 @@ export function createRustNativeRule(
                   true,
                   includePropertyNamesOption(bridgeOptions, meta),
                   includeText,
+                  meta.bridge.symbolFacts === true,
+                  0,
+                  ruleName,
                 ),
               ),
             );
@@ -85,14 +89,32 @@ export function toNativeNode(
   includeRuleOptions = true,
   includePropertyNames: NodeMetadataOption = includeTypeTexts,
   includeText: NodeMetadataOption = false,
+  includeSymbolFacts = false,
   depth = 0,
+  ruleName?: string,
 ): NativeLintNode {
   const fields: Record<string, unknown> = {};
   const children: Record<string, NativeLintNode> = {};
   const childLists: Record<string, NativeLintNode[]> = {};
 
+  const typeAnnotationText = sourceTypeAnnotationText(context, node);
+  if (typeAnnotationText) {
+    fields.__typeAnnotationText = typeAnnotationText;
+  }
+
+  const options = (context as { options?: unknown }).options;
+  if (includeRuleOptions && Array.isArray(options) && options.length > 0 && isJsonValue(options)) {
+    fields.__ruleOptions = options;
+  }
+  if (includeRuleOptions) {
+    // Host facts run BEFORE child serialization: fact providers may annotate
+    // descendant AST nodes, and those annotations must be visible when the
+    // subtree is serialized below.
+    addHostInputs(context, node, fields, includeSymbolFacts, ruleName);
+  }
+
   for (const [key, value] of Object.entries(node)) {
-    if (isSkippedField(key)) {
+    if (isSkippedField(key) || key in fields) {
       continue;
     }
     if (isNativeChildNode(value)) {
@@ -105,12 +127,18 @@ export function toNativeNode(
           false,
           includePropertyNames,
           includeText,
+          includeSymbolFacts,
           depth + 1,
         );
       }
       continue;
     }
     if (Array.isArray(value)) {
+      if (key.startsWith("__") && isJsonValue(value)) {
+        // Rule-specific facts may be nested JSON (e.g. per-slot text lists).
+        fields[key] = value;
+        continue;
+      }
       if (maxDepth > 0 && value.every(isNativeChildNode)) {
         childLists[key] = value.map((child) =>
           toNativeNode(
@@ -121,6 +149,7 @@ export function toNativeNode(
             false,
             includePropertyNames,
             includeText,
+            includeSymbolFacts,
             depth + 1,
           ),
         );
@@ -136,19 +165,6 @@ export function toNativeNode(
     if (isJsonPrimitive(value)) {
       fields[key] = value;
     }
-  }
-
-  const typeAnnotationText = sourceTypeAnnotationText(context, node);
-  if (typeAnnotationText) {
-    fields.__typeAnnotationText = typeAnnotationText;
-  }
-
-  const options = (context as { options?: unknown }).options;
-  if (includeRuleOptions && Array.isArray(options) && options.length > 0 && isJsonValue(options)) {
-    fields.__ruleOptions = options;
-  }
-  if (includeRuleOptions) {
-    addHostInputs(context, node, fields);
   }
 
   const nativeNode: NativeLintNode = {
@@ -319,6 +335,8 @@ function addHostInputs(
   context: ContextWithParserOptions,
   node: RangedNode,
   fields: Record<string, unknown>,
+  includeSymbolFacts: boolean,
+  ruleName?: string,
 ): void {
   const current = node as any;
   const ancestors = ancestorFacts(context, current);
@@ -334,9 +352,11 @@ function addHostInputs(
   if (current.parent?.type) {
     fields.__parentKind = current.parent.type;
   }
-  const symbolFacts = symbolFactsOfNode(context, current);
-  if (Object.keys(symbolFacts).length > 0) {
-    fields.__symbolFacts = symbolFacts;
+  if (includeSymbolFacts) {
+    const symbolFacts = symbolFactsOfNode(context, current);
+    if (Object.keys(symbolFacts).length > 0) {
+      fields.__symbolFacts = symbolFacts;
+    }
   }
   const typeParameterFacts = typeParameterFactsOfNode(context, current);
   if (Object.keys(typeParameterFacts).length > 0) {
@@ -345,6 +365,13 @@ function addHostInputs(
   const returnTypeFacts = returnTypeFactsOfNode(context, current);
   if (Object.keys(returnTypeFacts).length > 0) {
     fields.__returnTypeFacts = returnTypeFacts;
+  }
+  if (ruleName) {
+    const sink = { fields };
+    attachConfigFacts(ruleName, context, sink);
+    for (const provider of ruleFactProviders[ruleName] ?? []) {
+      provider(context, current, sink);
+    }
   }
 }
 
@@ -376,19 +403,17 @@ function symbolFactsOfNode(context: ContextWithParserOptions, node: any): Record
   if (target?.type !== "Identifier") {
     return {};
   }
-  const symbol = checkerFor(context).getSymbolAtLocation(target);
-  const declarations = symbol?.declarations?.filter(
-    (declaration): declaration is string => typeof declaration === "string",
-  );
-  if (!declarations || declarations.length === 0) {
+  const checker = checkerFor(context);
+  const symbol = checker.getSymbolAtLocation(target);
+  if (!symbol) {
     return {};
   }
-  return {
-    declarations,
-    filename: context.filename,
-    cwd: context.cwd,
-    sourceText: context.sourceCode.text,
-  };
+  const deprecatedTag = checker.getJsDocTags(symbol).find((tag) => tag.name === "deprecated");
+  if (!deprecatedTag) {
+    return {};
+  }
+  const reason = deprecatedTag.text?.trim();
+  return reason ? { deprecated: true, deprecationReason: reason } : { deprecated: true };
 }
 
 function typeParameterFactsOfNode(
@@ -443,6 +468,9 @@ function ancestorFacts(
       if (typeof ancestor.async === "boolean") {
         fact.async = ancestor.async;
       }
+      if (ancestor.type === "CatchClause" && ancestor.param?.type === "Identifier") {
+        fact.catchParamName = ancestor.param.name;
+      }
       const className = ancestor.id?.name;
       if (
         (ancestor.type === "ClassDeclaration" || ancestor.type === "ClassExpression") &&
@@ -466,6 +494,27 @@ function ancestorFacts(
         const parentCalleeName = identifierName(stripChainExpression(ancestor.parent?.callee));
         if (parentCalleeName) {
           fact.parentCalleeName = parentCalleeName;
+        }
+        const parentCallee = stripChainExpression(ancestor.parent?.callee);
+        if (
+          parentCallee?.type === "MemberExpression" &&
+          parentCallee.property?.type === "Identifier"
+        ) {
+          fact.parentCalleePropertyName = parentCallee.property.name;
+        }
+        const parentArguments = ancestor.parent?.arguments;
+        if (Array.isArray(parentArguments)) {
+          const index = parentArguments.indexOf(ancestor);
+          if (index >= 0) {
+            fact.parentArgumentIndex = index;
+            if (
+              parentArguments
+                .slice(0, index)
+                .some((argument: any) => argument?.type === "SpreadElement")
+            ) {
+              fact.parentLeadingSpreadArgument = true;
+            }
+          }
         }
         if (ancestor.parent?.parent?.type) {
           fact.parentParentKind = ancestor.parent.parent.type;
@@ -611,7 +660,14 @@ function typeArgumentFactsOfCall(
   const defaultTexts =
     declaredDefaults ?? signatureFacts.signature?.typeParameterDefaultTexts ?? [];
   const lastIndex = typeArguments.length - 1;
+  const lastArgumentText = context.sourceCode.getText(typeArguments[lastIndex])?.trim();
+  if (lastArgumentText === "any") {
+    facts.lastTypeArgumentIsAny = true;
+  }
   const lastDefaultText = defaultTexts[lastIndex];
+  if (lastDefaultText?.trim() === "any") {
+    facts.lastTypeParameterDefaultIsAny = true;
+  }
   if (lastDefaultText !== undefined) {
     const hasDefault = lastDefaultText.trim().length > 0;
     facts.lastTypeParameterHasDefault = hasDefault;

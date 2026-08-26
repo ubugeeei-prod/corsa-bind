@@ -1,3 +1,7 @@
+use std::sync::OnceLock;
+
+use crate::fast::FastMap;
+
 use super::{
     AwaitThenableRule, ConsistentReturnRule, ConsistentTypeExportsRule, DotNotationRule,
     LintDiagnostic, LintNode, NoArrayDeleteRule, NoBaseToStringRule, NoConfusingVoidExpressionRule,
@@ -24,6 +28,7 @@ use super::{
 #[derive(Default)]
 pub struct LintRuleRegistry {
     rules: Vec<Box<dyn RustLintRule>>,
+    index: FastMap<&'static str, usize>,
 }
 
 impl LintRuleRegistry {
@@ -33,7 +38,11 @@ impl LintRuleRegistry {
     }
 
     /// Adds one rule to the registry and returns the updated registry.
+    ///
+    /// A rule registered under an already-present name replaces the earlier
+    /// entry for lookup purposes.
     pub fn with_rule(mut self, rule: impl RustLintRule + 'static) -> Self {
+        self.index.insert(rule.name(), self.rules.len());
         self.rules.push(Box::new(rule));
         self
     }
@@ -116,25 +125,51 @@ impl LintRuleRegistry {
     ///
     /// Returns `None` when `rule_name` is not registered.
     pub fn run_rule(&self, rule_name: &str, node: &LintNode) -> Option<Vec<LintDiagnostic>> {
-        let rule = self
-            .rules
-            .iter()
-            .find(|candidate| candidate.name() == rule_name)?;
+        self.run_rule_owned(rule_name, node.clone())
+    }
+
+    /// Runs a single rule by name, taking ownership of the node.
+    ///
+    /// Hosts that deserialize a fresh [`LintNode`] per call (the FFI and
+    /// JavaScript bridges) should prefer this over [`run_rule`](Self::run_rule)
+    /// so derived host facts are applied in place instead of onto a deep copy.
+    ///
+    /// Returns `None` when `rule_name` is not registered.
+    pub fn run_rule_owned(&self, rule_name: &str, node: LintNode) -> Option<Vec<LintDiagnostic>> {
+        let rule = self.index.get(rule_name).map(|&slot| &self.rules[slot])?;
         let mut ctx = RuleContext::new(rule.as_ref());
-        let prepared = host_facts::prepare_node_for_rule(node);
+        let prepared = host_facts::prepare_node_for_rule_owned(node);
         rule.check(&mut ctx, &prepared);
         Some(ctx.finish())
     }
 }
 
+/// Returns the process-wide registry of built-in type-aware lint rules.
+///
+/// The registry is built once and reused, so per-node bridge calls avoid
+/// re-allocating all rules and re-scanning rule names.
+pub fn default_type_aware_registry() -> &'static LintRuleRegistry {
+    static REGISTRY: OnceLock<LintRuleRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(LintRuleRegistry::with_default_type_aware_rules)
+}
+
 /// Runs one built-in type-aware rule by name against a host-provided node.
 ///
-/// This convenience helper rebuilds the default registry for simple FFI and
-/// JavaScript bridge calls. Reuse [`LintRuleRegistry`] directly when running
-/// many nodes.
+/// This convenience helper resolves the rule through the shared
+/// [`default_type_aware_registry`] and is safe to call once per visited node.
 pub fn run_default_type_aware_rule(
     rule_name: &str,
     node: &LintNode,
 ) -> Option<Vec<LintDiagnostic>> {
-    LintRuleRegistry::with_default_type_aware_rules().run_rule(rule_name, node)
+    default_type_aware_registry().run_rule(rule_name, node)
+}
+
+/// Owned-node variant of [`run_default_type_aware_rule`].
+///
+/// Prefer this from FFI hosts that already own a freshly deserialized node.
+pub fn run_default_type_aware_rule_owned(
+    rule_name: &str,
+    node: LintNode,
+) -> Option<Vec<LintDiagnostic>> {
+    default_type_aware_registry().run_rule_owned(rule_name, node)
 }

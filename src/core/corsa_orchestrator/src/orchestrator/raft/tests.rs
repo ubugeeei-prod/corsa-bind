@@ -229,6 +229,37 @@ fn snapshot_compacts_log() {
 }
 
 #[test]
+fn log_compaction_triggers_automatically_at_threshold() {
+    let config = RaftConfig {
+        snapshot_threshold: 2,
+        ..RaftConfig::default()
+    };
+    let cluster = RaftCluster::with_config(["a", "b", "c"], config);
+    cluster.campaign("a").unwrap();
+    for index in 0..5 {
+        cluster
+            .append(
+                "a",
+                ReplicatedCommand::PutDocument {
+                    document: doc(&format!("/doc{index}.ts"), ""),
+                },
+            )
+            .unwrap();
+    }
+    // Applying committed entries must have crossed the threshold and
+    // compacted the leader's in-memory log without an explicit compact().
+    let nodes = cluster.inner.nodes.read();
+    let leader = nodes["a"].lock();
+    assert!(leader.log_base_index > 0);
+    assert!(leader.log.len() < 5);
+    // The replicated state machine still holds every applied document.
+    drop(leader);
+    drop(nodes);
+    let state = cluster.node_state("a").unwrap();
+    assert_eq!(state.documents.len(), 5);
+}
+
+#[test]
 fn cluster_recovers_from_dropped_response_via_retry() {
     let cluster = RaftCluster::new(["a", "b", "c"]);
     cluster.campaign("a").unwrap();

@@ -89,6 +89,7 @@ points.
 - [Language bindings](./language_bindings.md) — native bindings for Elixir, C, C++, Go, Zig, C#, Swift, MoonBit.
 - [Type-aware Oxlint](./oxlint_guide.md) — `corsa-oxlint` rule authoring and native rules.
 - [Native rules](./native_rules.md) — the full set of type-aware rules implemented natively in Rust.
+- [typescript-eslint parity](./typescript_eslint_parity.md) — per-rule option, fact, and test status against upstream.
 
 ## Run and ship
 

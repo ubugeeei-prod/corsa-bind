@@ -194,6 +194,13 @@ The current Vitest bench summary is useful for relative ranking but the JSON fil
 ## Notes
 
 - `ApiSpawnConfig::new()` defaults to `SyncMsgpackStdio`, because it is still consistently ahead on the measured real-Corsa paths.
+- What "msgpack" buys is defined by upstream: Corsa's MessagePack protocol is
+  a msgpack-framed `[type, method, payload]` tuple whose payload is still the
+  upstream JSON body (`ref/corsa-upstream/tsc/internal/api/protocol_msgpack.go`),
+  plus binary responses for payload-heavy endpoints. The win comes from the
+  lighter framing, the sync connection, and those binary responses — not from
+  msgpack-encoding the request body, which the upstream wire format does not
+  support (and this repository does not fork).
 - `getSourceFile` benefits strongly from msgpack because async JSON-RPC has to carry binary payloads through JSON framing.
 - `bench/src/report_guard.test.ts` fails when benchmark samples go missing or when the measured hot paths drift past the configured budget.
 - `src/bindings/rust/corsa/tests/real_corsa_baseline.rs` pins the real upstream API summary for the locked Corsa upstream commit.

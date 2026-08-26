@@ -547,7 +547,10 @@ impl ApiClient {
     /// Relation endpoints treat both as missing data so analysis can continue.
     /// The message arrives as [`CorsaError::Protocol`] over msgpack and as
     /// [`CorsaError::Rpc`] over JSON-RPC, so both variants are inspected.
-    pub(crate) fn is_stale_handle_error(error: &CorsaError) -> bool {
+    ///
+    /// This classification is public so binding layers can share one
+    /// definition instead of re-matching upstream message fragments.
+    pub fn is_stale_handle_error(error: &CorsaError) -> bool {
         match error {
             CorsaError::Rpc(rpc) => is_stale_handle_message(&rpc.message),
             CorsaError::Protocol(message) => is_stale_handle_message(message),
@@ -588,12 +591,10 @@ impl ApiClient {
         T: DeserializeOwned,
         P: Serialize + ?Sized,
     {
-        let value: Value = self.request_after_initialize(method, params).await?;
-        if value.is_null() {
-            Ok(None)
-        } else {
-            Ok(Some(serde_json::from_value(value)?))
-        }
+        // `Option<T>` deserializes `null` (and the msgpack lane's empty
+        // response) to `None` directly, so the response is decoded in one
+        // pass instead of materializing an intermediate `Value` first.
+        self.request_after_initialize(method, params).await
     }
 
     async fn request_binary_after_initialize<P>(

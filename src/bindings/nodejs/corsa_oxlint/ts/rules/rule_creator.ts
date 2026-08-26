@@ -9,7 +9,10 @@ export function createNativeRule(
     defaultOptions: [],
     meta: {
       type: "problem",
-      schema: [],
+      // Native rules accept their upstream typescript-eslint options; the
+      // Rust side deserializes and validates them, so the JS-side schema
+      // stays permissive.
+      schema: { type: "array" },
       ...meta,
       docs: {
         requiresTypeChecking: true,

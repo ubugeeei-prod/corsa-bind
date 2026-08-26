@@ -74,6 +74,12 @@ fn accept_reject_arguments(node: &LintNode, args: &[LintNode]) -> bool {
     let Some(argument) = args.first() else {
         return rule_option(node, "allowEmptyReject", false);
     };
+    if crate::lint::helpers::type_texts_match_names(
+        &argument.type_texts,
+        &crate::lint::helpers::rule_allow_list_names(node, "allow"),
+    ) {
+        return true;
+    }
     if rule_option(node, "allowThrowingAny", false) && is_any_like_node(argument) {
         return true;
     }

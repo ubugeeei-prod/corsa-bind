@@ -7,7 +7,15 @@ export const noFloatingPromisesRule = createRustNativeRule(
   { shouldRun: shouldRunNoFloatingPromises },
 );
 
-function shouldRunNoFloatingPromises(node: any): boolean {
+function shouldRunNoFloatingPromises(node: any, context: unknown): boolean {
   const expression = stripChainExpression(node.expression);
-  return !(expression?.type === "UnaryExpression" && expression.operator === "void");
+  if (expression?.type !== "UnaryExpression" || expression.operator !== "void") {
+    return true;
+  }
+  // `void promise;` is only a finding under `ignoreVoid: false`; skipping the
+  // native call otherwise keeps the default path free of type queries.
+  const options = (context as { options?: readonly unknown[] }).options?.[0];
+  return typeof options === "object" && options !== null
+    ? (options as { ignoreVoid?: boolean }).ignoreVoid === false
+    : false;
 }

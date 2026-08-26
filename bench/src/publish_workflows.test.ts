@@ -56,9 +56,13 @@ describe("publish workflows", () => {
     expect(workflow).toContain('package: "typescript@7.0.2"');
     expect(workflow).toContain('package: "typescript@next"');
     expect(workflow).toContain("Build corsa-oxlint package");
-    expect(workflow).toContain("Normalize benchmark paths");
-    expect(workflow).toContain("cp .cache/tsgo .cache/corsa");
-    expect(workflow).toContain("ln -sfn typescript_oxlint src/bindings/nodejs/corsa_oxlint");
+    expect(workflow).toMatch(/vp run -w build_corsa(\s|$)/m);
+    expect(workflow).toContain("vp run -w build_corsa_oxlint");
+    expect(workflow).toContain("--dataset ref/corsa-upstream/packages/typescript/tsconfig.json");
+    // The retired pre-rename (typescript-go) compatibility shim must not return.
+    expect(workflow).not.toContain("typescript-go");
+    expect(workflow).not.toContain("typescript_oxlint");
+    expect(workflow).not.toContain(".cache/tsgo");
     expect(workflow).toContain("Checkout PR helper scripts");
     expect(workflow).toContain(
       "--manifest-path .cache/pr-benchmark/workflow-scripts/src/bindings/rust/corsa/Cargo.toml",

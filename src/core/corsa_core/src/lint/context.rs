@@ -66,12 +66,12 @@ fn bridge_requirements_for_rule(name: &str, requires_type_texts: bool) -> RuleBr
         "consistent-return"
         | "consistent-type-exports"
         | "dot-notation"
-        | "no-deprecated"
         | "no-unnecessary-qualifier"
         | "no-unnecessary-template-expression"
         | "no-unnecessary-type-parameters"
         | "no-useless-default-assignment"
         | "prefer-optional-chain" => RuleBridgeRequirements::syntax_only(5),
+        "no-deprecated" => RuleBridgeRequirements::syntax_only(5).with_symbol_facts(),
         "no-duplicate-type-constituents" | "no-redundant-type-constituents" => {
             RuleBridgeRequirements::syntax_only(5).with_text(NodeMetadataDepth::through(1))
         }
@@ -129,6 +129,9 @@ fn bridge_requirements_for_rule(name: &str, requires_type_texts: bool) -> RuleBr
         }
         "prefer-reduce-type-parameter" => {
             RuleBridgeRequirements::type_texts(3, NodeMetadataDepth::exact(2))
+        }
+        "prefer-string-starts-ends-with" => {
+            RuleBridgeRequirements::type_texts(4, NodeMetadataDepth::range(2, 3))
         }
         "require-array-sort-compare" => {
             RuleBridgeRequirements::type_texts(2, NodeMetadataDepth::exact(2))

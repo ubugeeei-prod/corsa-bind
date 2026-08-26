@@ -16,13 +16,13 @@ use std::{future::Future, sync::Arc, time::Duration};
 /// Distributed orchestrator that mirrors state through a Raft cluster.
 ///
 /// This type layers replication and leader-based mutation ordering on top of
-/// the local [`ApiOrchestrator`]. The underlying [`RaftCluster`] is the
-/// production-grade Raft implementation provided by this crate: pluggable
-/// storage, pluggable transport, randomized election timing, runtime
-/// membership changes, and snapshot-based log compaction are all
-/// available. The public `DistributedApiOrchestrator` surface itself
-/// remains gated by the `experimental-distributed` cargo feature while
-/// it stabilizes.
+/// the local [`ApiOrchestrator`]. The underlying [`RaftCluster`] offers
+/// pluggable storage, pluggable transport, randomized election timing,
+/// simplified single-server membership changes, and snapshot-based log
+/// compaction. The whole distributed layer — this surface and the Raft
+/// implementation beneath it — is gated by the `experimental-distributed`
+/// cargo feature and sits outside the production support commitment (see
+/// `docs/support_policy.md`).
 ///
 /// # Examples
 ///

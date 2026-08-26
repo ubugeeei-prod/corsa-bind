@@ -1970,15 +1970,7 @@ fn char_len_at(text: &str, index: usize) -> Option<usize> {
 }
 
 fn is_stale_handle_error(error: &CorsaError) -> bool {
-    match error {
-        CorsaError::Rpc(rpc) => is_stale_handle_message(&rpc.message),
-        CorsaError::Protocol(message) => is_stale_handle_message(message),
-        _ => false,
-    }
-}
-
-fn is_stale_handle_message(message: &str) -> bool {
-    message.contains("not found in snapshot registry") || message.contains("empty type handle")
+    ApiClient::is_stale_handle_error(error)
 }
 
 async fn get_signatures_of_type_with_parameter_texts(
@@ -2355,20 +2347,33 @@ async fn render_symbol_type_texts(
     project: ProjectHandle,
     symbols: &[SymbolHandle],
 ) -> corsa::Result<Vec<Vec<String>>> {
+    if symbols.is_empty() {
+        return Ok(Vec::new());
+    }
+    // One batched getTypesOfSymbols round trip replaces a per-symbol
+    // getTypeOfSymbol loop; unresolved slots fall back individually below.
+    let batched = match client
+        .get_types_of_symbols(snapshot.clone(), project.clone(), symbols.to_vec())
+        .await
+    {
+        Ok(batched) if batched.len() == symbols.len() => batched,
+        Ok(_) => vec![None; symbols.len()],
+        Err(error) if is_stale_handle_error(&error) => vec![None; symbols.len()],
+        Err(error) => return Err(error),
+    };
+
     let mut rendered = Vec::with_capacity(symbols.len());
-    for symbol in symbols {
-        let type_response = match client
-            .get_type_of_symbol(snapshot.clone(), project.clone(), symbol.clone())
-            .await
-        {
-            Ok(Some(type_response)) => Some(type_response),
-            Ok(None) => {
-                client
-                    .get_declared_type_of_symbol(snapshot.clone(), project.clone(), symbol.clone())
-                    .await?
-            }
-            Err(error) if is_stale_handle_error(&error) => None,
-            Err(error) => return Err(error),
+    for (symbol, slot) in symbols.iter().zip(batched) {
+        let type_response = match slot {
+            Some(type_response) => Some(type_response),
+            None => match client
+                .get_declared_type_of_symbol(snapshot.clone(), project.clone(), symbol.clone())
+                .await
+            {
+                Ok(type_response) => type_response,
+                Err(error) if is_stale_handle_error(&error) => None,
+                Err(error) => return Err(error),
+            },
         };
         match type_response {
             Some(type_response) => {
