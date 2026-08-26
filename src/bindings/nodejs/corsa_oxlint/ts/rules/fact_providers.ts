@@ -687,7 +687,7 @@ function unboundMethodInfoAt(
     }
   }
   const isStatic =
-    staticMemberFromAst(context, memberExpression) ?? staticModifierFor(context, symbol);
+    staticMemberFromAst(context, symbol, memberExpression) ?? staticModifierFor(context, symbol);
   if (isMethod && ignoreStatic && isStatic === undefined) {
     // Reporting a static method that ignoreStatic excludes would be a false
     // positive, so degrade to silence when staticness is unknowable.
@@ -703,6 +703,7 @@ function unboundMethodInfoAt(
 
 function staticMemberFromAst(
   context: ContextWithParserOptions,
+  symbol: CorsaSymbol,
   memberExpression: any,
 ): boolean | undefined {
   if (
@@ -722,6 +723,7 @@ function staticMemberFromAst(
   if (objectPositions.length === 0) {
     return undefined;
   }
+  const memberPositions = sameFileDeclarationPositions(context, symbol);
   const classNode = findClassDeclarationByNameAndPosition(
     rootOf(memberExpression),
     objectName,
@@ -733,6 +735,12 @@ function staticMemberFromAst(
       continue;
     }
     if (identifierLikeName(member.key) === propertyName) {
+      if (
+        memberPositions.length > 0 &&
+        !memberPositions.some((position) => rangeContains(member, position))
+      ) {
+        continue;
+      }
       return member.static === true;
     }
   }
