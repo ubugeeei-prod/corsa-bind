@@ -748,7 +748,7 @@ function staticMemberFromAst(
       ) {
         continue;
       }
-      return member.static === true;
+      return classMemberHasStaticModifier(context, member);
     }
   }
   return undefined;
@@ -887,6 +887,18 @@ function sameFileDeclarationPositions(
 
 function rangeContains(node: any, position: number): boolean {
   return Array.isArray(node?.range) && node.range[0] <= position && position <= node.range[1];
+}
+
+function classMemberHasStaticModifier(context: ContextWithParserOptions, member: any): boolean {
+  if (member?.static === true) {
+    return true;
+  }
+  const rangeStart = Array.isArray(member?.range) ? member.range[0] : undefined;
+  const keyStart = Array.isArray(member?.key?.range) ? member.key.range[0] : undefined;
+  if (typeof rangeStart !== "number" || typeof keyStart !== "number" || keyStart < rangeStart) {
+    return false;
+  }
+  return /\bstatic\b/.test(context.sourceCode.text.slice(rangeStart, keyStart));
 }
 
 /**
