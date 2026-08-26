@@ -720,15 +720,22 @@ function staticMemberFromAst(
   }
   const objectSymbol = checkerFor(context).getSymbolAtLocation(memberExpression.object);
   const objectPositions = objectSymbol ? sameFileDeclarationPositions(context, objectSymbol) : [];
-  if (objectPositions.length === 0) {
+  const memberPositions = sameFileDeclarationPositions(context, symbol);
+  const bindingPositions = [...objectPositions, ...memberPositions];
+  const objectTypeMatchesClass = objectTypeReferencesClass(
+    context,
+    memberExpression.object,
+    objectName,
+  );
+  if (bindingPositions.length === 0 && !objectTypeMatchesClass) {
     return undefined;
   }
-  const memberPositions = sameFileDeclarationPositions(context, symbol);
-  const classNode = findClassDeclarationByNameAndPosition(
-    rootOf(memberExpression),
-    objectName,
-    objectPositions,
-  );
+  const root = rootOf(memberExpression);
+  const classNode =
+    (bindingPositions.length > 0
+      ? findClassDeclarationByNameAndPosition(root, objectName, bindingPositions)
+      : undefined) ??
+    (objectTypeMatchesClass ? uniqueClassDeclarationByName(root, objectName) : undefined);
   const members = Array.isArray(classNode?.body?.body) ? classNode.body.body : [];
   for (const member of members) {
     if (!member || typeof member !== "object") {
@@ -745,6 +752,25 @@ function staticMemberFromAst(
     }
   }
   return undefined;
+}
+
+function objectTypeReferencesClass(
+  context: ContextWithParserOptions,
+  node: any,
+  name: string,
+): boolean {
+  const type = typeAtNode(context, node);
+  if (!type) {
+    return false;
+  }
+  const expected = `typeof ${name}`;
+  const texts = new Set(type.texts ?? []);
+  try {
+    texts.add(checkerFor(context).typeToString(type));
+  } catch {
+    // Leave the AST fallback disabled when the class binding cannot be rendered.
+  }
+  return [...texts].some((text) => text.trim() === expected);
 }
 
 function identifierLikeName(node: any): string | undefined {
@@ -803,6 +829,37 @@ function findClassDeclarationByNameAndPosition(
     }
   }
   return undefined;
+}
+
+function uniqueClassDeclarationByName(root: any, name: string): any {
+  const matches: any[] = [];
+  collectClassDeclarationsByName(root, name, matches);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function collectClassDeclarationsByName(root: any, name: string, matches: any[]): void {
+  if (!root || typeof root !== "object") {
+    return;
+  }
+  if (
+    (root.type === "ClassDeclaration" || root.type === "ClassExpression") &&
+    root.id?.type === "Identifier" &&
+    root.id.name === name
+  ) {
+    matches.push(root);
+  }
+  if (Array.isArray(root)) {
+    for (const item of root) {
+      collectClassDeclarationsByName(item, name, matches);
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "parent" || value === null || typeof value !== "object") {
+      continue;
+    }
+    collectClassDeclarationsByName(value, name, matches);
+  }
 }
 
 function sameFileDeclarationPositions(
