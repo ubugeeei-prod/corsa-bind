@@ -597,6 +597,16 @@ describe("corsa oxlint native rules", () => {
           code: "class Counter { static count() { return 1; } } const counted = Counter.count;",
           options: [{ ignoreStatic: true }],
         },
+        {
+          code: [
+            "class Counter { count() { return this; } }",
+            "class Other { static count() { return 1; } }",
+            "function take(Counter: typeof Other) {",
+            "  const counted = Counter.count;",
+            "}",
+          ].join("\n"),
+          options: [{ ignoreStatic: true }],
+        },
       ],
       invalid: [
         {
