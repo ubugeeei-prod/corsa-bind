@@ -604,6 +604,72 @@ describe("corsa oxlint type locations", () => {
     expect(seen.object).toBe("typeof Foo");
   });
 
+  integrationCase("resolves overloaded call expression return types from arguments", () => {
+    const seen: Record<string, string | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "overloaded-call-expression-type",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise argument-aware call expression type lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          CallExpression(node: any) {
+            if (node.callee?.name !== "choose") {
+              return;
+            }
+            const argument = node.arguments?.[0];
+            const key = typeof argument?.value === "number" ? "number" : "string";
+            const type = checker.getTypeAtLocation(node);
+            seen[key] = type ? checker.typeToString(type) : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("overloaded-call-expression-type", rule as any, {
+      valid: [
+        {
+          code: [
+            "function choose(value: string): string;",
+            "function choose(value: number): number;",
+            "function choose(value: string | number): string | number {",
+            "  return value;",
+            "}",
+            "const text = choose('x');",
+            "const count = choose(1);",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.string).toBe("string");
+    expect(seen.number).toBe("number");
+  });
+
   integrationCase("falls back for instantiated generic base types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

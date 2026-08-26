@@ -19,7 +19,7 @@
 import { sessionForContext } from "../registry";
 import { memberPropertyName, stripChainExpression } from "./ast";
 import { checkerFor, typeAtNode, typeTextsAtNode } from "./type_utils";
-import type { ContextWithParserOptions, CorsaType } from "../types";
+import type { ContextWithParserOptions, CorsaSymbol, CorsaType } from "../types";
 
 /** Mutable sink the providers write resolved facts into. */
 export interface FactSink {
@@ -686,7 +686,8 @@ function unboundMethodInfoAt(
       thisArgIsVoid = thisTexts.length > 0 && thisTexts.every((text) => text.trim() === "void");
     }
   }
-  const isStatic = staticMemberFromAst(memberExpression) ?? staticModifierFor(context, symbol);
+  const isStatic =
+    staticMemberFromAst(context, memberExpression) ?? staticModifierFor(context, symbol);
   if (isMethod && ignoreStatic && isStatic === undefined) {
     // Reporting a static method that ignoreStatic excludes would be a false
     // positive, so degrade to silence when staticness is unknowable.
@@ -700,7 +701,10 @@ function unboundMethodInfoAt(
   };
 }
 
-function staticMemberFromAst(memberExpression: any): boolean | undefined {
+function staticMemberFromAst(
+  context: ContextWithParserOptions,
+  memberExpression: any,
+): boolean | undefined {
   if (
     !memberExpression ||
     memberExpression.type !== "MemberExpression" ||
@@ -713,7 +717,16 @@ function staticMemberFromAst(memberExpression: any): boolean | undefined {
   if (!propertyName || !objectName) {
     return undefined;
   }
-  const classNode = findClassDeclarationByName(rootOf(memberExpression), objectName);
+  const objectSymbol = checkerFor(context).getSymbolAtLocation(memberExpression.object);
+  const objectPositions = objectSymbol ? sameFileDeclarationPositions(context, objectSymbol) : [];
+  if (objectPositions.length === 0) {
+    return undefined;
+  }
+  const classNode = findClassDeclarationByNameAndPosition(
+    rootOf(memberExpression),
+    objectName,
+    objectPositions,
+  );
   const members = Array.isArray(classNode?.body?.body) ? classNode.body.body : [];
   for (const member of members) {
     if (!member || typeof member !== "object") {
@@ -747,20 +760,25 @@ function rootOf(node: any): any {
   return current;
 }
 
-function findClassDeclarationByName(root: any, name: string): any {
+function findClassDeclarationByNameAndPosition(
+  root: any,
+  name: string,
+  positions: readonly number[],
+): any {
   if (!root || typeof root !== "object") {
     return undefined;
   }
   if (
     (root.type === "ClassDeclaration" || root.type === "ClassExpression") &&
     root.id?.type === "Identifier" &&
-    root.id.name === name
+    root.id.name === name &&
+    positions.some((position) => rangeContains(root, position))
   ) {
     return root;
   }
   if (Array.isArray(root)) {
     for (const item of root) {
-      const match = findClassDeclarationByName(item, name);
+      const match = findClassDeclarationByNameAndPosition(item, name, positions);
       if (match) {
         return match;
       }
@@ -771,12 +789,39 @@ function findClassDeclarationByName(root: any, name: string): any {
     if (key === "parent" || value === null || typeof value !== "object") {
       continue;
     }
-    const match = findClassDeclarationByName(value, name);
+    const match = findClassDeclarationByNameAndPosition(value, name, positions);
     if (match) {
       return match;
     }
   }
   return undefined;
+}
+
+function sameFileDeclarationPositions(
+  context: ContextWithParserOptions,
+  symbol: CorsaSymbol,
+): readonly number[] {
+  const positions: number[] = [];
+  for (const declaration of [symbol.valueDeclaration, ...symbol.declarations]) {
+    if (!declaration) {
+      continue;
+    }
+    const [posPart, , ...pathParts] = declaration.split(".");
+    const path = pathParts.join(".");
+    const filename = String(context.filename ?? "");
+    if (!path || !(path === filename || filename.endsWith(path) || path.endsWith(filename))) {
+      continue;
+    }
+    const pos = Number(posPart);
+    if (Number.isFinite(pos) && pos >= 0 && pos <= context.sourceCode.text.length) {
+      positions.push(pos);
+    }
+  }
+  return positions;
+}
+
+function rangeContains(node: any, position: number): boolean {
+  return Array.isArray(node?.range) && node.range[0] <= position && position <= node.range[1];
 }
 
 /**
