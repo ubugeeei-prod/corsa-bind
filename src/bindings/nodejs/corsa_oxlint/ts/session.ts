@@ -312,11 +312,6 @@ export class CorsaProjectSession {
   }
 
   /**
-   * Returns the JSDoc tags attached to a symbol, straight from the checker's
-   * `getJsDocTags` endpoint. Results are cached per symbol handle for the
-   * lifetime of the current snapshot.
-   */
-  /**
    * Asks the checker whether `source` is assignable to `target`, through the
    * upstream `isTypeAssignableTo` endpoint. Returns undefined when either
    * handle cannot be resolved.
@@ -343,6 +338,11 @@ export class CorsaProjectSession {
     }, "checking type assignability");
   }
 
+  /**
+   * Returns the JSDoc tags attached to a symbol, straight from the checker's
+   * `getJsDocTags` endpoint. Results are cached per symbol handle for the
+   * lifetime of the current snapshot.
+   */
   getJsDocTags(symbol: CorsaSymbol): readonly CorsaJsDocTagInfo[] {
     return (
       this.withTransportRecovery(() => this.getJsDocTagsUnchecked(symbol), "reading JSDoc tags") ??

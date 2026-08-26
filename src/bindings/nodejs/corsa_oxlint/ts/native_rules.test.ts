@@ -463,9 +463,7 @@ describe("corsa oxlint native rules", () => {
 
   integrationCase("runs no-unsafe-argument through RuleTester", () => {
     createTester().run("no-unsafe-argument", corsaOxlintRules["no-unsafe-argument"] as never, {
-      valid: [
-        { code: "declare function takes(value: number): void; takes(1);" },
-      ],
+      valid: [{ code: "declare function takes(value: number): void; takes(1);" }],
       invalid: [
         {
           code: "declare function takes(value: number): void; declare const loose: any; takes(loose);",
@@ -568,7 +566,10 @@ describe("corsa oxlint native rules", () => {
       {
         valid: [{ code: "type Union = string | number; declare const value: Union;" }],
         invalid: [
-          { code: "type Redundant = string | 'literal'; declare const value: Redundant;", errors: 1 },
+          {
+            code: "type Redundant = string | 'literal'; declare const value: Redundant;",
+            errors: 1,
+          },
           { code: "type WithAny = any | number; declare const value: WithAny;", errors: 1 },
         ],
       },
@@ -582,9 +583,7 @@ describe("corsa oxlint native rules", () => {
           code: "async function* fine() { yield Promise.resolve(1); }",
         },
       ],
-      invalid: [
-        { code: "async function* nope() { yield 1; }", errors: 1 },
-      ],
+      invalid: [{ code: "async function* nope() { yield 1; }", errors: 1 }],
     });
   });
 
@@ -631,7 +630,10 @@ describe("corsa oxlint native rules", () => {
       {
         valid: [{ code: "type Fine = string | number; declare const value: Fine;" }],
         invalid: [
-          { code: "type Duplicated = string | string; declare const value: Duplicated;", errors: 1 },
+          {
+            code: "type Duplicated = string | string; declare const value: Duplicated;",
+            errors: 1,
+          },
           {
             code: "type Aliased = string; type Duplicated = Aliased | string; declare const value: Duplicated;",
             errors: 1,
@@ -646,9 +648,7 @@ describe("corsa oxlint native rules", () => {
       "strict-boolean-expressions",
       corsaOxlintRules["strict-boolean-expressions"] as never,
       {
-        valid: [
-          { code: "declare const flag: boolean; if (flag) { console.log(1); }" },
-        ],
+        valid: [{ code: "declare const flag: boolean; if (flag) { console.log(1); }" }],
         invalid: [
           {
             code: "declare const greeting: string | undefined; if (greeting) { console.log(1); }",
@@ -691,7 +691,9 @@ describe("corsa oxlint native rules", () => {
       corsaOxlintRules["prefer-nullish-coalescing"] as never,
       {
         valid: [
-          { code: "declare const nickname: string | undefined; const label = nickname ?? 'anonymous';" },
+          {
+            code: "declare const nickname: string | undefined; const label = nickname ?? 'anonymous';",
+          },
         ],
         invalid: [
           {
@@ -741,12 +743,8 @@ describe("corsa oxlint native rules", () => {
 
   integrationCase("runs strict-void-return through RuleTester", () => {
     createTester().run("strict-void-return", corsaOxlintRules["strict-void-return"] as never, {
-      valid: [
-        { code: "declare function on(cb: () => void): void; on(() => undefined);" },
-      ],
-      invalid: [
-        { code: "declare function on(cb: () => void): void; on(() => 123);", errors: 1 },
-      ],
+      valid: [{ code: "declare function on(cb: () => void): void; on(() => undefined);" }],
+      invalid: [{ code: "declare function on(cb: () => void): void; on(() => 123);", errors: 1 }],
     });
   });
 
@@ -809,9 +807,7 @@ describe("corsa oxlint native rules", () => {
       "promise-function-async",
       corsaOxlintRules["promise-function-async"] as never,
       {
-        valid: [
-          { code: "async function fine(): Promise<number> { return 1; }" },
-        ],
+        valid: [{ code: "async function fine(): Promise<number> { return 1; }" }],
         invalid: [
           { code: "function nope(): Promise<number> { return Promise.resolve(1); }", errors: 1 },
         ],
@@ -838,12 +834,8 @@ describe("corsa oxlint native rules", () => {
       "prefer-return-this-type",
       corsaOxlintRules["prefer-return-this-type"] as never,
       {
-        valid: [
-          { code: "class Builder { build(): this { return this; } }" },
-        ],
-        invalid: [
-          { code: "class Builder { build(): Builder { return this; } }", errors: 1 },
-        ],
+        valid: [{ code: "class Builder { build(): this { return this; } }" }],
+        invalid: [{ code: "class Builder { build(): Builder { return this; } }", errors: 1 }],
       },
     );
   });
@@ -853,9 +845,7 @@ describe("corsa oxlint native rules", () => {
       "non-nullable-type-assertion-style",
       corsaOxlintRules["non-nullable-type-assertion-style"] as never,
       {
-        valid: [
-          { code: "declare const wide: string | number; const narrowed = wide as string;" },
-        ],
+        valid: [{ code: "declare const wide: string | number; const narrowed = wide as string;" }],
         invalid: [
           {
             code: "declare const maybe: string | undefined; const definite = maybe as string;",
@@ -888,9 +878,7 @@ describe("corsa oxlint native rules", () => {
           { code: "const runtimeValue = 1; export { runtimeValue };" },
           { code: "type Shape = { size: number }; export type { Shape };" },
         ],
-        invalid: [
-          { code: "type Shape = { size: number }; export { Shape };", errors: 1 },
-        ],
+        invalid: [{ code: "type Shape = { size: number }; export { Shape };", errors: 1 }],
       },
     );
   });
@@ -900,12 +888,8 @@ describe("corsa oxlint native rules", () => {
       "no-confusing-void-expression",
       corsaOxlintRules["no-confusing-void-expression"] as never,
       {
-        valid: [
-          { code: "declare function log(): void; log();" },
-        ],
-        invalid: [
-          { code: "declare function log(): void; const result = log();", errors: 1 },
-        ],
+        valid: [{ code: "declare function log(): void; log();" }],
+        invalid: [{ code: "declare function log(): void; const result = log();", errors: 1 }],
       },
     );
   });
@@ -915,12 +899,8 @@ describe("corsa oxlint native rules", () => {
       "no-unnecessary-template-expression",
       corsaOxlintRules["no-unnecessary-template-expression"] as never,
       {
-        valid: [
-          { code: "declare const count: number; const label = `${count}`;" },
-        ],
-        invalid: [
-          { code: "declare const already: string; const copy = `${already}`;", errors: 1 },
-        ],
+        valid: [{ code: "declare const count: number; const label = `${count}`;" }],
+        invalid: [{ code: "declare const already: string; const copy = `${already}`;", errors: 1 }],
       },
     );
   });
@@ -930,9 +910,7 @@ describe("corsa oxlint native rules", () => {
       "no-unnecessary-type-conversion",
       corsaOxlintRules["no-unnecessary-type-conversion"] as never,
       {
-        valid: [
-          { code: "declare const count: number; const text = String(count);" },
-        ],
+        valid: [{ code: "declare const count: number; const text = String(count);" }],
         invalid: [
           { code: "declare const already: string; const copy = String(already);", errors: 1 },
         ],
@@ -946,7 +924,9 @@ describe("corsa oxlint native rules", () => {
       corsaOxlintRules["no-unnecessary-type-parameters"] as never,
       {
         valid: [
-          { code: "function pick<Value>(items: Value[], index: number): Value { return items[index]; }" },
+          {
+            code: "function pick<Value>(items: Value[], index: number): Value { return items[index]; }",
+          },
         ],
         invalid: [
           { code: "function only<Value>(value: Value): void { console.log(value); }", errors: 1 },
@@ -960,12 +940,8 @@ describe("corsa oxlint native rules", () => {
       "no-useless-default-assignment",
       corsaOxlintRules["no-useless-default-assignment"] as never,
       {
-        valid: [
-          { code: "function greet(who: string | undefined = 'world') { return who; }" },
-        ],
-        invalid: [
-          { code: "function greet(who: string = 'world') { return who; }", errors: 1 },
-        ],
+        valid: [{ code: "function greet(who: string | undefined = 'world') { return who; }" }],
+        invalid: [{ code: "function greet(who: string = 'world') { return who; }", errors: 1 }],
       },
     );
   });
@@ -1026,33 +1002,34 @@ describe("corsa oxlint native rules", () => {
     );
   });
 
-  integrationCase("runs switch-exhaustiveness-check defaultCaseCommentPattern through RuleTester", () => {
-    createTester().run(
-      "switch-exhaustiveness-check",
-      corsaOxlintRules["switch-exhaustiveness-check"] as never,
-      {
-        valid: [
-          {
-            code: "type Kind = 'a' | 'b'; declare const kind: Kind; switch (kind) { case 'a': break; // skip exhaustiveness\n default: break; }",
-            options: [{ defaultCaseCommentPattern: "skip exhaustiveness" }],
-          },
-        ],
-        invalid: [
-          {
-            code: "type Kind = 'a' | 'b'; declare const kind: Kind; switch (kind) { case 'a': break; default: break; }",
-            options: [{ defaultCaseCommentPattern: "skip exhaustiveness" }],
-            errors: 1,
-          },
-        ],
-      },
-    );
-  });
+  integrationCase(
+    "runs switch-exhaustiveness-check defaultCaseCommentPattern through RuleTester",
+    () => {
+      createTester().run(
+        "switch-exhaustiveness-check",
+        corsaOxlintRules["switch-exhaustiveness-check"] as never,
+        {
+          valid: [
+            {
+              code: "type Kind = 'a' | 'b'; declare const kind: Kind; switch (kind) { case 'a': break; // skip exhaustiveness\n default: break; }",
+              options: [{ defaultCaseCommentPattern: "skip exhaustiveness" }],
+            },
+          ],
+          invalid: [
+            {
+              code: "type Kind = 'a' | 'b'; declare const kind: Kind; switch (kind) { case 'a': break; default: break; }",
+              options: [{ defaultCaseCommentPattern: "skip exhaustiveness" }],
+              errors: 1,
+            },
+          ],
+        },
+      );
+    },
+  );
 
   integrationCase("runs no-deprecated through RuleTester", () => {
     createTester().run("no-deprecated", corsaOxlintRules["no-deprecated"] as never, {
-      valid: [
-        { code: "const fresh = () => 1; fresh();" },
-      ],
+      valid: [{ code: "const fresh = () => 1; fresh();" }],
       invalid: [
         {
           code: "/** @deprecated Use replacement() instead. */\nconst legacy = () => 1;\nlegacy();",
@@ -1067,9 +1044,7 @@ describe("corsa oxlint native rules", () => {
       "no-unnecessary-condition",
       corsaOxlintRules["no-unnecessary-condition"] as never,
       {
-        valid: [
-          { code: "declare const flag: boolean; if (flag) { console.log(1); }" },
-        ],
+        valid: [{ code: "declare const flag: boolean; if (flag) { console.log(1); }" }],
         invalid: [
           { code: "declare const label: 'ready'; if (label) { console.log(1); }", errors: 1 },
         ],
@@ -1103,7 +1078,9 @@ describe("corsa oxlint native rules", () => {
       corsaOxlintRules["no-unnecessary-type-arguments"] as never,
       {
         valid: [
-          { code: "function keep<Value = string>(value: Value): Value { return value; } keep<number>(1);" },
+          {
+            code: "function keep<Value = string>(value: Value): Value { return value; } keep<number>(1);",
+          },
         ],
         invalid: [
           {
@@ -1127,9 +1104,7 @@ describe("corsa oxlint native rules", () => {
             options: [{ allow: ["Array"] }],
           },
         ],
-        invalid: [
-          { code: "function nope(values: number[]) { return values.length; }", errors: 1 },
-        ],
+        invalid: [{ code: "function nope(values: number[]) { return values.length; }", errors: 1 }],
       },
     );
   });

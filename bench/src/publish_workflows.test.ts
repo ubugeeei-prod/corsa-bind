@@ -56,7 +56,7 @@ describe("publish workflows", () => {
     expect(workflow).toContain('package: "typescript@7.0.2"');
     expect(workflow).toContain('package: "typescript@next"');
     expect(workflow).toContain("Build corsa-oxlint package");
-    expect(workflow).toContain("vp run -w build_corsa");
+    expect(workflow).toMatch(/vp run -w build_corsa(\s|$)/m);
     expect(workflow).toContain("vp run -w build_corsa_oxlint");
     expect(workflow).toContain("--dataset ref/corsa-upstream/packages/typescript/tsconfig.json");
     // The retired pre-rename (typescript-go) compatibility shim must not return.

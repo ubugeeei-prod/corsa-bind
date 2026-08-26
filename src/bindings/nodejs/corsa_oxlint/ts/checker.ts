@@ -78,7 +78,7 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
         }
       }
       if (kind === "AwaitExpression") {
-        const resolved = typeOfAwaitExpression(node as Node, this);
+        const resolved = typeOfAwaitExpression(context, node as Node, this);
         if (resolved) {
           return resolved;
         }
@@ -442,7 +442,11 @@ function typeOfCallExpression(
  * Resolves `await expr` to the awaited type by unwrapping a promise-like
  * reference type's first type argument.
  */
-function typeOfAwaitExpression(node: Node, checker: CorsaTypeCheckerShape): CorsaType | undefined {
+function typeOfAwaitExpression(
+  context: ContextWithParserOptions,
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
   const argument = childNode(node, "argument");
   if (!argument) {
     return undefined;
@@ -453,15 +457,16 @@ function typeOfAwaitExpression(node: Node, checker: CorsaTypeCheckerShape): Cors
   }
   const rendered = argumentType.texts?.length
     ? argumentType.texts
-    : [checker.typeToString(argumentType)];
+    : [safeTypeToString(checker, argumentType) ?? ""];
   const isPromiseReference = rendered.some(
-    (text) =>
-      text.startsWith("Promise<") || text.startsWith("PromiseLike<") || text === "Promise",
+    (text) => text.startsWith("Promise<") || text.startsWith("PromiseLike<") || text === "Promise",
   );
   if (!isPromiseReference) {
     return argumentType;
   }
-  return checker.getTypeArguments(argumentType)[0] ?? argumentType;
+  const awaited = checker.getTypeArguments(argumentType)[0] ?? argumentType;
+  sessionForContext(context).session.rememberTypeLookupFromType(awaited, argumentType);
+  return awaited;
 }
 
 function typeOfNewExpression(

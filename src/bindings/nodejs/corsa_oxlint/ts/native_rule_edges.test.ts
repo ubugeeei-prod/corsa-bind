@@ -1,13 +1,18 @@
-import { describe } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { RuleTester } from "./rule_tester";
 import { integrationCase as resolveIntegrationCase, resolvedRealCorsaBinary } from "./test_support";
 import { corsaOxlintRules } from "./rules";
+import { returnTextOfFunctionTypeText } from "./rules/fact_providers";
 
 const realCorsaBinary = resolvedRealCorsaBinary() ?? "";
 const integrationCase = resolveIntegrationCase();
 
 describe("corsa oxlint native rule edges", () => {
+  it("extracts return text from generic function type text", () => {
+    expect(returnTextOfFunctionTypeText("<T>(value: T) => Promise<T>")).toBe("Promise<T>");
+  });
+
   integrationCase("covers array and enum edge cases", () => {
     const tester = createTester();
 
@@ -175,6 +180,9 @@ describe("corsa oxlint native rule edges", () => {
           {
             code: "const matches = text.startsWith(prefix) || text.endsWith(suffix);",
           },
+          {
+            code: "declare const value: { charAt(index: number): string }; const starts = value.charAt(0) === 'x';",
+          },
         ],
         invalid: [
           {
@@ -188,6 +196,22 @@ describe("corsa oxlint native rule edges", () => {
         ],
       },
     );
+  });
+
+  integrationCase("covers prefer-readonly constructor callback reassignments", () => {
+    createTester().run("prefer-readonly", corsaOxlintRules["prefer-readonly"] as never, {
+      valid: [
+        {
+          code: "class Box { private value = 0; constructor() { setTimeout(() => { this.value = 1; }); } }",
+        },
+      ],
+      invalid: [
+        {
+          code: "class Box { private value = 0; }",
+          errors: [{ messageId: "preferReadonly" }],
+        },
+      ],
+    });
   });
 });
 

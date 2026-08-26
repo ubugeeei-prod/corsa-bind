@@ -105,7 +105,7 @@ fn detect_single_element_equality(
         && callee_property_name(Some(current)).as_deref() == Some("charAt")
     {
         let target = current.child("callee").and_then(member_object)?;
-        if !is_string_like_type_texts(&target.type_texts) && target.type_texts.is_empty() {
+        if !target.type_texts.is_empty() && !is_string_like_type_texts(&target.type_texts) {
             return None;
         }
         let index = child_list(current, "arguments").first()?;

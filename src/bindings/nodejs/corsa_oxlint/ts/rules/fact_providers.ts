@@ -27,11 +27,7 @@ export interface FactSink {
   readonly fields: Record<string, unknown>;
 }
 
-export type FactProvider = (
-  context: ContextWithParserOptions,
-  node: any,
-  sink: FactSink,
-) => void;
+export type FactProvider = (context: ContextWithParserOptions, node: any, sink: FactSink) => void;
 
 // ---------------------------------------------------------------------------
 // shared helpers
@@ -88,11 +84,11 @@ export function returnTextOfFunctionTypeText(text: string): string | undefined {
     const ch = text[index];
     if (ch === "(" || ch === "<" || ch === "[" || ch === "{") {
       depth += 1;
-    } else if (ch === ")" || ch === "]" || ch === "}") {
-      depth -= 1;
     } else if (ch === "=" && text[index + 1] === ">" && depth === 0) {
       const result = text.slice(index + 2).trim();
       return result.length > 0 ? result : undefined;
+    } else if (ch === ")" || ch === ">" || ch === "]" || ch === "}") {
+      depth = Math.max(0, depth - 1);
     }
   }
   return undefined;
@@ -330,7 +326,6 @@ function splitTupleText(text: string): string[] {
   return parts;
 }
 
-
 // ---------------------------------------------------------------------------
 // no-unsafe-enum-comparison
 // ---------------------------------------------------------------------------
@@ -354,7 +349,10 @@ const TYPE_FLAG_TEMPLATE_LITERAL = 1 << 22;
 const TYPE_FLAG_STRING_MAPPING = 1 << 23;
 const TYPE_FLAG_UNION = 1 << 27;
 const TYPE_FLAG_STRING_LIKE =
-  TYPE_FLAG_STRING | TYPE_FLAG_STRING_LITERAL | TYPE_FLAG_TEMPLATE_LITERAL | TYPE_FLAG_STRING_MAPPING;
+  TYPE_FLAG_STRING |
+  TYPE_FLAG_STRING_LITERAL |
+  TYPE_FLAG_TEMPLATE_LITERAL |
+  TYPE_FLAG_STRING_MAPPING;
 const TYPE_FLAG_NUMBER_LIKE = TYPE_FLAG_NUMBER | TYPE_FLAG_NUMBER_LITERAL | TYPE_FLAG_ENUM;
 
 const ENUM_COMPARISON_OPERATORS = new Set(["<", "<=", ">", ">=", "==", "===", "!=", "!=="]);
@@ -541,7 +539,9 @@ const requireAwaitFacts: FactProvider = (context, node, _sink) => {
       texts.some((text) =>
         text
           .split("|")
-          .some((part) => part.trim().startsWith("Promise<") || part.trim().startsWith("PromiseLike<")),
+          .some(
+            (part) => part.trim().startsWith("Promise<") || part.trim().startsWith("PromiseLike<"),
+          ),
       ) || propertyNamesAt(context, argument).includes("then");
     if (thenable) {
       yieldNode.__yieldArgumentThenable = true;
@@ -667,6 +667,7 @@ function unboundMethodInfoAt(
   context: ContextWithParserOptions,
   lookupNode: any,
   ignoreStatic: boolean,
+  memberExpression?: any,
 ): UnboundMethodInfo | undefined {
   const checker = checkerFor(context);
   const symbol = checker.getSymbolAtLocation(lookupNode);
@@ -685,7 +686,7 @@ function unboundMethodInfoAt(
       thisArgIsVoid = thisTexts.length > 0 && thisTexts.every((text) => text.trim() === "void");
     }
   }
-  const isStatic = staticModifierFor(context, symbol);
+  const isStatic = staticMemberFromAst(memberExpression) ?? staticModifierFor(context, symbol);
   if (isMethod && ignoreStatic && isStatic === undefined) {
     // Reporting a static method that ignoreStatic excludes would be a false
     // positive, so degrade to silence when staticness is unknowable.
@@ -697,6 +698,85 @@ function unboundMethodInfoAt(
     thisArgIsVoid,
     isStatic: isStatic ?? false,
   };
+}
+
+function staticMemberFromAst(memberExpression: any): boolean | undefined {
+  if (
+    !memberExpression ||
+    memberExpression.type !== "MemberExpression" ||
+    memberExpression.computed
+  ) {
+    return undefined;
+  }
+  const propertyName = identifierLikeName(memberExpression.property);
+  const objectName = identifierLikeName(memberExpression.object);
+  if (!propertyName || !objectName) {
+    return undefined;
+  }
+  const classNode = findClassDeclarationByName(rootOf(memberExpression), objectName);
+  const members = Array.isArray(classNode?.body?.body) ? classNode.body.body : [];
+  for (const member of members) {
+    if (!member || typeof member !== "object") {
+      continue;
+    }
+    if (identifierLikeName(member.key) === propertyName) {
+      return member.static === true;
+    }
+  }
+  return undefined;
+}
+
+function identifierLikeName(node: any): string | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  if (node.type === "Identifier" || node.type === "PrivateIdentifier") {
+    return typeof node.name === "string" ? node.name : undefined;
+  }
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return node.value;
+  }
+  return undefined;
+}
+
+function rootOf(node: any): any {
+  let current = node;
+  while (current?.parent) {
+    current = current.parent;
+  }
+  return current;
+}
+
+function findClassDeclarationByName(root: any, name: string): any {
+  if (!root || typeof root !== "object") {
+    return undefined;
+  }
+  if (
+    (root.type === "ClassDeclaration" || root.type === "ClassExpression") &&
+    root.id?.type === "Identifier" &&
+    root.id.name === name
+  ) {
+    return root;
+  }
+  if (Array.isArray(root)) {
+    for (const item of root) {
+      const match = findClassDeclarationByName(item, name);
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
+  }
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "parent" || value === null || typeof value !== "object") {
+      continue;
+    }
+    const match = findClassDeclarationByName(value, name);
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -761,7 +841,7 @@ const unboundMethodFacts: FactProvider = (context, node, sink) => {
     if (!property || property.type !== "Identifier") {
       return;
     }
-    const info = unboundMethodInfoAt(context, property, ignoreStatic);
+    const info = unboundMethodInfoAt(context, property, ignoreStatic, node);
     if (info) {
       sink.fields.__unboundMethodInfo = { ...info };
     }
@@ -827,7 +907,6 @@ function annotateDestructuredProperties(
   }
 }
 
-
 // ---------------------------------------------------------------------------
 // no-misused-spread
 // ---------------------------------------------------------------------------
@@ -878,7 +957,10 @@ const misusedSpreadFacts: FactProvider = (context, node, sink) => {
   if (allowNames.length > 0) {
     const matches = parts.some((part) => {
       const text = renderedTypeText(context, part).trim();
-      const name = text.slice(0, text.search(/[<\s|&]/) === -1 ? text.length : text.search(/[<\s|&]/));
+      const name = text.slice(
+        0,
+        text.search(/[<\s|&]/) === -1 ? text.length : text.search(/[<\s|&]/),
+      );
       return allowNames.includes(name || text);
     });
     if (matches) {
@@ -1009,7 +1091,6 @@ const duplicateTypeConstituentsFacts: FactProvider = (context, node, sink) => {
   }
 };
 
-
 // ---------------------------------------------------------------------------
 // strict-boolean-expressions
 // ---------------------------------------------------------------------------
@@ -1075,7 +1156,11 @@ function conditionPartDescriptor(
     variant = "never";
   } else if (
     flags &
-    (TYPE_FLAG_TYPE_PARAMETER | TYPE_FLAG_INDEX | TYPE_FLAG_INDEXED_ACCESS | TYPE_FLAG_CONDITIONAL | TYPE_FLAG_SUBSTITUTION)
+    (TYPE_FLAG_TYPE_PARAMETER |
+      TYPE_FLAG_INDEX |
+      TYPE_FLAG_INDEXED_ACCESS |
+      TYPE_FLAG_CONDITIONAL |
+      TYPE_FLAG_SUBSTITUTION)
   ) {
     variant = "generic";
   } else if (
@@ -1248,8 +1333,7 @@ const switchExhaustivenessFacts: FactProvider = (context, node, sink) => {
     const defaultIndex = cases.findIndex((switchCase) => switchCase && !switchCase.test);
     if (defaultIndex !== -1) {
       const defaultCase = cases[defaultIndex];
-      const previousEnd =
-        defaultIndex > 0 ? cases[defaultIndex - 1]?.range?.[1] : blockStart + 1;
+      const previousEnd = defaultIndex > 0 ? cases[defaultIndex - 1]?.range?.[1] : blockStart + 1;
       if (typeof previousEnd === "number" && Array.isArray(defaultCase.range)) {
         const leading = source.slice(previousEnd, defaultCase.range[0]);
         try {
@@ -1288,7 +1372,6 @@ const preferNullishCoalescingFacts: FactProvider = (_context, node, sink) => {
   }
 };
 
-
 // ---------------------------------------------------------------------------
 // no-unnecessary-type-assertion
 // ---------------------------------------------------------------------------
@@ -1299,10 +1382,7 @@ const TYPE_FLAG_LITERAL =
   TYPE_FLAG_BIGINT_LITERAL |
   TYPE_FLAG_BOOLEAN_LITERAL;
 
-function nullishTopFlagLabels(
-  context: ContextWithParserOptions,
-  type: CorsaType,
-): string[] {
+function nullishTopFlagLabels(context: ContextWithParserOptions, type: CorsaType): string[] {
   const labels = new Set<string>();
   for (const part of unionPartsOfType(context, type)) {
     if (part.flags & TYPE_FLAG_ANY) labels.add("any");
@@ -1315,7 +1395,10 @@ function nullishTopFlagLabels(
 }
 
 /** Best-effort contextual type for an expression position. */
-function contextualTypeForNode(context: ContextWithParserOptions, node: any): CorsaType | undefined {
+function contextualTypeForNode(
+  context: ContextWithParserOptions,
+  node: any,
+): CorsaType | undefined {
   const parent = node.parent;
   if (!parent) {
     return undefined;
@@ -1423,7 +1506,6 @@ function letDeclarationWithoutInitializer(
   );
   return /\b(?:let|var)\b/.test(statement) && !statement.includes("=");
 }
-
 
 // ---------------------------------------------------------------------------
 // related-getter-setter-pairs
@@ -1631,8 +1713,7 @@ function nullishPartsDescriptor(
     const falsyLiteral =
       (flags & TYPE_FLAG_STRING_LITERAL && part.value === "") ||
       (flags & TYPE_FLAG_NUMBER_LITERAL && part.value === 0) ||
-      ((flags & TYPE_FLAG_BOOLEAN_LITERAL) !== 0 &&
-        renderedTypeText(context, part) === "false");
+      ((flags & TYPE_FLAG_BOOLEAN_LITERAL) !== 0 && renderedTypeText(context, part) === "false");
     if (falsyLiteral) descriptor.hasFalsyNonNullishLiteral = true;
   }
   return descriptor;
@@ -1830,7 +1911,10 @@ const promiseFunctionAsyncFacts: FactProvider = (context, node, sink) => {
   if (fn.returnType) {
     sink.fields.__hasExplicitReturnType = true;
   }
-  const texts = functionSignatureReturnTexts(context, node.type === "MethodDefinition" ? { ...fn, key: node.key, returnType: fn.returnType } : node);
+  const texts = functionSignatureReturnTexts(
+    context,
+    node.type === "MethodDefinition" ? { ...fn, key: node.key, returnType: fn.returnType } : node,
+  );
   if (texts.length > 0) {
     sink.fields.__signatureReturnTypeTexts = [texts];
   }
@@ -1929,15 +2013,15 @@ const nonNullableAssertionStyleFacts: FactProvider = (context, node, sink) => {
     return;
   }
   const expression = node.expression;
-  const expressionType = expression ? typeAtNode(context, stripChainExpression(expression)) : undefined;
+  const expressionType = expression
+    ? typeAtNode(context, stripChainExpression(expression))
+    : undefined;
   if (expressionType) {
     const parts = unionPartsOfType(context, expressionType);
     if (parts.some((part) => (part.flags & (TYPE_FLAG_ANY | TYPE_FLAG_UNKNOWN)) !== 0)) {
       sink.fields.__expressionLoose = true;
     } else {
-      sink.fields.__expressionUnionTypeTexts = parts.map((part) =>
-        renderedTypeText(context, part),
-      );
+      sink.fields.__expressionUnionTypeTexts = parts.map((part) => renderedTypeText(context, part));
     }
   }
   const assertedType = annotation ? typeAtNode(context, annotation) : undefined;
@@ -1958,7 +2042,11 @@ const nonNullableAssertionStyleFacts: FactProvider = (context, node, sink) => {
         return unionPartsOfType(context, constraint).some(
           (constraintPart) =>
             (constraintPart.flags &
-              (TYPE_FLAG_NULL | TYPE_FLAG_UNDEFINED | TYPE_FLAG_VOID | TYPE_FLAG_ANY | TYPE_FLAG_UNKNOWN)) !==
+              (TYPE_FLAG_NULL |
+                TYPE_FLAG_UNDEFINED |
+                TYPE_FLAG_VOID |
+                TYPE_FLAG_ANY |
+                TYPE_FLAG_UNKNOWN)) !==
             0,
         );
       });
@@ -1968,7 +2056,6 @@ const nonNullableAssertionStyleFacts: FactProvider = (context, node, sink) => {
     sink.fields.__higherPrecedenceThanUnary = true;
   }
 };
-
 
 // ---------------------------------------------------------------------------
 // dot-notation
@@ -2363,8 +2450,15 @@ const unnecessaryTypeConversionFacts: FactProvider = (context, node, sink) => {
   }
   if (Array.isArray(node.range)) {
     const source = context.sourceCode.text;
-    const before = source.slice(0, node.range[0]).trimEnd();
-    if (before.endsWith("(") && source.slice(node.range[1]).trimStart().startsWith(")")) {
+    let before = node.range[0] - 1;
+    while (before >= 0 && /\s/.test(source[before]!)) {
+      before -= 1;
+    }
+    let after = node.range[1];
+    while (after < source.length && /\s/.test(source[after]!)) {
+      after += 1;
+    }
+    if (source[before] === "(" && source[after] === ")") {
       sink.fields.__parenthesized = true;
     }
   }
@@ -2377,7 +2471,8 @@ const unnecessaryTypeConversionFacts: FactProvider = (context, node, sink) => {
         const path = declaration.split(".").slice(2).join(".");
         const filename = String(context.filename ?? "");
         sink.fields.__calleeIsGlobalBuiltin = !(
-          path && (path === filename || filename.endsWith(path))
+          path &&
+          (path === filename || filename.endsWith(path))
         );
       }
     }
@@ -2427,8 +2522,7 @@ const unnecessaryTypeParametersFacts: FactProvider = (context, node, sink) => {
       if (constraintText) {
         param.__constraintText = constraintText;
         param.__constraintIsComplex = !(
-          param.constraint.type === "TSTypeReference" ||
-          param.constraint.type.endsWith("Keyword")
+          param.constraint.type === "TSTypeReference" || param.constraint.type.endsWith("Keyword")
         );
       }
     }
@@ -2489,7 +2583,11 @@ const uselessDefaultAssignmentFacts: FactProvider = (context, node, sink) => {
     if (Array.isArray(left.typeAnnotation.range)) {
       sink.fields.__nameEnd = left.typeAnnotation.range[0];
     }
-  } else if (left.type === "Identifier" && typeof left.name === "string" && Array.isArray(left.range)) {
+  } else if (
+    left.type === "Identifier" &&
+    typeof left.name === "string" &&
+    Array.isArray(left.range)
+  ) {
     sink.fields.__nameEnd = left.range[0] + left.name.length;
   }
   const targetType = typeAtNode(context, left);
@@ -2545,7 +2643,12 @@ function reassignedPrivateMembers(classNode: any): Set<string> {
     let nextInsideConstructor = insideConstructor;
     if (kind === "MethodDefinition") {
       nextInsideConstructor = current.kind === "constructor";
-    } else if (typeof kind === "string" && kind.includes("Function") && !insideConstructor) {
+    } else if (
+      typeof kind === "string" &&
+      kind.includes("Function") &&
+      insideConstructor &&
+      !isConstructorFunctionValue(current)
+    ) {
       nextInsideConstructor = false;
     }
     if (kind === "AssignmentExpression" && !nextInsideConstructor) {
@@ -2553,13 +2656,6 @@ function reassignedPrivateMembers(classNode: any): Set<string> {
     }
     if (kind === "UpdateExpression" && !nextInsideConstructor) {
       record(stripChainExpression(current.argument));
-    }
-    if (
-      kind === "AssignmentExpression" &&
-      nextInsideConstructor &&
-      typeof current.__insideNestedFunction === "boolean"
-    ) {
-      record(stripChainExpression(current.left));
     }
     for (const [key, value] of Object.entries(current)) {
       if (key === "parent" || value === null || typeof value !== "object") {
@@ -2573,9 +2669,21 @@ function reassignedPrivateMembers(classNode: any): Set<string> {
   return reassigned;
 }
 
+function isConstructorFunctionValue(node: any): boolean {
+  return (
+    node?.type === "FunctionExpression" &&
+    node.parent?.type === "MethodDefinition" &&
+    node.parent.kind === "constructor" &&
+    node.parent.value === node
+  );
+}
+
 const preferReadonlyFacts: FactProvider = (_context, node, sink) => {
   const classNode = findEnclosingClass(node) ?? node.parent?.parent;
-  if (!classNode || (classNode.type !== "ClassDeclaration" && classNode.type !== "ClassExpression")) {
+  if (
+    !classNode ||
+    (classNode.type !== "ClassDeclaration" && classNode.type !== "ClassExpression")
+  ) {
     return;
   }
   const key = node.key ?? node.parameter?.left ?? node.parameter;
@@ -2663,8 +2771,7 @@ const preferReadonlyParameterTypesFacts: FactProvider = (context, node, sink) =>
     const parts = unionPartsOfType(context, type);
     const texts = parts.map((part) => renderedTypeText(context, part));
     const readonlyText = (text: string) =>
-      typeTextLooksReadonly(text) ||
-      (treatMethodsAsReadonly && /^\{[^}]*\(/.test(text.trim()));
+      typeTextLooksReadonly(text) || (treatMethodsAsReadonly && /^\{[^}]*\(/.test(text.trim()));
     if (texts.length > 0 && texts.every(readonlyText)) {
       rawParam.__typeIsReadonly = true;
       param.__typeIsReadonly = true;

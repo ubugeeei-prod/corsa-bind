@@ -2,8 +2,8 @@ use serde_json::Value;
 
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
 use crate::lint::helpers::{
-    identifier_name, is_any_like_node, is_error_like_node, is_unknown_like_node, rule_option_bool,
-    strip_chain_expression,
+    identifier_name, is_any_like_node, is_error_like_node, is_unknown_like_node,
+    rule_allow_list_names, rule_option_bool, strip_chain_expression, type_texts_match_names,
 };
 
 /// Type-aware rule that requires thrown values to be Error-like.
@@ -37,40 +37,12 @@ struct Options {
 impl Options {
     fn from_node(node: &LintNode) -> Self {
         Self {
-            allow: allow_names(node),
+            allow: rule_allow_list_names(node, "allow"),
             allow_rethrowing: rule_option_bool(node, "allowRethrowing").unwrap_or(true),
             allow_throwing_any: rule_option_bool(node, "allowThrowingAny").unwrap_or(true),
             allow_throwing_unknown: rule_option_bool(node, "allowThrowingUnknown").unwrap_or(true),
         }
     }
-}
-
-fn allow_names(node: &LintNode) -> Vec<String> {
-    let Some(entries) = node
-        .fields
-        .get("__ruleOptions")
-        .and_then(Value::as_array)
-        .and_then(|options| options.first())
-        .and_then(|options| options.get("allow"))
-        .and_then(Value::as_array)
-    else {
-        return Vec::new();
-    };
-    let mut names = Vec::new();
-    for entry in entries {
-        match entry {
-            Value::String(name) => names.push(name.clone()),
-            Value::Object(spec) => match spec.get("name") {
-                Some(Value::String(name)) => names.push(name.clone()),
-                Some(Value::Array(name_list)) => {
-                    names.extend(name_list.iter().filter_map(Value::as_str).map(String::from));
-                }
-                _ => {}
-            },
-            _ => {}
-        }
-    }
-    names
 }
 
 impl RustLintRule for OnlyThrowErrorRule {
@@ -99,7 +71,7 @@ impl RustLintRule for OnlyThrowErrorRule {
         };
         let options = Options::from_node(node);
 
-        if type_matches_allow(argument, &options.allow) {
+        if type_texts_match_names(&argument.type_texts, &options.allow) {
             return;
         }
 
@@ -127,17 +99,6 @@ impl RustLintRule for OnlyThrowErrorRule {
 
         ctx.report("object", argument.range);
     }
-}
-
-fn type_matches_allow(argument: &LintNode, allow: &[String]) -> bool {
-    if allow.is_empty() {
-        return false;
-    }
-    argument.type_texts.iter().any(|text| {
-        let name = text.trim();
-        let name = &name[..name.find('<').unwrap_or(name.len())];
-        allow.iter().any(|allowed| allowed == name)
-    })
 }
 
 fn is_undefined_value(argument: &LintNode) -> bool {
@@ -340,6 +301,19 @@ mod tests {
         assert!(
             run(&throw_statement(
                 typed_identifier("failure", "CustomFailure"),
+                Some(options),
+                None,
+            ))
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn allow_list_matches_top_level_union_member() {
+        let options = json!({ "allow": [{ "from": "file", "name": "CustomFailure" }] });
+        assert!(
+            run(&throw_statement(
+                typed_identifier("failure", "CustomFailure | undefined"),
                 Some(options),
                 None,
             ))
