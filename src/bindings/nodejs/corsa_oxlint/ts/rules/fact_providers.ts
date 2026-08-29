@@ -19,7 +19,7 @@
 import { sessionForContext } from "../registry";
 import { memberPropertyName, stripChainExpression } from "./ast";
 import { checkerFor, typeAtNode, typeTextsAtNode } from "./type_utils";
-import type { ContextWithParserOptions, CorsaType } from "../types";
+import type { ContextWithParserOptions, CorsaSymbol, CorsaType } from "../types";
 
 /** Mutable sink the providers write resolved facts into. */
 export interface FactSink {
@@ -686,7 +686,8 @@ function unboundMethodInfoAt(
       thisArgIsVoid = thisTexts.length > 0 && thisTexts.every((text) => text.trim() === "void");
     }
   }
-  const isStatic = staticMemberFromAst(memberExpression) ?? staticModifierFor(context, symbol);
+  const isStatic =
+    staticMemberFromAst(context, symbol, memberExpression) ?? staticModifierFor(context, symbol);
   if (isMethod && ignoreStatic && isStatic === undefined) {
     // Reporting a static method that ignoreStatic excludes would be a false
     // positive, so degrade to silence when staticness is unknowable.
@@ -700,7 +701,11 @@ function unboundMethodInfoAt(
   };
 }
 
-function staticMemberFromAst(memberExpression: any): boolean | undefined {
+function staticMemberFromAst(
+  context: ContextWithParserOptions,
+  symbol: CorsaSymbol,
+  memberExpression: any,
+): boolean | undefined {
   if (
     !memberExpression ||
     memberExpression.type !== "MemberExpression" ||
@@ -713,17 +718,169 @@ function staticMemberFromAst(memberExpression: any): boolean | undefined {
   if (!propertyName || !objectName) {
     return undefined;
   }
-  const classNode = findClassDeclarationByName(rootOf(memberExpression), objectName);
+  const lexicalStatic = lexicalClassStaticMember(
+    context,
+    memberExpression,
+    objectName,
+    propertyName,
+  );
+  if (lexicalStatic !== undefined) {
+    return lexicalStatic;
+  }
+  const root = rootOf(memberExpression);
+  const typeBackedStatic = staticMemberFromObjectType(
+    context,
+    memberExpression.object,
+    root,
+    propertyName,
+  );
+  if (typeBackedStatic !== undefined) {
+    return typeBackedStatic;
+  }
+  const objectSymbol = checkerFor(context).getSymbolAtLocation(memberExpression.object);
+  const objectPositions = objectSymbol ? sameFileDeclarationPositions(context, objectSymbol) : [];
+  const memberPositions = sameFileDeclarationPositions(context, symbol);
+  const memberClass =
+    memberPositions.length > 0
+      ? findClassDeclarationContainingMember(root, propertyName, memberPositions)
+      : undefined;
+  if (memberClass) {
+    const className = identifierLikeName(memberClass.id);
+    const objectMatchesClass =
+      objectPositions.some((position) => rangeContains(memberClass, position)) ||
+      (className ? objectTypeReferencesClass(context, memberExpression.object, className) : false);
+    return objectMatchesClass
+      ? (classMemberStaticness(context, memberClass, propertyName) ?? false)
+      : false;
+  }
+  const bindingPositions = [...objectPositions, ...memberPositions];
+  const objectTypeMatchesClass = objectTypeReferencesClass(
+    context,
+    memberExpression.object,
+    objectName,
+  );
+  if (bindingPositions.length === 0 && !objectTypeMatchesClass) {
+    return undefined;
+  }
+  const classNode =
+    (bindingPositions.length > 0
+      ? findClassDeclarationByNameAndPosition(root, objectName, bindingPositions)
+      : undefined) ??
+    (objectTypeMatchesClass ? uniqueClassDeclarationByName(root, objectName) : undefined);
   const members = Array.isArray(classNode?.body?.body) ? classNode.body.body : [];
   for (const member of members) {
     if (!member || typeof member !== "object") {
       continue;
     }
     if (identifierLikeName(member.key) === propertyName) {
-      return member.static === true;
+      if (
+        memberPositions.length > 0 &&
+        !memberPositions.some((position) => rangeContains(member, position))
+      ) {
+        continue;
+      }
+      return classMemberHasStaticModifier(context, member);
     }
   }
   return undefined;
+}
+
+function findClassDeclarationContainingMember(
+  root: any,
+  propertyName: string,
+  positions: readonly number[],
+): any {
+  if (!root || typeof root !== "object") {
+    return undefined;
+  }
+  if (root.type === "ClassDeclaration" || root.type === "ClassExpression") {
+    for (const member of root.body?.body ?? []) {
+      if (
+        identifierLikeName(member?.key) === propertyName &&
+        positions.some((position) => rangeContains(member, position))
+      ) {
+        return root;
+      }
+    }
+  }
+  if (Array.isArray(root)) {
+    for (const item of root) {
+      const match = findClassDeclarationContainingMember(item, propertyName, positions);
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
+  }
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "parent" || value === null || typeof value !== "object") {
+      continue;
+    }
+    const match = findClassDeclarationContainingMember(value, propertyName, positions);
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
+}
+
+function staticMemberFromObjectType(
+  context: ContextWithParserOptions,
+  objectNode: any,
+  root: any,
+  propertyName: string,
+): boolean | undefined {
+  for (const className of objectTypeClassNames(context, objectNode)) {
+    const classNode = uniqueClassDeclarationByName(root, className);
+    const staticness = classNode
+      ? classMemberStaticness(context, classNode, propertyName)
+      : undefined;
+    if (staticness !== undefined) {
+      return staticness;
+    }
+  }
+  return undefined;
+}
+
+function objectTypeClassNames(context: ContextWithParserOptions, node: any): readonly string[] {
+  const type = typeAtNode(context, node);
+  if (!type) {
+    return [];
+  }
+  const checker = checkerFor(context);
+  const texts = new Set(type.texts ?? []);
+  try {
+    texts.add(checker.typeToString(type));
+  } catch {
+    // Fall back to any text that came with the type handle.
+  }
+  const names = new Set<string>();
+  for (const text of texts) {
+    const match = /^typeof\s+([A-Za-z_$][\w$]*)$/.exec(text.trim());
+    if (match) {
+      names.add(match[1]);
+    }
+  }
+  return [...names];
+}
+
+function objectTypeReferencesClass(
+  context: ContextWithParserOptions,
+  node: any,
+  name: string,
+): boolean {
+  const type = typeAtNode(context, node);
+  if (!type) {
+    return false;
+  }
+  const expected = `typeof ${name}`;
+  const texts = new Set(type.texts ?? []);
+  try {
+    texts.add(checkerFor(context).typeToString(type));
+  } catch {
+    // Leave the AST fallback disabled when the class binding cannot be rendered.
+  }
+  return [...texts].some((text) => text.trim() === expected);
 }
 
 function identifierLikeName(node: any): string | undefined {
@@ -747,20 +904,25 @@ function rootOf(node: any): any {
   return current;
 }
 
-function findClassDeclarationByName(root: any, name: string): any {
+function findClassDeclarationByNameAndPosition(
+  root: any,
+  name: string,
+  positions: readonly number[],
+): any {
   if (!root || typeof root !== "object") {
     return undefined;
   }
   if (
     (root.type === "ClassDeclaration" || root.type === "ClassExpression") &&
     root.id?.type === "Identifier" &&
-    root.id.name === name
+    root.id.name === name &&
+    positions.some((position) => rangeContains(root, position))
   ) {
     return root;
   }
   if (Array.isArray(root)) {
     for (const item of root) {
-      const match = findClassDeclarationByName(item, name);
+      const match = findClassDeclarationByNameAndPosition(item, name, positions);
       if (match) {
         return match;
       }
@@ -771,12 +933,223 @@ function findClassDeclarationByName(root: any, name: string): any {
     if (key === "parent" || value === null || typeof value !== "object") {
       continue;
     }
-    const match = findClassDeclarationByName(value, name);
+    const match = findClassDeclarationByNameAndPosition(value, name, positions);
     if (match) {
       return match;
     }
   }
   return undefined;
+}
+
+function uniqueClassDeclarationByName(root: any, name: string): any {
+  const matches: any[] = [];
+  collectClassDeclarationsByName(root, name, matches);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function collectClassDeclarationsByName(root: any, name: string, matches: any[]): void {
+  if (!root || typeof root !== "object") {
+    return;
+  }
+  if (
+    (root.type === "ClassDeclaration" || root.type === "ClassExpression") &&
+    root.id?.type === "Identifier" &&
+    root.id.name === name
+  ) {
+    matches.push(root);
+  }
+  if (Array.isArray(root)) {
+    for (const item of root) {
+      collectClassDeclarationsByName(item, name, matches);
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "parent" || value === null || typeof value !== "object") {
+      continue;
+    }
+    collectClassDeclarationsByName(value, name, matches);
+  }
+}
+
+function sameFileDeclarationPositions(
+  context: ContextWithParserOptions,
+  symbol: CorsaSymbol,
+): readonly number[] {
+  const positions: number[] = [];
+  for (const declaration of [symbol.valueDeclaration, ...symbol.declarations]) {
+    if (!declaration) {
+      continue;
+    }
+    const [posPart, , ...pathParts] = declaration.split(".");
+    const path = pathParts.join(".");
+    const filename = String(context.filename ?? "");
+    if (!path || !(path === filename || filename.endsWith(path) || path.endsWith(filename))) {
+      continue;
+    }
+    const pos = Number(posPart);
+    if (Number.isFinite(pos) && pos >= 0 && pos <= context.sourceCode.text.length) {
+      positions.push(pos);
+    }
+  }
+  return positions;
+}
+
+function rangeContains(node: any, position: number): boolean {
+  return Array.isArray(node?.range) && node.range[0] <= position && position <= node.range[1];
+}
+
+function classMemberHasStaticModifier(context: ContextWithParserOptions, member: any): boolean {
+  if (member?.static === true) {
+    return true;
+  }
+  const rangeStart = Array.isArray(member?.range) ? member.range[0] : undefined;
+  const keyStart = Array.isArray(member?.key?.range) ? member.key.range[0] : undefined;
+  if (typeof rangeStart !== "number" || typeof keyStart !== "number" || keyStart < rangeStart) {
+    return false;
+  }
+  return /\bstatic\b/.test(context.sourceCode.text.slice(rangeStart, keyStart));
+}
+
+function lexicalClassStaticMember(
+  context: ContextWithParserOptions,
+  memberExpression: any,
+  objectName: string,
+  propertyName: string,
+): boolean | undefined {
+  for (let scope = memberExpression.parent; scope; scope = scope.parent) {
+    const classNode = classBindingInScope(scope, objectName, memberExpression.range?.[0]);
+    if (classNode !== undefined) {
+      return classMemberStaticness(context, classNode, propertyName);
+    }
+    if (hasNonClassBindingInScope(scope, objectName, memberExpression.range?.[0])) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function classBindingInScope(scope: any, name: string, before: number | undefined): any {
+  const statements = Array.isArray(scope?.body)
+    ? scope.body
+    : Array.isArray(scope?.body?.body)
+      ? scope.body.body
+      : [];
+  for (const statement of statements) {
+    if (!statementBefore(statement, before)) {
+      continue;
+    }
+    if (statement?.type === "ClassDeclaration" && statement.id?.name === name) {
+      return statement;
+    }
+    if (statement?.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const declarator of statement.declarations ?? []) {
+      if (
+        declarator?.id?.type === "Identifier" &&
+        declarator.id.name === name &&
+        (declarator.init?.type === "ClassExpression" ||
+          declarator.init?.type === "ClassDeclaration")
+      ) {
+        return declarator.init;
+      }
+    }
+  }
+  return undefined;
+}
+
+function hasNonClassBindingInScope(scope: any, name: string, before: number | undefined): boolean {
+  if (isFunctionLikeNode(scope)) {
+    for (const parameter of scope.params ?? []) {
+      if (bindingPatternContainsName(parameter, name)) {
+        return true;
+      }
+    }
+  }
+  if (scope?.type === "CatchClause" && bindingPatternContainsName(scope.param, name)) {
+    return true;
+  }
+  const statements = Array.isArray(scope?.body)
+    ? scope.body
+    : Array.isArray(scope?.body?.body)
+      ? scope.body.body
+      : [];
+  for (const statement of statements) {
+    if (!statementBefore(statement, before)) {
+      continue;
+    }
+    if (statement?.type === "FunctionDeclaration" && statement.id?.name === name) {
+      return true;
+    }
+    if (statement?.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const declarator of statement.declarations ?? []) {
+      if (
+        bindingPatternContainsName(declarator?.id, name) &&
+        declarator?.init?.type !== "ClassExpression" &&
+        declarator?.init?.type !== "ClassDeclaration"
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function classMemberStaticness(
+  context: ContextWithParserOptions,
+  classNode: any,
+  propertyName: string,
+): boolean | undefined {
+  for (const member of classNode?.body?.body ?? []) {
+    if (identifierLikeName(member?.key) === propertyName) {
+      return classMemberHasStaticModifier(context, member);
+    }
+  }
+  return undefined;
+}
+
+function statementBefore(statement: any, before: number | undefined): boolean {
+  if (before === undefined || !Array.isArray(statement?.range)) {
+    return true;
+  }
+  return statement.range[0] <= before;
+}
+
+function isFunctionLikeNode(node: any): boolean {
+  return (
+    node?.type === "FunctionDeclaration" ||
+    node?.type === "FunctionExpression" ||
+    node?.type === "ArrowFunctionExpression"
+  );
+}
+
+function bindingPatternContainsName(pattern: any, name: string): boolean {
+  if (!pattern || typeof pattern !== "object") {
+    return false;
+  }
+  if (pattern.type === "Identifier") {
+    return pattern.name === name;
+  }
+  if (pattern.type === "AssignmentPattern") {
+    return bindingPatternContainsName(pattern.left, name);
+  }
+  if (pattern.type === "RestElement") {
+    return bindingPatternContainsName(pattern.argument, name);
+  }
+  if (pattern.type === "ArrayPattern") {
+    return (pattern.elements ?? []).some((element: any) =>
+      bindingPatternContainsName(element, name),
+    );
+  }
+  if (pattern.type === "ObjectPattern") {
+    return (pattern.properties ?? []).some((property: any) =>
+      bindingPatternContainsName(property?.value ?? property?.argument, name),
+    );
+  }
+  return false;
 }
 
 /**

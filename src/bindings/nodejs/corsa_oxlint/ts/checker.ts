@@ -410,8 +410,8 @@ function uniqueTypesById(types: readonly CorsaType[]): readonly CorsaType[] {
  * Position-based type lookups resolve the touching token, so the direct query
  * for a call expression range yields the callee's type. Going through the
  * call signature mirrors what `checker.getTypeAtLocation(callExpr)` means in
- * the real TypeScript API. Overloads resolve to the first signature, which is
- * the same approximation the NewExpression path uses.
+ * the real TypeScript API. Overloads resolve through the argument-aware
+ * signature facts when the native checker can provide them.
  */
 function typeOfCallExpression(
   context: ContextWithParserOptions,
@@ -426,7 +426,15 @@ function typeOfCallExpression(
   if (!calleeType) {
     return undefined;
   }
-  const callSignature = checker.getSignaturesOfType(calleeType, SignatureKind.Call)[0];
+  const rawArgs = (node as unknown as { readonly arguments?: unknown }).arguments;
+  const args = Array.isArray(rawArgs) ? rawArgs.filter(isNode) : [];
+  const callSignature =
+    checker.getCallSignatureFacts(
+      calleeType,
+      SignatureKind.Call,
+      args.map((arg) => typeTextsAtCallArgument(context, arg, checker)),
+      explicitTypeArgumentTexts(context, node),
+    ).signature ?? checker.getSignaturesOfType(calleeType, SignatureKind.Call)[0];
   if (!callSignature) {
     return undefined;
   }
@@ -436,6 +444,73 @@ function typeOfCallExpression(
   }
   sessionForContext(context).session.rememberTypeLookupFromType(returnType, calleeType);
   return returnType;
+}
+
+function typeTextsAtCallArgument(
+  context: ContextWithParserOptions,
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): readonly string[] {
+  const values = new Set<string>();
+  const nodeType = checker.getTypeAtLocation(node);
+  collectTexts(nodeType ? (checker.getBaseTypeOfLiteralType(nodeType) ?? nodeType) : undefined);
+  const symbol = checker.getSymbolAtLocation(node);
+  const symbolType = symbol
+    ? (checker.getTypeOfSymbol(symbol) ?? checker.getDeclaredTypeOfSymbol(symbol))
+    : undefined;
+  collectTexts(
+    symbolType ? (checker.getBaseTypeOfLiteralType(symbolType) ?? symbolType) : undefined,
+  );
+  return [...values];
+
+  function collectTexts(type: CorsaType | undefined): void {
+    if (!type) {
+      return;
+    }
+    for (const text of [...(type.texts ?? []), safeTypeToString(checker, type) ?? ""]) {
+      if (text) {
+        values.add(text);
+      }
+    }
+  }
+}
+
+function explicitTypeArgumentTexts(
+  context: ContextWithParserOptions,
+  node: Node,
+): readonly string[] {
+  const explicitNodes = typeArgumentNodes(node as unknown as Record<string, unknown>);
+  if (explicitNodes.length > 0) {
+    return explicitNodes
+      .map((typeArgument) => context.sourceCode.getText(typeArgument as Node))
+      .filter((text): text is string => text.length > 0);
+  }
+  const callee = childNode(node, "callee");
+  const range = (node as Node & { readonly range?: readonly [number, number] }).range;
+  const calleeRange = (
+    callee as (Node & { readonly range?: readonly [number, number] }) | undefined
+  )?.range;
+  if (!range || !calleeRange) {
+    return [];
+  }
+  return typeArgumentRanges(context.sourceCode.text, calleeRange[1], range[1]).map(([start, end]) =>
+    context.sourceCode.text.slice(start, end),
+  );
+}
+
+function typeArgumentNodes(node: Record<string, unknown>): readonly Node[] {
+  const candidates = [
+    node.typeArguments,
+    node.typeParameters,
+    node.typeParameterInstantiation,
+  ].flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") {
+      return [];
+    }
+    const params = (candidate as { readonly params?: unknown }).params;
+    return Array.isArray(params) ? params : [];
+  });
+  return candidates.filter(isNode);
 }
 
 /**
