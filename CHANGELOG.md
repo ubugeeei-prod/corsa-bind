@@ -21,6 +21,9 @@ published versions.
 ### Added
 
 - the Node binding exposes named sync/async wrappers for project-scoped
+  `getTypesAtPositions`, so batched type lookups no longer need untyped
+  `callJson` strings. The handwritten wrapper interface is updated in the
+  same change so published `dist/index.d.mts` keeps the names.
   `getPropertyOfType` and `isTypeAssignableTo`. These are thin checker
   relations; `getSignaturesOfType` stays on `callJson` because that path
   fills `parameterTypeTexts`.

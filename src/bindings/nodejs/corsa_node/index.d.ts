@@ -28,6 +28,9 @@ export declare class CorsaApiClient {
   /** Resolves the checker type visible at a file position. */
   getTypeAtPosition(snapshot: string, project: string, file: string, position: number): any
   getTypeAtPositionAsync(snapshot: string, project: string, file: string, position: number): Promise<unknown>
+  /** Resolves checker types for source positions in one project-scoped request. */
+  getTypesAtPositions(snapshot: string, project: string, file: string, positions: Array<number>): any
+  getTypesAtPositionsAsync(snapshot: string, project: string, file: string, positions: Array<number>): Promise<unknown>
   /** Resolves the checker type for a source range using Rust-side lookup hints. */
   getTypeAtSourceRange(snapshot: string, project: string, file: string, start: number, end: number, sourceText: string, kind?: string | undefined | null): any
   getTypeAtSourceRangeAsync(snapshot: string, project: string, file: string, start: number, end: number, sourceText: string, kind?: string | undefined | null): Promise<unknown>

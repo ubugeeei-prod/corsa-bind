@@ -181,6 +181,12 @@ enum JsonTaskKind {
         file: String,
         position: u32,
     },
+    GetTypesAtPositions {
+        snapshot: String,
+        project: String,
+        file: String,
+        positions: Vec<u32>,
+    },
     GetTypeAtSourceRange {
         snapshot: String,
         project: String,
@@ -329,6 +335,21 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                     ProjectHandle::from(project.as_str()),
                     file.clone(),
                     *position,
+                ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetTypesAtPositions {
+                snapshot,
+                project,
+                file,
+                positions,
+            } => {
+                let response = block_on(self.client.get_types_at_positions(
+                    SnapshotHandle::from(snapshot.as_str()),
+                    ProjectHandle::from(project.as_str()),
+                    file.clone(),
+                    positions.clone(),
                 ))
                 .map_err(into_napi_error)?;
                 to_value(&response)
@@ -872,6 +893,44 @@ impl CorsaApiClient {
                 project,
                 file,
                 position,
+            },
+        })
+    }
+
+    /// Resolves checker types for source positions in one project-scoped request.
+    #[napi]
+    pub fn get_types_at_positions(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+        positions: Vec<u32>,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_types_at_positions(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            file,
+            positions,
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn get_types_at_positions_async(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+        positions: Vec<u32>,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetTypesAtPositions {
+                snapshot,
+                project,
+                file,
+                positions,
             },
         })
     }

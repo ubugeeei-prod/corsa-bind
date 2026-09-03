@@ -256,6 +256,11 @@ describe("CorsaApiClient", () => {
         client.isTypeAssignableTo(snapshot.snapshot, project.id, stringType.id, stringType.id),
       ).toBe(true);
       expect(
+        client
+          .getTypesAtPositions(snapshot.snapshot, project.id, "/workspace/src/index.ts", [1, 2])
+          .map((item) => item?.id),
+      ).toEqual(["t0000000000000001", "t0000000000000001"]);
+      expect(
         client.getSymbolAtPosition(snapshot.snapshot, project.id, "/workspace/src/index.ts", 1)
           ?.name,
       ).toBe("value");
@@ -361,6 +366,17 @@ describe("CorsaApiClient", () => {
       await expect(
         client.isTypeAssignableToAsync(snapshot.snapshot, project.id, stringType.id, stringType.id),
       ).resolves.toBe(true);
+      await expect(
+        client.getTypesAtPositionsAsync(
+          snapshot.snapshot,
+          project.id,
+          "/workspace/src/index.ts",
+          [1, 2],
+        ),
+      ).resolves.toEqual([
+        expect.objectContaining({ id: "t0000000000000001" }),
+        expect.objectContaining({ id: "t0000000000000001" }),
+      ]);
       await expect(
         client.getSymbolsAtPositionsAsync(
           snapshot.snapshot,

@@ -49,6 +49,18 @@ export interface CorsaApiClient {
     file: string,
     position: number,
   ): Promise<TypeResponse | null>;
+  getTypesAtPositions(
+    snapshot: string,
+    project: string,
+    file: string,
+    positions: number[],
+  ): Array<TypeResponse | null>;
+  getTypesAtPositionsAsync(
+    snapshot: string,
+    project: string,
+    file: string,
+    positions: number[],
+  ): Promise<Array<TypeResponse | null>>;
   getTypeAtSourceRange(
     snapshot: string,
     project: string,
