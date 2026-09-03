@@ -34,6 +34,18 @@ export declare class CorsaApiClient {
   /** Resolves the checker symbol visible at a file position. */
   getSymbolAtPosition(snapshot: string, project: string, file: string, position: number): any
   getSymbolAtPositionAsync(snapshot: string, project: string, file: string, position: number): Promise<unknown>
+  /** Resolves checker symbols for source positions in one project-scoped request. */
+  getSymbolsAtPositions(snapshot: string, project: string, file: string, positions: Array<number>): any
+  getSymbolsAtPositionsAsync(snapshot: string, project: string, file: string, positions: Array<number>): Promise<unknown>
+  /** Follows all aliases for a checker symbol in its owning project. */
+  getAliasedSymbol(snapshot: string, project: string, symbol: string): any
+  getAliasedSymbolAsync(snapshot: string, project: string, symbol: string): Promise<unknown>
+  /** Follows one alias edge for a checker symbol in its owning project. */
+  getImmediateAliasedSymbol(snapshot: string, project: string, symbol: string): any
+  getImmediateAliasedSymbolAsync(snapshot: string, project: string, symbol: string): Promise<unknown>
+  /** Returns the checker-owned exports of a module symbol. */
+  getExportsOfModule(snapshot: string, project: string, symbol: string): any
+  getExportsOfModuleAsync(snapshot: string, project: string, symbol: string): Promise<unknown>
   /**
    * Resolves the symbol attached to a checker type.
    *

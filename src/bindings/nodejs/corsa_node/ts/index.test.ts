@@ -253,6 +253,26 @@ describe("CorsaApiClient", () => {
         client.getSymbolAtPosition(snapshot.snapshot, project.id, "/workspace/src/index.ts", 1)
           ?.name,
       ).toBe("value");
+      expect(
+        client
+          .getSymbolsAtPositions(snapshot.snapshot, project.id, "/workspace/src/index.ts", [1, 2])
+          .map((item) => item?.name),
+      ).toEqual(["value", undefined]);
+      const positionedSymbol = client.getSymbolAtPosition(
+        snapshot.snapshot,
+        project.id,
+        "/workspace/src/index.ts",
+        1,
+      );
+      expect(
+        client.getAliasedSymbol(snapshot.snapshot, project.id, positionedSymbol!.id)?.name,
+      ).toBe("value");
+      expect(
+        client.getImmediateAliasedSymbol(snapshot.snapshot, project.id, positionedSymbol!.id)?.name,
+      ).toBe("value");
+      expect(
+        client.getExportsOfModule(snapshot.snapshot, project.id, positionedSymbol!.id),
+      ).toEqual([expect.objectContaining({ name: "value" })]);
       expect(client.getSymbolOfType(snapshot.snapshot, stringType.id, project.id)?.name).toBe(
         "value",
       );
@@ -329,6 +349,29 @@ describe("CorsaApiClient", () => {
         1,
       );
       expect(nodeType?.id).toBe("t0000000000000001");
+      await expect(
+        client.getSymbolsAtPositionsAsync(
+          snapshot.snapshot,
+          project.id,
+          "/workspace/src/index.ts",
+          [1, 2],
+        ),
+      ).resolves.toEqual([expect.objectContaining({ name: "value" }), null]);
+      const positionedSymbol = await client.getSymbolAtPositionAsync(
+        snapshot.snapshot,
+        project.id,
+        "/workspace/src/index.ts",
+        1,
+      );
+      await expect(
+        client.getAliasedSymbolAsync(snapshot.snapshot, project.id, positionedSymbol!.id),
+      ).resolves.toEqual(expect.objectContaining({ name: "value" }));
+      await expect(
+        client.getImmediateAliasedSymbolAsync(snapshot.snapshot, project.id, positionedSymbol!.id),
+      ).resolves.toEqual(expect.objectContaining({ name: "value" }));
+      await expect(
+        client.getExportsOfModuleAsync(snapshot.snapshot, project.id, positionedSymbol!.id),
+      ).resolves.toEqual([expect.objectContaining({ name: "value" })]);
       await expect(
         client.getSymbolOfTypeAsync(snapshot.snapshot, stringType.id, project.id),
       ).resolves.toEqual(expect.objectContaining({ name: "value" }));
