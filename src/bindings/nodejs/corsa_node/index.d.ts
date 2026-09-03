@@ -43,6 +43,9 @@ export declare class CorsaApiClient {
   /** Follows one alias edge for a checker symbol in its owning project. */
   getImmediateAliasedSymbol(snapshot: string, project: string, symbol: string): any
   getImmediateAliasedSymbolAsync(snapshot: string, project: string, symbol: string): Promise<unknown>
+  /** Returns the checker-owned exports of a module symbol. */
+  getExportsOfModule(snapshot: string, project: string, symbol: string): any
+  getExportsOfModuleAsync(snapshot: string, project: string, symbol: string): Promise<unknown>
   /**
    * Resolves the symbol attached to a checker type.
    *

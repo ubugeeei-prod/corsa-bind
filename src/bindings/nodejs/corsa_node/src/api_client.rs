@@ -208,6 +208,11 @@ enum JsonTaskKind {
         symbol: String,
         immediate: bool,
     },
+    GetExportsOfModule {
+        snapshot: String,
+        project: String,
+        symbol: String,
+    },
     GetSymbolOfType {
         snapshot: String,
         type_handle: String,
@@ -389,6 +394,19 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                         SymbolHandle::from(symbol.as_str()),
                     ))
                 }
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetExportsOfModule {
+                snapshot,
+                project,
+                symbol,
+            } => {
+                let response = block_on(self.client.get_exports_of_module(
+                    SnapshotHandle::from(snapshot.as_str()),
+                    ProjectHandle::from(project.as_str()),
+                    SymbolHandle::from(symbol.as_str()),
+                ))
                 .map_err(into_napi_error)?;
                 to_value(&response)
             }
@@ -1013,6 +1031,40 @@ impl CorsaApiClient {
                 project,
                 symbol,
                 immediate: true,
+            },
+        })
+    }
+
+    /// Returns the checker-owned exports of a module symbol.
+    #[napi]
+    pub fn get_exports_of_module(
+        &self,
+        snapshot: String,
+        project: String,
+        symbol: String,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_exports_of_module(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            SymbolHandle::from(symbol.as_str()),
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn get_exports_of_module_async(
+        &self,
+        snapshot: String,
+        project: String,
+        symbol: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetExportsOfModule {
+                snapshot,
+                project,
+                symbol,
             },
         })
     }

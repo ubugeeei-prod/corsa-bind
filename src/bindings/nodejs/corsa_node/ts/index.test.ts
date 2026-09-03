@@ -270,6 +270,9 @@ describe("CorsaApiClient", () => {
       expect(
         client.getImmediateAliasedSymbol(snapshot.snapshot, project.id, positionedSymbol!.id)?.name,
       ).toBe("value");
+      expect(
+        client.getExportsOfModule(snapshot.snapshot, project.id, positionedSymbol!.id),
+      ).toEqual([expect.objectContaining({ name: "value" })]);
       expect(client.getSymbolOfType(snapshot.snapshot, stringType.id, project.id)?.name).toBe(
         "value",
       );
@@ -366,6 +369,9 @@ describe("CorsaApiClient", () => {
       await expect(
         client.getImmediateAliasedSymbolAsync(snapshot.snapshot, project.id, positionedSymbol!.id),
       ).resolves.toEqual(expect.objectContaining({ name: "value" }));
+      await expect(
+        client.getExportsOfModuleAsync(snapshot.snapshot, project.id, positionedSymbol!.id),
+      ).resolves.toEqual([expect.objectContaining({ name: "value" })]);
       await expect(
         client.getSymbolOfTypeAsync(snapshot.snapshot, stringType.id, project.id),
       ).resolves.toEqual(expect.objectContaining({ name: "value" }));

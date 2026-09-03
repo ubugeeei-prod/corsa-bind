@@ -22,7 +22,8 @@ published versions.
 - the Node binding exposes named sync/async wrappers for project-scoped
   `getSymbolsAtPositions`, `getAliasedSymbol`, and
   `getImmediateAliasedSymbol`, avoiding untyped `callJson` calls on common
-  symbol-resolution hot paths.
+  symbol-resolution hot paths. The same facade now exposes
+  `getExportsOfModule` for checker-owned module export enumeration.
 - full typescript-eslint option parity for the native rule set, including `ignoreVoid`/`ignoreIIFE`/`checkThenables`/`allowForKnownSafeCalls`/`allowForKnownSafePromises` (no-floating-promises), `allow`/`allowRethrowing`/`allowThrowingAny`/`allowThrowingUnknown` (only-throw-error), `checkUnknown`/`ignoredTypeNames` (no-base-to-string), `allow` lists for restrict-template-expressions, prefer-promise-reject-errors, and prefer-readonly-parameter-types (plus `treatMethodsAsReadonly`), `allowSingleElementEquality` with the `s[0] === "a"` detection family (prefer-string-starts-ends-with), and `defaultCaseCommentPattern` (switch-exhaustiveness-check). [`docs/typescript_eslint_parity.md`](./docs/typescript_eslint_parity.md) tracks the per-rule status.
 - `no-floating-promises` and `only-throw-error` moved to the upstream message catalogs (`floating*`, `object`/`undef`); their previous local `unexpected` IDs no longer exist.
 - the corsa-oxlint checker shim exposes `getJsDocTags` and `isTypeAssignableTo`, backed by the corresponding upstream endpoints with per-snapshot caching.
