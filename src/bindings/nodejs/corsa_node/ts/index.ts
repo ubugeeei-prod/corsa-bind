@@ -79,6 +79,40 @@ export interface CorsaApiClient {
     file: string,
     position: number,
   ): Promise<SymbolResponse | null>;
+  getSymbolsAtPositions(
+    snapshot: string,
+    project: string,
+    file: string,
+    positions: number[],
+  ): Array<SymbolResponse | null>;
+  getSymbolsAtPositionsAsync(
+    snapshot: string,
+    project: string,
+    file: string,
+    positions: number[],
+  ): Promise<Array<SymbolResponse | null>>;
+  getAliasedSymbol(snapshot: string, project: string, symbol: string): SymbolResponse | null;
+  getAliasedSymbolAsync(
+    snapshot: string,
+    project: string,
+    symbol: string,
+  ): Promise<SymbolResponse | null>;
+  getImmediateAliasedSymbol(
+    snapshot: string,
+    project: string,
+    symbol: string,
+  ): SymbolResponse | null;
+  getImmediateAliasedSymbolAsync(
+    snapshot: string,
+    project: string,
+    symbol: string,
+  ): Promise<SymbolResponse | null>;
+  getExportsOfModule(snapshot: string, project: string, symbol: string): SymbolResponse[];
+  getExportsOfModuleAsync(
+    snapshot: string,
+    project: string,
+    symbol: string,
+  ): Promise<SymbolResponse[]>;
   getSymbolOfType(snapshot: string, typeHandle: string, project?: string): SymbolResponse | null;
   getSymbolOfTypeAsync(
     snapshot: string,
