@@ -361,13 +361,12 @@ describe("CorsaApiClient", () => {
       );
       expect(nodeType?.id).toBe("t0000000000000001");
       await expect(
-<<<<<<< HEAD
         client.getPropertyOfTypeAsync(snapshot.snapshot, project.id, stringType.id, "length"),
       ).resolves.toEqual(expect.objectContaining({ name: "value" }));
       await expect(
         client.isTypeAssignableToAsync(snapshot.snapshot, project.id, stringType.id, stringType.id),
       ).resolves.toBe(true);
-=======
+      await expect(
         client.getTypesAtPositionsAsync(
           snapshot.snapshot,
           project.id,
@@ -378,7 +377,6 @@ describe("CorsaApiClient", () => {
         expect.objectContaining({ id: "t0000000000000001" }),
         expect.objectContaining({ id: "t0000000000000001" }),
       ]);
->>>>>>> 5aa936a (feat(napi): expose batched getTypesAtPositions)
       await expect(
         client.getSymbolsAtPositionsAsync(
           snapshot.snapshot,
