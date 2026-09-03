@@ -9,6 +9,7 @@ published versions.
 
 ### Fixed
 
+- published Node wrapper types now declare the 1.13.0 named methods `getSymbolsAtPositions`, `getAliasedSymbol`, `getImmediateAliasedSymbol`, and `getExportsOfModule`. The N-API binary already exposed them; `dist/index.d.mts` lagged because `ts/index.ts` was not updated.
 - the JSON driver mirrored numeric handles into `objectId` for only 26 of the 33 upstream methods that read it, so `getReturnTypeOfSignature`, `getApparentType`, `getApparentPropertiesOfType`, `getNonNullableType`, `getReducedType`, `getConstraintOfTypeParameter`, and `getDefaultFromTypeParameter` silently returned `null` on stable TypeScript 7 runtimes. `isTypeAssignableTo`'s `source`/`target` handles are now numeric-encoded as well.
 - `checker.getTypeAtLocation(callExpression)` resolved the touching token (the callee leaf) instead of the call result; call expressions now resolve through the callee's call signatures, `await` expressions unwrap the promise reference, and compound (`typeof A | typeof B`) constructor types keep their compound instance types through `new` expressions.
 - 33 of the 59 native rules were authored against a checker-fact vocabulary the JS bridge never produced, leaving whole rule paths silent in production (only synthetic-fact unit tests exercised them). Every rule's documented facts are now wired through per-rule fact providers, and all 59 rules carry `RuleTester` valid/invalid suites that run against the real pinned binary.
