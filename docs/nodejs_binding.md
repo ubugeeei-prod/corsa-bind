@@ -160,6 +160,7 @@ All of these have `*Async` counterparts.
 | `getSourceFile(snapshot, project, file)`                    | `Buffer \| null`                               |
 | `getStringType(snapshot, project)`                          | `TypeResponse`                                 |
 | `getTypeAtPosition(snapshot, project, file, position)`      | `TypeResponse \| null`                         |
+| `getTypesAtPositions(snapshot, project, file, positions)`   | type response list                             |
 | `getSymbolAtPosition(snapshot, project, file, position)`    | symbol response                                |
 | `getSymbolsAtPositions(snapshot, project, file, positions)` | symbol response list                           |
 | `getAliasedSymbol(snapshot, project, symbol)`               | fully resolved symbol or unknown symbol        |
@@ -173,7 +174,8 @@ All of these have `*Async` counterparts.
 | `typeToString(snapshot, project, type)`                     | `string`                                       |
 
 The batch form performs one checker round trip for all positions in one source
-file. Alias methods require an alias symbol handle; check the returned symbol's
+file. `getTypesAtPositions` is the type-side counterpart of
+`getSymbolsAtPositions`. Alias methods require an alias symbol handle; check the returned symbol's
 flags before calling `getAliasedSymbol`, matching the upstream checker contract.
 Module exports likewise use the checker symbol handle rather than a source name.
 For endpoints without a typed wrapper, drop down to the raw calls below.
