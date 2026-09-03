@@ -161,11 +161,17 @@ All of these have `*Async` counterparts.
 | `getStringType(snapshot, project)`                       | `TypeResponse`                                 |
 | `getTypeAtPosition(snapshot, project, file, position)`   | `TypeResponse \| null`                         |
 | `getSymbolAtPosition(snapshot, project, file, position)` | symbol response                                |
+| `getSymbolsAtPositions(snapshot, project, file, positions)` | symbol response list                        |
+| `getAliasedSymbol(snapshot, project, symbol)`            | fully resolved symbol or unknown symbol        |
+| `getImmediateAliasedSymbol(snapshot, project, symbol)`   | next alias target or `null`                     |
 | `getTypeArguments(snapshot, project, type)`              | type list                                      |
 | `getTypeOfSymbol(snapshot, project, symbol)`             | `TypeResponse \| null`                         |
 | `getDeclaredTypeOfSymbol(snapshot, project, symbol)`     | `TypeResponse \| null`                         |
 | `typeToString(snapshot, project, type)`                  | `string`                                       |
 
+The batch form performs one checker round trip for all positions in one source
+file. Alias methods require an alias symbol handle; check the returned symbol's
+flags before calling `getAliasedSymbol`, matching the upstream checker contract.
 For endpoints without a typed wrapper, drop down to the raw calls below.
 
 ## Raw calls (escape hatch)

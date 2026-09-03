@@ -196,6 +196,18 @@ enum JsonTaskKind {
         file: String,
         position: u32,
     },
+    GetSymbolsAtPositions {
+        snapshot: String,
+        project: String,
+        file: String,
+        positions: Vec<u32>,
+    },
+    GetAliasedSymbol {
+        snapshot: String,
+        project: String,
+        symbol: String,
+        immediate: bool,
+    },
     GetSymbolOfType {
         snapshot: String,
         type_handle: String,
@@ -340,6 +352,43 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                     file.clone(),
                     *position,
                 ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetSymbolsAtPositions {
+                snapshot,
+                project,
+                file,
+                positions,
+            } => {
+                let response = block_on(self.client.get_symbols_at_positions(
+                    SnapshotHandle::from(snapshot.as_str()),
+                    ProjectHandle::from(project.as_str()),
+                    file.clone(),
+                    positions.clone(),
+                ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetAliasedSymbol {
+                snapshot,
+                project,
+                symbol,
+                immediate,
+            } => {
+                let response = if *immediate {
+                    block_on(self.client.get_immediate_aliased_symbol(
+                        SnapshotHandle::from(snapshot.as_str()),
+                        ProjectHandle::from(project.as_str()),
+                        SymbolHandle::from(symbol.as_str()),
+                    ))
+                } else {
+                    block_on(self.client.get_aliased_symbol(
+                        SnapshotHandle::from(snapshot.as_str()),
+                        ProjectHandle::from(project.as_str()),
+                        SymbolHandle::from(symbol.as_str()),
+                    ))
+                }
                 .map_err(into_napi_error)?;
                 to_value(&response)
             }
@@ -856,6 +905,114 @@ impl CorsaApiClient {
                 project,
                 file,
                 position,
+            },
+        })
+    }
+
+    /// Resolves checker symbols for source positions in one project-scoped request.
+    #[napi]
+    pub fn get_symbols_at_positions(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+        positions: Vec<u32>,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_symbols_at_positions(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            file,
+            positions,
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn get_symbols_at_positions_async(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+        positions: Vec<u32>,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetSymbolsAtPositions {
+                snapshot,
+                project,
+                file,
+                positions,
+            },
+        })
+    }
+
+    /// Follows all aliases for a checker symbol in its owning project.
+    #[napi]
+    pub fn get_aliased_symbol(
+        &self,
+        snapshot: String,
+        project: String,
+        symbol: String,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_aliased_symbol(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            SymbolHandle::from(symbol.as_str()),
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn get_aliased_symbol_async(
+        &self,
+        snapshot: String,
+        project: String,
+        symbol: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetAliasedSymbol {
+                snapshot,
+                project,
+                symbol,
+                immediate: false,
+            },
+        })
+    }
+
+    /// Follows one alias edge for a checker symbol in its owning project.
+    #[napi]
+    pub fn get_immediate_aliased_symbol(
+        &self,
+        snapshot: String,
+        project: String,
+        symbol: String,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_immediate_aliased_symbol(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            SymbolHandle::from(symbol.as_str()),
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn get_immediate_aliased_symbol_async(
+        &self,
+        snapshot: String,
+        project: String,
+        symbol: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetAliasedSymbol {
+                snapshot,
+                project,
+                symbol,
+                immediate: true,
             },
         })
     }
