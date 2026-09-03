@@ -117,6 +117,30 @@ export interface CorsaApiClient {
     end: number,
     sourceText: string,
   ): Promise<TypeResponse[]>;
+  getPropertyOfType(
+    snapshot: string,
+    project: string,
+    typeHandle: string,
+    name: string,
+  ): SymbolResponse | null;
+  getPropertyOfTypeAsync(
+    snapshot: string,
+    project: string,
+    typeHandle: string,
+    name: string,
+  ): Promise<SymbolResponse | null>;
+  isTypeAssignableTo(
+    snapshot: string,
+    project: string,
+    source: string,
+    target: string,
+  ): boolean;
+  isTypeAssignableToAsync(
+    snapshot: string,
+    project: string,
+    source: string,
+    target: string,
+  ): Promise<boolean>;
   getConstraintOfType(snapshot: string, project: string, typeHandle: string): TypeResponse | null;
   getConstraintOfTypeAsync(
     snapshot: string,

@@ -165,6 +165,8 @@ All of these have `*Async` counterparts.
 | `getAliasedSymbol(snapshot, project, symbol)`               | fully resolved symbol or unknown symbol        |
 | `getImmediateAliasedSymbol(snapshot, project, symbol)`      | next alias target or `null`                    |
 | `getExportsOfModule(snapshot, project, symbol)`             | checker-owned module exports                   |
+| `getPropertyOfType(snapshot, project, type, name)`          | symbol response or `null`                      |
+| `isTypeAssignableTo(snapshot, project, source, target)`     | `boolean`                                      |
 | `getTypeArguments(snapshot, project, type)`                 | type list                                      |
 | `getTypeOfSymbol(snapshot, project, symbol)`                | `TypeResponse \| null`                         |
 | `getDeclaredTypeOfSymbol(snapshot, project, symbol)`        | `TypeResponse \| null`                         |

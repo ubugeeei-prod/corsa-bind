@@ -249,6 +249,18 @@ enum JsonTaskKind {
         project: String,
         type_handle: String,
     },
+    GetPropertyOfType {
+        snapshot: String,
+        project: String,
+        type_handle: String,
+        name: String,
+    },
+    IsTypeAssignableTo {
+        snapshot: String,
+        project: String,
+        source: String,
+        target: String,
+    },
     TypeToString {
         snapshot: String,
         project: String,
@@ -491,6 +503,36 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                     SnapshotHandle::from(snapshot.as_str()),
                     ProjectHandle::from(project.as_str()),
                     SymbolHandle::from(symbol.as_str()),
+                ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::GetPropertyOfType {
+                snapshot,
+                project,
+                type_handle,
+                name,
+            } => {
+                let response = block_on(self.client.get_property_of_type(
+                    SnapshotHandle::from(snapshot.as_str()),
+                    ProjectHandle::from(project.as_str()),
+                    TypeHandle::from(type_handle.as_str()),
+                    name.clone(),
+                ))
+                .map_err(into_napi_error)?;
+                to_value(&response)
+            }
+            JsonTaskKind::IsTypeAssignableTo {
+                snapshot,
+                project,
+                source,
+                target,
+            } => {
+                let response = block_on(self.client.is_type_assignable_to(
+                    SnapshotHandle::from(snapshot.as_str()),
+                    ProjectHandle::from(project.as_str()),
+                    TypeHandle::from(source.as_str()),
+                    TypeHandle::from(target.as_str()),
                 ))
                 .map_err(into_napi_error)?;
                 to_value(&response)
@@ -1202,6 +1244,82 @@ impl CorsaApiClient {
                 start,
                 end,
                 source_text,
+            },
+        })
+    }
+
+    /// Resolves a named property on a checker type in its owning project.
+    #[napi]
+    pub fn get_property_of_type(
+        &self,
+        snapshot: String,
+        project: String,
+        type_handle: String,
+        name: String,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_property_of_type(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            TypeHandle::from(type_handle.as_str()),
+            name,
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn get_property_of_type_async(
+        &self,
+        snapshot: String,
+        project: String,
+        type_handle: String,
+        name: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetPropertyOfType {
+                snapshot,
+                project,
+                type_handle,
+                name,
+            },
+        })
+    }
+
+    /// Returns whether `source` is assignable to `target` in the owning project.
+    #[napi]
+    pub fn is_type_assignable_to(
+        &self,
+        snapshot: String,
+        project: String,
+        source: String,
+        target: String,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.is_type_assignable_to(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            TypeHandle::from(source.as_str()),
+            TypeHandle::from(target.as_str()),
+        ))
+        .map_err(into_napi_error)?;
+        to_value(&response)
+    }
+
+    #[napi]
+    pub fn is_type_assignable_to_async(
+        &self,
+        snapshot: String,
+        project: String,
+        source: String,
+        target: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::IsTypeAssignableTo {
+                snapshot,
+                project,
+                source,
+                target,
             },
         })
     }

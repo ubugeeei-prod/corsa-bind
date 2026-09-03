@@ -20,6 +20,10 @@ published versions.
 ### Added
 
 - the Node binding exposes named sync/async wrappers for project-scoped
+  `getPropertyOfType` and `isTypeAssignableTo`. These are thin checker
+  relations; `getSignaturesOfType` stays on `callJson` because that path
+  fills `parameterTypeTexts`.
+- the Node binding exposes named sync/async wrappers for project-scoped
   `getSymbolsAtPositions`, `getAliasedSymbol`, and
   `getImmediateAliasedSymbol`, avoiding untyped `callJson` calls on common
   symbol-resolution hot paths. The same facade now exposes

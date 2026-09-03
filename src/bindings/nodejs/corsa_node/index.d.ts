@@ -60,6 +60,12 @@ export declare class CorsaApiClient {
   getTypeArgumentsAtSourceRange(snapshot: string, project: string, typeHandle: string, objectFlags: number | undefined | null, file: string, start: number, end: number, sourceText: string): any
   getTypeArgumentsAsync(snapshot: string, project: string, typeHandle: string, objectFlags?: number | undefined | null): Promise<unknown>
   getTypeArgumentsAtSourceRangeAsync(snapshot: string, project: string, typeHandle: string, objectFlags: number | undefined | null, file: string, start: number, end: number, sourceText: string): Promise<unknown>
+  /** Resolves a named property on a checker type in its owning project. */
+  getPropertyOfType(snapshot: string, project: string, typeHandle: string, name: string): any
+  getPropertyOfTypeAsync(snapshot: string, project: string, typeHandle: string, name: string): Promise<unknown>
+  /** Returns whether `source` is assignable to `target` in the owning project. */
+  isTypeAssignableTo(snapshot: string, project: string, source: string, target: string): any
+  isTypeAssignableToAsync(snapshot: string, project: string, source: string, target: string): Promise<unknown>
   /** Resolves a type constraint using Corsa relation endpoints. */
   getConstraintOfType(snapshot: string, project: string, typeHandle: string): any
   getConstraintOfTypeAsync(snapshot: string, project: string, typeHandle: string): Promise<unknown>
