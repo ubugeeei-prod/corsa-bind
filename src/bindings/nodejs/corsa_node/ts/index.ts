@@ -129,12 +129,7 @@ export interface CorsaApiClient {
     typeHandle: string,
     name: string,
   ): Promise<SymbolResponse | null>;
-  isTypeAssignableTo(
-    snapshot: string,
-    project: string,
-    source: string,
-    target: string,
-  ): boolean;
+  isTypeAssignableTo(snapshot: string, project: string, source: string, target: string): boolean;
   isTypeAssignableToAsync(
     snapshot: string,
     project: string,
