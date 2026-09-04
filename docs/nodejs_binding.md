@@ -181,10 +181,10 @@ Module exports likewise use the checker symbol handle rather than a source name.
 For endpoints without a typed wrapper, drop down to the raw calls below.
 
 For N+1-prone checker workflows, keep these primitives but run them through the
-batch helpers:
+orchestrator helpers:
 
 ```ts
-import { resolveCheckerBatch } from "@corsa-bind/napi";
+import { resolveCheckerBatch } from "@corsa-bind/napi/orchestrator";
 
 const facts = resolveCheckerBatch(client, { snapshot, project: project.id }, [
   { key: "nodes", kind: "typesAtPositions", file, positions: nodeStarts },
@@ -197,8 +197,13 @@ const facts = resolveCheckerBatch(client, { snapshot, project: project.id }, [
 `getTypesOfSymbols` for symbol-type fan-out, and sends the remaining relation
 queries (`propertyOfType`, `typeArguments`, `constraintOfType`, alias
 resolution, assignability, and similar follow-ups) through upstream
-`batchRequests`. Use `batchCheckerRequests` when you need the lower-level raw
-batch primitive directly.
+`batchRequests`. Use `batchCheckerRequests` from `@corsa-bind/napi` when you
+need the lower-level raw batch primitive directly.
+
+Warning: `resolveCheckerBatch` is still exported from `@corsa-bind/napi` for
+compatibility and warns once at runtime. New code should import it from
+`@corsa-bind/napi/orchestrator` so the root entry point stays close to the
+upstream binding surface.
 
 ## Raw calls (escape hatch)
 

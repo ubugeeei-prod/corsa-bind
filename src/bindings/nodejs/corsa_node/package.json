@@ -28,6 +28,13 @@
       "bun": "./dist/index.mjs",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./orchestrator": {
+      "types": "./dist/orchestrator.d.mts",
+      "deno": "./dist/orchestrator.mjs",
+      "bun": "./dist/orchestrator.mjs",
+      "import": "./dist/orchestrator.mjs",
+      "default": "./dist/orchestrator.mjs"
     }
   },
   "publishConfig": {

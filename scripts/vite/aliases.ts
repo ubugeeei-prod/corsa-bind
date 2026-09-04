@@ -10,6 +10,7 @@ import { corsaOxlintDir, nodePackageDir } from "./paths.ts";
  */
 export const aliases = {
   "@corsa-bind/napi": resolve(nodePackageDir, "ts/index.ts"),
+  "@corsa-bind/napi/orchestrator": resolve(nodePackageDir, "ts/orchestrator.ts"),
   "corsa-oxlint/ast-utils": resolve(corsaOxlintDir, "ts/ast_utils.ts"),
   "corsa-oxlint/compat": resolve(corsaOxlintDir, "ts/oxlint_compat.ts"),
   "corsa-oxlint/eslint-utils": resolve(corsaOxlintDir, "ts/oxlint_utils.ts"),

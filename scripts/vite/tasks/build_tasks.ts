@@ -56,14 +56,14 @@ export const buildTasks = {
   build_wrapper: {
     cache: false,
     command:
-      "vp pack index.ts types.ts --dts --format esm --out-dir ../dist --sourcemap --tsconfig ../tsconfig.json --root . --deps.neverBundle ../index.js",
+      "vp pack index.ts orchestrator.ts checker_batch.ts types.ts orchestrator_types.ts --dts --format esm --out-dir ../dist --sourcemap --tsconfig ../tsconfig.json --root . --deps.neverBundle ../index.js",
     cwd: "src/bindings/nodejs/corsa_node/ts",
     dependsOn: ["build_node_release"],
   },
   build_wrapper_ci: {
     cache: false,
     command:
-      "vp pack index.ts types.ts --dts --format esm --out-dir ../dist --sourcemap --tsconfig ../tsconfig.json --root . --deps.neverBundle ../index.js",
+      "vp pack index.ts orchestrator.ts checker_batch.ts types.ts orchestrator_types.ts --dts --format esm --out-dir ../dist --sourcemap --tsconfig ../tsconfig.json --root . --deps.neverBundle ../index.js",
     cwd: "src/bindings/nodejs/corsa_node/ts",
     dependsOn: ["build_node_debug"],
   },

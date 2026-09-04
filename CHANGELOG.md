@@ -21,12 +21,15 @@ published versions.
 ### Added
 
 - the Node binding adds `batchCheckerRequests` / `batchCheckerRequestsAsync`
-  for upstream `batchRequests` and `resolveCheckerBatch` /
-  `resolveCheckerBatchAsync` for project-scoped checker hot paths. The higher
-  layer coalesces repeated position queries, batches symbol-to-type fan-out via
-  `getTypesOfSymbols`, and keeps follow-up relation primitives such as
-  `getPropertyOfType`, `getTypeArguments`, `getConstraintOfType`, and
-  `isTypeAssignableTo` in one transport round trip.
+  for the upstream `batchRequests` primitive, and the
+  `@corsa-bind/napi/orchestrator` entry point adds `resolveCheckerBatch` /
+  `resolveCheckerBatchAsync` for project-scoped checker hot paths. The
+  orchestrator helper coalesces repeated position queries, batches
+  symbol-to-type fan-out via `getTypesOfSymbols`, and keeps follow-up relation
+  primitives such as `getPropertyOfType`, `getTypeArguments`,
+  `getConstraintOfType`, and `isTypeAssignableTo` in one transport round trip.
+  The root `resolveCheckerBatch` exports remain as compatibility shims with a
+  one-time runtime warning.
 - the Node binding exposes named sync/async wrappers for project-scoped
   `getTypesAtPositions`, so batched type lookups no longer need untyped
   `callJson` strings. The handwritten wrapper interface is updated in the
