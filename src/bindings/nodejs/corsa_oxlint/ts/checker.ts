@@ -90,10 +90,7 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
         }
       }
       if (kind === "ConditionalExpression") {
-        const resolved = typeOfConditionalExpression(node as Node, this);
-        if (resolved) {
-          return resolved;
-        }
+        return typeOfConditionalExpression(node as Node, this);
       }
       if (typeNodeNeedsDeclarationLookup(node as Node)) {
         const resolved = typeOfEnclosingDeclarationAnnotation(node as Node, this);
@@ -637,11 +634,10 @@ function typeOfConditionalExpression(
   }
   const consequentType = checker.getTypeAtLocation(consequent);
   const alternateType = checker.getTypeAtLocation(alternate);
-  return syntheticCompoundType(
-    "union",
-    [consequentType, alternateType].filter((type): type is CorsaType => type !== undefined),
-    checker,
-  );
+  if (!consequentType || !alternateType) {
+    return undefined;
+  }
+  return syntheticCompoundType("union", [consequentType, alternateType], checker);
 }
 
 function typeOfEnclosingDeclarationAnnotation(
