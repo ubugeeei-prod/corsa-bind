@@ -26,6 +26,56 @@ The native runner is still the main source of truth for transport-level speed be
 
 For the reasoning behind these benchmark layers, implementation notes, and extension tips, see [benchmarking_guide.md](./benchmarking_guide.md).
 
+## Checker Query Performance Tips
+
+Type-aware lint rules and editor integrations usually spend time in small
+checker lookups after a snapshot is already warm. Avoid N+1 loops over
+individual relation primitives in those hot paths.
+
+Keep using the single-call primitives for one-off scripts:
+
+```ts
+const type = client.getTypeAtPosition(snapshot, project, file, position);
+const symbol = client.getPropertyOfType(snapshot, project, type.id, "value");
+```
+
+For repeated work in the same `(snapshot, project)`, prefer the batch helpers
+from `@corsa-bind/napi`:
+
+```ts
+import { resolveCheckerBatch } from "@corsa-bind/napi";
+
+const facts = resolveCheckerBatch(client, { snapshot, project: project.id }, [
+  { key: "nodes", kind: "typesAtPositions", file, positions },
+  { key: "symbols", kind: "symbolsAtPositions", file, positions },
+  { key: "callable", kind: "propertyOfType", type: candidateType, name: "call" },
+  { key: "safe", kind: "isTypeAssignableTo", source: sourceType, target: targetType },
+]);
+```
+
+`resolveCheckerBatch` reduces common fan-out before it crosses the process
+boundary:
+
+- repeated `typeAtPosition` and `symbolAtPosition` queries are grouped by file
+  and sent as `getTypesAtPositions` / `getSymbolsAtPositions`;
+- `typeOfSymbol` and `typesOfSymbols` fan-out is sent through
+  `getTypesOfSymbols`;
+- follow-up relation queries such as `getPropertyOfType`,
+  `getDeclaredTypeOfSymbol`, `getSymbolOfType`, `getTypeArguments`,
+  `getConstraintOfType`, alias resolution, module exports,
+  `isTypeAssignableTo`, and `typeToString` share one upstream `batchRequests`
+  transport round trip.
+
+Use `batchCheckerRequests` when you already know the exact upstream endpoint
+sequence and want the raw `batchRequests` primitive. Keep all requests in the
+same snapshot and project unless an endpoint explicitly does not use one; mixing
+snapshots in a single batch makes handle lifetimes harder to reason about and
+usually defeats cache locality.
+
+The batching helpers do not replace `updateSnapshot`. Reuse a warm snapshot,
+batch the checker facts needed for the current rule/editor pass, and release
+the snapshot only after all follow-up relation handles have been consumed.
+
 ## Tooling Runner
 
 The tooling benchmark is the `bench_tooling_compare` binary. It tracks two workloads:

@@ -53,6 +53,7 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
                 "currentDirectory": cwd,
             })),
             "describeCapabilities" => Some(common::capabilities()),
+            "batchRequests" => Some(batch_requests(params)),
             "parseConfigFile" => Some(parse_config(&mut reader, &mut writer, &callbacks, params)?),
             "updateSnapshot" => Some(common::snapshot_from_update_params(
                 "/workspace/tsconfig.json",
@@ -214,6 +215,77 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             jsonrpc::write_message(&mut writer, &RawMessage::response(id, response))?;
         }
     }
+}
+
+fn batch_requests(params: Value) -> Value {
+    let responses = params
+        .get("requests")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|request| {
+            let method = request
+                .get("method")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let params = request.get("params").cloned().unwrap_or(Value::Null);
+            let mut response = json!({ "method": method });
+            if let Some(error) = missing_project_error(&params) {
+                response["error"] = Value::String(error.message.to_string());
+                return response;
+            }
+            response["result"] = batch_request_result(method, &params).unwrap_or(Value::Null);
+            response
+        })
+        .collect::<Vec<_>>();
+    json!({ "responses": responses })
+}
+
+fn batch_request_result(method: &str, params: &Value) -> Option<Value> {
+    match method {
+        "getSymbolsAtPositions" | "getSymbolsAtLocations" => {
+            Some(json!([common::symbol("value"), Value::Null]))
+        }
+        "getTypeOfSymbol"
+        | "getDeclaredTypeOfSymbol"
+        | "getTypeAtPosition"
+        | "getTypeAtLocation"
+        | "getConstraintOfType" => Some(common::type_response("t0000000000000001")),
+        "getTypeArguments" => Some(repeated_type_responses(1)),
+        "getTypesOfSymbols" | "getTypeAtLocations" | "getTypesAtPositions" => {
+            Some(repeated_type_responses(batch_request_item_count(params)))
+        }
+        "getSymbolOfType"
+        | "getAliasedSymbol"
+        | "getImmediateAliasedSymbol"
+        | "getPropertyOfType" => Some(common::symbol("value")),
+        "getExportsOfModule" => Some(json!([common::symbol("value")])),
+        "isTypeAssignableTo" => Some(json!(true)),
+        "typeToString" => Some(json!("type:string")),
+        _ => None,
+    }
+}
+
+fn batch_request_item_count(params: &Value) -> usize {
+    params
+        .as_object()
+        .and_then(|value| {
+            value
+                .get("symbols")
+                .or_else(|| value.get("locations"))
+                .or_else(|| value.get("positions"))
+                .and_then(Value::as_array)
+        })
+        .map(Vec::len)
+        .unwrap_or(1)
+}
+
+fn repeated_type_responses(count: usize) -> Value {
+    Value::Array(
+        (0..count)
+            .map(|_| common::type_response("t0000000000000001"))
+            .collect(),
+    )
 }
 
 /// Mirrors upstream's per-project handle resolution so project-less lookups
