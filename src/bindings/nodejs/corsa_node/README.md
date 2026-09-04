@@ -30,6 +30,7 @@ bun run ./main.ts
 
 - native JS bindings for the `corsa` API and LSP surface
 - an ESM TypeScript wrapper under `dist/`
+- an `@corsa-bind/napi/orchestrator` subpath for workflow-level JS helpers
 - no bundled Corsa executable
 
 ## Runtime requirement
@@ -44,6 +45,10 @@ The wrapper exposes Promise-based methods such as `spawnAsync`,
 and `closeAsync` for production Node services and editor integrations. The
 older synchronous methods remain available for short scripts and latency-bounded
 tooling, but they run on the JavaScript call path.
+
+The root entry point intentionally stays close to the upstream binding surface.
+Workflow strategies such as checker query coalescing live under
+`@corsa-bind/napi/orchestrator`.
 
 ## Development
 

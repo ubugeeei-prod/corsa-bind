@@ -40,10 +40,10 @@ const symbol = client.getPropertyOfType(snapshot, project, type.id, "value");
 ```
 
 For repeated work in the same `(snapshot, project)`, prefer the batch helpers
-from `@corsa-bind/napi`:
+from the orchestrator entry point:
 
 ```ts
-import { resolveCheckerBatch } from "@corsa-bind/napi";
+import { resolveCheckerBatch } from "@corsa-bind/napi/orchestrator";
 
 const facts = resolveCheckerBatch(client, { snapshot, project: project.id }, [
   { key: "nodes", kind: "typesAtPositions", file, positions },
@@ -67,10 +67,14 @@ boundary:
   transport round trip.
 
 Use `batchCheckerRequests` when you already know the exact upstream endpoint
-sequence and want the raw `batchRequests` primitive. Keep all requests in the
-same snapshot and project unless an endpoint explicitly does not use one; mixing
-snapshots in a single batch makes handle lifetimes harder to reason about and
-usually defeats cache locality.
+sequence and want the raw `batchRequests` primitive from `@corsa-bind/napi`.
+Keep all requests in the same snapshot and project unless an endpoint
+explicitly does not use one; mixing snapshots in a single batch makes handle
+lifetimes harder to reason about and usually defeats cache locality.
+
+Warning: the root `@corsa-bind/napi` export still keeps `resolveCheckerBatch`
+as a compatibility shim, but it warns once at runtime. Import orchestrated
+query strategies from `@corsa-bind/napi/orchestrator` in new code.
 
 The batching helpers do not replace `updateSnapshot`. Reuse a warm snapshot,
 batch the checker facts needed for the current rule/editor pass, and release

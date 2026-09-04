@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CorsaApiClient,
@@ -17,13 +17,14 @@ import {
   isStringArrayLikeTypeTexts,
   isPromiseLikeTypeTexts,
   nativeLintRuleMetas,
+  resolveCheckerBatch as resolveCheckerBatchFromRoot,
   runNativeLintRule,
-  resolveCheckerBatch,
   splitTopLevelTypeText,
   splitTypeText,
   isUnsafeAssignment,
   isUnsafeReturn,
 } from "./index";
+import { resolveCheckerBatch } from "./orchestrator";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
@@ -325,6 +326,52 @@ describe("CorsaApiClient", () => {
       client.releaseHandle(snapshot.snapshot);
     } finally {
       client.close();
+    }
+  });
+
+  it("keeps the root checker batch resolver as a warned compatibility shim", () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const client = {
+      callJson<T>(method: string, params?: unknown): T {
+        expect(method).toBe("batchRequests");
+        const requests = (params as { requests: Array<{ method: string }> }).requests;
+        return {
+          responses: requests.map((request) => ({
+            method: request.method,
+            result: {
+              id: "s0000000000000001",
+              name: "value",
+              flags: 2,
+              checkFlags: 0,
+              declarations: ["1.3.80./workspace/src/index.ts"],
+            },
+          })),
+        } as T;
+      },
+    };
+
+    try {
+      const query = {
+        key: "property",
+        kind: "propertyOfType",
+        type: "t0000000000000010",
+        name: "length",
+      } as const;
+      const first = resolveCheckerBatchFromRoot(client, { snapshot: "s1", project: "p1" }, [query]);
+      const second = resolveCheckerBatchFromRoot(client, { snapshot: "s1", project: "p1" }, [
+        query,
+      ]);
+
+      expect(first[0]).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(second[0]).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(String(warning.mock.calls[0]?.[0])).toContain("@corsa-bind/napi/orchestrator");
+    } finally {
+      warning.mockRestore();
     }
   });
 
