@@ -83,6 +83,21 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
           return resolved;
         }
       }
+      if (kind === "MemberExpression") {
+        const resolved = typeOfComputedMemberExpression(context, node as Node, this);
+        if (resolved) {
+          return resolved;
+        }
+      }
+      if (kind === "ConditionalExpression") {
+        return typeOfConditionalExpression(node as Node, this);
+      }
+      if (typeNodeNeedsDeclarationLookup(node as Node)) {
+        const resolved = typeOfEnclosingDeclarationAnnotation(node as Node, this);
+        if (resolved) {
+          return resolved;
+        }
+      }
       const lookupNode = nodeForTypeLookup(node);
       const type = sessionForContext(context).session.getTypeAtSourceRange(
         filenameFor(context, lookupNode),
@@ -542,6 +557,155 @@ function typeOfAwaitExpression(
   const awaited = checker.getTypeArguments(argumentType)[0] ?? argumentType;
   sessionForContext(context).session.rememberTypeLookupFromType(awaited, argumentType);
   return awaited;
+}
+
+function typeOfComputedMemberExpression(
+  context: ContextWithParserOptions,
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  if ((node as unknown as { readonly computed?: boolean }).computed !== true) {
+    return undefined;
+  }
+  const object = childNode(node, "object");
+  const property = childNode(node, "property");
+  if (!object || !property) {
+    return undefined;
+  }
+  const objectType = checker.getTypeAtLocation(object);
+  if (!objectType) {
+    return undefined;
+  }
+  const propertyName = computedPropertyName(property);
+  const propertyType = propertyName
+    ? typeOfNamedProperty(objectType, propertyName, checker)
+    : undefined;
+  const indexedType = propertyType ?? typeOfIndexedMember(objectType, property, checker);
+  if (indexedType) {
+    sessionForContext(context).session.rememberTypeLookupFromType(indexedType, objectType);
+  }
+  return indexedType;
+}
+
+function typeOfNamedProperty(
+  objectType: CorsaType,
+  propertyName: string,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const symbol = checker
+    .getPropertiesOfType(objectType)
+    .find((property) => property.name === propertyName);
+  return symbol
+    ? (checker.getTypeOfSymbol(symbol) ?? checker.getDeclaredTypeOfSymbol(symbol))
+    : undefined;
+}
+
+function typeOfIndexedMember(
+  objectType: CorsaType,
+  property: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const typeArguments = checker.getTypeArguments(objectType);
+  if (typeArguments.length === 0) {
+    return undefined;
+  }
+  const text = safeTypeToString(checker, objectType) ?? objectType.texts?.[0] ?? "";
+  const index = numericLiteralValue(property);
+  if (index !== undefined && tupleLikeTypeText(text)) {
+    return typeArguments[index];
+  }
+  if (index !== undefined && arrayLikeTypeText(text)) {
+    return typeArguments[0];
+  }
+  if (computedPropertyName(property) !== undefined && recordLikeTypeText(text)) {
+    return typeArguments[1];
+  }
+  return undefined;
+}
+
+function typeOfConditionalExpression(
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const consequent = childNode(node, "consequent");
+  const alternate = childNode(node, "alternate");
+  if (!consequent || !alternate) {
+    return undefined;
+  }
+  const consequentType = checker.getTypeAtLocation(consequent);
+  const alternateType = checker.getTypeAtLocation(alternate);
+  if (!consequentType || !alternateType) {
+    return undefined;
+  }
+  return syntheticCompoundType("union", [consequentType, alternateType], checker);
+}
+
+function typeOfEnclosingDeclarationAnnotation(
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const declaration = enclosingTypedPropertyDeclaration(node);
+  return declaration ? checker.getTypeAtLocation(declaration) : undefined;
+}
+
+function typeNodeNeedsDeclarationLookup(node: Node): boolean {
+  switch ((node as { readonly type?: string }).type) {
+    case "TSArrayType":
+    case "TSTupleType":
+    case "TSUnionType":
+    case "TSIntersectionType":
+      return enclosingTypedPropertyDeclaration(node) !== undefined;
+    case "TSTypeReference":
+      return (
+        typeArgumentNodes(node as unknown as Record<string, unknown>).length > 0 &&
+        enclosingTypedPropertyDeclaration(node) !== undefined
+      );
+    default:
+      return false;
+  }
+}
+
+function enclosingTypedPropertyDeclaration(node: Node): Node | undefined {
+  const annotation = parentNode(node);
+  if (!annotation || (annotation as { readonly type?: string }).type !== "TSTypeAnnotation") {
+    return undefined;
+  }
+  const declaration = parentNode(annotation);
+  switch ((declaration as { readonly type?: string } | undefined)?.type) {
+    case "PropertyDefinition":
+    case "TSAbstractPropertyDefinition":
+    case "TSPropertySignature":
+      return declaration;
+    default:
+      return undefined;
+  }
+}
+
+function computedPropertyName(node: Node): string | undefined {
+  const value = (node as unknown as { readonly value?: unknown }).value;
+  return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
+}
+
+function numericLiteralValue(node: Node): number | undefined {
+  const value = (node as unknown as { readonly value?: unknown }).value;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function tupleLikeTypeText(text: string): boolean {
+  return text.startsWith("[") || text.startsWith("readonly [");
+}
+
+function arrayLikeTypeText(text: string): boolean {
+  return (
+    text.endsWith("[]") ||
+    text.startsWith("Array<") ||
+    text.startsWith("ReadonlyArray<") ||
+    text.startsWith("readonly ")
+  );
+}
+
+function recordLikeTypeText(text: string): boolean {
+  return text.startsWith("Record<");
 }
 
 function typeOfNewExpression(
@@ -1197,7 +1361,7 @@ function nodeForTypeLookup(node: Node | CorsaNode): Node | CorsaNode {
       return childNode(node, "key") ?? node;
     case "PropertyDefinition":
     case "TSAbstractPropertyDefinition":
-      return childNode(node, "typeAnnotation") ?? childNode(node, "key") ?? node;
+      return childNode(node, "key") ?? childNode(node, "typeAnnotation") ?? node;
     default:
       return node;
   }
@@ -1243,6 +1407,10 @@ function implementedClauseChildNode(node: Node, key: string): Node | undefined {
     return value;
   }
   return undefined;
+}
+
+function parentNode(node: Node): Node | undefined {
+  return childNode(node, "parent");
 }
 
 function implementedTypesFromCorsaNode(

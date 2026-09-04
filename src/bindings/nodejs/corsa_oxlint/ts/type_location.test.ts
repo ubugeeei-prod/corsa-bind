@@ -670,6 +670,252 @@ describe("corsa oxlint type locations", () => {
     expect(seen.number).toBe("number");
   });
 
+  integrationCase("resolves compound expression nodes to their own types", () => {
+    const seen: Record<string, string | undefined> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "compound-expression-node-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise compound expression type lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          CallExpression(node: any) {
+            if (node.callee?.type !== "Identifier" || node.callee.name !== "probe") {
+              return;
+            }
+            const argument = node.arguments?.[0];
+            if (!argument) {
+              return;
+            }
+            const type = services.getTypeAtLocation(argument);
+            seen[context.sourceCode.getText(argument)] = type
+              ? checker.typeToString(type)
+              : undefined;
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester({ languageOptions: { sourceType: "module" } });
+    tester.run("compound-expression-node-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Target { marker = 1; }",
+            "class Holder {",
+            "  plain: Target = new Target();",
+            "  method(): Target { return new Target(); }",
+            "}",
+            "function make(): Target { return new Target(); }",
+            "function probe(_value: unknown): void {}",
+            "const holder = new Holder();",
+            "const targets = [new Target()];",
+            "const keyed: Record<string, Target> = { value: new Target() };",
+            "const flag = Math.random() > 0.5;",
+            "const pending = Promise.resolve(new Target());",
+            "async function main(): Promise<void> {",
+            "  probe(holder);",
+            "  probe(holder.plain);",
+            "  probe(holder.method());",
+            "  probe(make());",
+            "  probe(targets[0]);",
+            '  probe(keyed["value"]);',
+            "  probe(flag ? holder.plain : make());",
+            "  probe(await pending);",
+            "}",
+            "void main;",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen).toEqual({
+      holder: "Holder",
+      "holder.plain": "Target",
+      "holder.method()": "Target",
+      "make()": "Target",
+      "targets[0]": "Target",
+      'keyed["value"]': "Target",
+      "flag ? holder.plain : make()": "Target",
+      "await pending": "Target",
+    });
+  });
+
+  integrationCase("resolves modified property definition nodes to their declared types", () => {
+    const seen: Record<string, { readonly node?: string; readonly key?: string }> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "modified-property-definition-node-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise property definition type lookup with modifiers",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          PropertyDefinition(node: any) {
+            const name = node.key?.name;
+            if (!name) {
+              return;
+            }
+            const nodeType = services.getTypeAtLocation(node);
+            const keyType = services.getTypeAtLocation(node.key);
+            seen[name] = {
+              node: nodeType ? checker.typeToString(nodeType) : undefined,
+              key: keyType ? checker.typeToString(keyType) : undefined,
+            };
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester({ languageOptions: { sourceType: "module" } });
+    tester.run("modified-property-definition-node-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Target {}",
+            "class Holder {",
+            "  plain: Target = new Target();",
+            "  definite!: Target;",
+            "  optional?: Target;",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen).toEqual({
+      plain: { node: "Target", key: "Target" },
+      definite: { node: "Target", key: "Target" },
+      optional: { node: "Target | undefined", key: "Target | undefined" },
+    });
+  });
+
+  integrationCase("resolves composite type annotation nodes to instantiated types", () => {
+    const seen: Record<string, { readonly annotation?: string; readonly property?: string }> = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "composite-type-annotation-node-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise composite type annotation lookup",
+          requiresTypeChecking: true,
+        },
+        messages: {
+          unexpected: "unexpected",
+        },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        return {
+          PropertyDefinition(node: any) {
+            const name = node.key?.name;
+            const annotation = node.typeAnnotation?.typeAnnotation;
+            if (!name || !annotation) {
+              return;
+            }
+            const annotationType = services.getTypeAtLocation(annotation);
+            const propertyType = services.getTypeAtLocation(node);
+            seen[name] = {
+              annotation: annotationType ? checker.typeToString(annotationType) : undefined,
+              property: propertyType ? checker.typeToString(propertyType) : undefined,
+            };
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester({ languageOptions: { sourceType: "module" } });
+    tester.run("composite-type-annotation-node-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Target { marker = 1; }",
+            "class Holder {",
+            "  plain: Target = new Target();",
+            "  list: Target[] = [];",
+            "  pair: [Target, Target] = [new Target(), new Target()];",
+            "  union: Target | undefined = undefined;",
+            '  intersection: Target & { extra: string } = Object.assign(new Target(), { extra: "" });',
+            "  wrapped: Readonly<Target> = new Target();",
+            "}",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen).toEqual({
+      plain: { annotation: "Target", property: "Target" },
+      list: { annotation: "Target[]", property: "Target[]" },
+      pair: { annotation: "[Target, Target]", property: "[Target, Target]" },
+      union: { annotation: "Target | undefined", property: "Target | undefined" },
+      intersection: {
+        annotation: "Target & { extra: string; }",
+        property: "Target & { extra: string; }",
+      },
+      wrapped: { annotation: "Readonly<Target>", property: "Readonly<Target>" },
+    });
+  });
+
   integrationCase("falls back for instantiated generic base types", () => {
     const seen: Record<string, readonly string[] | undefined> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);

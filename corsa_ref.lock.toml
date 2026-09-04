@@ -3,8 +3,8 @@ version = 1
 [corsa_upstream]
 path = "ref/corsa-upstream"
 repository = "https://github.com/microsoft/TypeScript.git"
-commit = "0c8f63f745ec8c8243c7d43d13e3f2fe8e04bc53"
-tree = "5454a5e45644ae655ae1bfd95cc92578a77ed35e"
-committer_date = "2026-08-25T17:32:50+00:00"
-author = "Rafli Surya Wijaya"
-subject = "docs(readme): update blog link to devblogs and use relative CONTRIBUTING.md links (#63994)"
+commit = "e73c923cb58e9ea8cd75ba41c51b8d8886af3076"
+tree = "4a3b3b3f2c23d4d732d5ab0bcf9cf966643148ad"
+committer_date = "2026-09-03T21:38:15Z"
+author = "Matheus Mol"
+subject = "API: add getChildren and token getters to Node (#63893)"
