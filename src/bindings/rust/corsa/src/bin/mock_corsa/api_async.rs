@@ -244,7 +244,7 @@ fn batch_requests(params: Value) -> Value {
 fn batch_request_result(method: &str, params: &Value) -> Option<Value> {
     match method {
         "getSymbolsAtPositions" | "getSymbolsAtLocations" => {
-            Some(json!([common::symbol("value"), Value::Null]))
+            Some(repeated_symbol_responses(batch_request_item_count(params)))
         }
         "getTypeOfSymbol"
         | "getDeclaredTypeOfSymbol"
@@ -286,6 +286,10 @@ fn repeated_type_responses(count: usize) -> Value {
             .map(|_| common::type_response("t0000000000000001"))
             .collect(),
     )
+}
+
+fn repeated_symbol_responses(count: usize) -> Value {
+    Value::Array((0..count).map(|_| common::symbol("value")).collect())
 }
 
 /// Mirrors upstream's per-project handle resolution so project-less lookups

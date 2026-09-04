@@ -366,13 +366,38 @@ describe("CorsaApiClient", () => {
             target: "t0000000000000010",
           },
         },
+        {
+          method: "getSymbolsAtPositions",
+          params: {
+            snapshot: snapshot.snapshot,
+            project: project.id,
+            file: "/workspace/src/index.ts",
+            positions: [1, 2, 3],
+          },
+        },
+        {
+          method: "getPropertyOfType",
+          params: {
+            snapshot: snapshot.snapshot,
+            type: "t0000000000000010",
+            name: "length",
+          },
+        },
       ]);
       expect(rawResponses.map((response) => response.method)).toEqual([
         "getPropertyOfType",
         "isTypeAssignableTo",
+        "getSymbolsAtPositions",
+        "getPropertyOfType",
       ]);
       expect(rawResponses[0].result).toEqual(expect.objectContaining({ name: "value" }));
       expect(rawResponses[1].result).toBe(true);
+      expect(rawResponses[2].result).toEqual([
+        expect.objectContaining({ name: "value" }),
+        expect.objectContaining({ name: "value" }),
+        expect.objectContaining({ name: "value" }),
+      ]);
+      expect(rawResponses[3].error).toMatch("empty project ID for type handle");
 
       const file = "/workspace/src/index.ts";
       const results = resolveCheckerBatch(
@@ -383,6 +408,7 @@ describe("CorsaApiClient", () => {
           { key: "same-type", kind: "typeAtPosition", file, position: 1 },
           { key: "types", kind: "typesAtPositions", file, positions: [1, 2, 1] },
           { key: "symbol", kind: "symbolAtPosition", file, position: 1 },
+          { key: "symbols", kind: "symbolsAtPositions", file, positions: [1, 2, 3] },
           { key: "symbol-types", kind: "typesOfSymbols", symbols: ["s1", "s2", "s1"] },
           { key: "symbol-type", kind: "typeOfSymbol", symbol: "s1" },
           { key: "type-symbol", kind: "symbolOfType", type: "t0000000000000010" },
@@ -431,6 +457,15 @@ describe("CorsaApiClient", () => {
       );
       expect(byKey.get("symbol")).toEqual(
         expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(byKey.get("symbols")).toEqual(
+        expect.objectContaining({
+          result: [
+            expect.objectContaining({ name: "value" }),
+            expect.objectContaining({ name: "value" }),
+            expect.objectContaining({ name: "value" }),
+          ],
+        }),
       );
       expect(byKey.get("symbol-types")).toEqual(
         expect.objectContaining({

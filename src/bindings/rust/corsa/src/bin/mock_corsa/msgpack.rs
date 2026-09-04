@@ -95,14 +95,14 @@ fn batch_requests(params: Value) -> Value {
                 .get("method")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            json!({
-                "method": method,
-                "result": batch_request_result(
-                    method,
-                    request.get("params").unwrap_or(&Value::Null),
-                )
-                .unwrap_or(Value::Null),
-            })
+            let params = request.get("params").cloned().unwrap_or(Value::Null);
+            let mut response = json!({ "method": method });
+            if let Some(error) = crate::common::missing_project_message(&params) {
+                response["error"] = Value::String(error);
+                return response;
+            }
+            response["result"] = batch_request_result(method, &params).unwrap_or(Value::Null);
+            response
         })
         .collect::<Vec<_>>();
     json!({ "responses": responses })
@@ -111,7 +111,7 @@ fn batch_requests(params: Value) -> Value {
 fn batch_request_result(method: &str, params: &Value) -> Option<Value> {
     match method {
         "getSymbolsAtPositions" | "getSymbolsAtLocations" => {
-            Some(json!([crate::common::symbol("value"), Value::Null]))
+            Some(repeated_symbol_responses(batch_request_item_count(params)))
         }
         "getTypeOfSymbol"
         | "getDeclaredTypeOfSymbol"
@@ -153,6 +153,10 @@ fn repeated_type_responses(count: usize) -> Value {
             .map(|_| crate::common::type_response("t0000000000000001"))
             .collect(),
     )
+}
+
+fn repeated_symbol_responses(count: usize) -> Value {
+    Value::Array((0..count).map(|_| crate::common::symbol("value")).collect())
 }
 
 fn record_params(method: &str, params: &Value) {
