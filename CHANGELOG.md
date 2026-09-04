@@ -20,6 +20,13 @@ published versions.
 
 ### Added
 
+- the Node binding adds `batchCheckerRequests` / `batchCheckerRequestsAsync`
+  for upstream `batchRequests` and `resolveCheckerBatch` /
+  `resolveCheckerBatchAsync` for project-scoped checker hot paths. The higher
+  layer coalesces repeated position queries, batches symbol-to-type fan-out via
+  `getTypesOfSymbols`, and keeps follow-up relation primitives such as
+  `getPropertyOfType`, `getTypeArguments`, `getConstraintOfType`, and
+  `isTypeAssignableTo` in one transport round trip.
 - the Node binding exposes named sync/async wrappers for project-scoped
   `getTypesAtPositions`, so batched type lookups no longer need untyped
   `callJson` strings. The handwritten wrapper interface is updated in the

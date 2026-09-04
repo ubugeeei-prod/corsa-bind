@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -9,6 +9,7 @@ import {
   CorsaApiClient,
   CorsaDistributedOrchestrator,
   CorsaVirtualDocument,
+  batchCheckerRequests,
   classifyTypeText,
   isAnyLikeTypeTexts,
   isArrayLikeTypeTexts,
@@ -17,6 +18,7 @@ import {
   isPromiseLikeTypeTexts,
   nativeLintRuleMetas,
   runNativeLintRule,
+  resolveCheckerBatch,
   splitTopLevelTypeText,
   splitTypeText,
   isUnsafeAssignment,
@@ -326,6 +328,179 @@ describe("CorsaApiClient", () => {
     }
   });
 
+  it("coalesces checker N+1 lookups through upstream batchRequests", () => {
+    const countDir = mkdtempSync(join(tmpdir(), "corsa-batch-counts-"));
+    const previousCountDir = process.env.CORSA_MOCK_COUNT_DIR;
+    process.env.CORSA_MOCK_COUNT_DIR = countDir;
+
+    const client = CorsaApiClient.spawn({
+      executable: mockBinary,
+      cwd: workspaceRoot,
+      mode: "msgpack",
+    });
+
+    try {
+      client.initialize();
+      const snapshot = client.updateSnapshot({
+        openProject: "/workspace/tsconfig.json",
+      });
+      const project = snapshot.projects[0];
+      expect(project).toBeDefined();
+
+      const rawResponses = batchCheckerRequests(client, [
+        {
+          method: "getPropertyOfType",
+          params: {
+            snapshot: snapshot.snapshot,
+            project: project.id,
+            type: "t0000000000000010",
+            name: "length",
+          },
+        },
+        {
+          method: "isTypeAssignableTo",
+          params: {
+            snapshot: snapshot.snapshot,
+            project: project.id,
+            source: "t0000000000000010",
+            target: "t0000000000000010",
+          },
+        },
+      ]);
+      expect(rawResponses.map((response) => response.method)).toEqual([
+        "getPropertyOfType",
+        "isTypeAssignableTo",
+      ]);
+      expect(rawResponses[0].result).toEqual(expect.objectContaining({ name: "value" }));
+      expect(rawResponses[1].result).toBe(true);
+
+      const file = "/workspace/src/index.ts";
+      const results = resolveCheckerBatch(
+        client,
+        { snapshot: snapshot.snapshot, project: project.id },
+        [
+          { key: "type", kind: "typeAtPosition", file, position: 1 },
+          { key: "same-type", kind: "typeAtPosition", file, position: 1 },
+          { key: "types", kind: "typesAtPositions", file, positions: [1, 2, 1] },
+          { key: "symbol", kind: "symbolAtPosition", file, position: 1 },
+          { key: "symbol-types", kind: "typesOfSymbols", symbols: ["s1", "s2", "s1"] },
+          { key: "symbol-type", kind: "typeOfSymbol", symbol: "s1" },
+          { key: "type-symbol", kind: "symbolOfType", type: "t0000000000000010" },
+          { key: "declared", kind: "declaredTypeOfSymbol", symbol: "s1" },
+          { key: "property", kind: "propertyOfType", type: "t0000000000000010", name: "length" },
+          {
+            key: "type-arguments",
+            kind: "typeArguments",
+            type: "t0000000000000010",
+            objectFlags: 1 << 2,
+          },
+          {
+            key: "skipped-type-arguments",
+            kind: "typeArguments",
+            type: "t0000000000000010",
+            objectFlags: 0,
+          },
+          { key: "constraint", kind: "constraintOfType", type: "t0000000000000010" },
+          {
+            key: "assignable",
+            kind: "isTypeAssignableTo",
+            source: "t0000000000000010",
+            target: "t0000000000000010",
+          },
+          { key: "alias", kind: "aliasedSymbol", symbol: "s1" },
+          { key: "immediate-alias", kind: "immediateAliasedSymbol", symbol: "s1" },
+          { key: "exports", kind: "exportsOfModule", symbol: "s1" },
+          { key: "display", kind: "typeToString", type: "t0000000000000010" },
+        ],
+      );
+      const byKey = new Map(results.map((result) => [result.key, result]));
+      expect(byKey.get("type")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ id: "t0000000000000001" }) }),
+      );
+      expect(byKey.get("same-type")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ id: "t0000000000000001" }) }),
+      );
+      expect(byKey.get("types")).toEqual(
+        expect.objectContaining({
+          result: [
+            expect.objectContaining({ id: "t0000000000000001" }),
+            expect.objectContaining({ id: "t0000000000000001" }),
+            expect.objectContaining({ id: "t0000000000000001" }),
+          ],
+        }),
+      );
+      expect(byKey.get("symbol")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(byKey.get("symbol-types")).toEqual(
+        expect.objectContaining({
+          result: [
+            expect.objectContaining({ id: "t0000000000000001" }),
+            expect.objectContaining({ id: "t0000000000000001" }),
+            expect.objectContaining({ id: "t0000000000000001" }),
+          ],
+        }),
+      );
+      expect(byKey.get("symbol-type")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ id: "t0000000000000001" }) }),
+      );
+      expect(byKey.get("type-symbol")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(byKey.get("declared")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ id: "t0000000000000001" }) }),
+      );
+      expect(byKey.get("property")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(byKey.get("type-arguments")).toEqual(
+        expect.objectContaining({
+          result: [expect.objectContaining({ id: "t0000000000000001" })],
+        }),
+      );
+      expect(byKey.get("skipped-type-arguments")).toEqual(expect.objectContaining({ result: [] }));
+      expect(byKey.get("constraint")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ id: "t0000000000000001" }) }),
+      );
+      expect(byKey.get("assignable")).toEqual(expect.objectContaining({ result: true }));
+      expect(byKey.get("alias")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(byKey.get("immediate-alias")).toEqual(
+        expect.objectContaining({ result: expect.objectContaining({ name: "value" }) }),
+      );
+      expect(byKey.get("exports")).toEqual(
+        expect.objectContaining({
+          result: [expect.objectContaining({ name: "value" })],
+        }),
+      );
+      expect(byKey.get("display")).toEqual(expect.objectContaining({ result: "type:string" }));
+
+      expect(readMockCallCount(countDir, "batchRequests")).toBe(2);
+      expect(readMockCallCount(countDir, "getTypeAtPosition")).toBe(0);
+      expect(readMockCallCount(countDir, "getTypesAtPositions")).toBe(0);
+      expect(readMockCallCount(countDir, "getTypeOfSymbol")).toBe(0);
+      expect(readMockCallCount(countDir, "getTypesOfSymbols")).toBe(0);
+      expect(readMockCallCount(countDir, "getSymbolOfType")).toBe(0);
+      expect(readMockCallCount(countDir, "getTypeArguments")).toBe(0);
+      expect(readMockCallCount(countDir, "getConstraintOfType")).toBe(0);
+      expect(readMockCallCount(countDir, "getPropertyOfType")).toBe(0);
+
+      client.releaseHandle(snapshot.snapshot);
+    } finally {
+      try {
+        client.close();
+      } finally {
+        if (previousCountDir === undefined) {
+          delete process.env.CORSA_MOCK_COUNT_DIR;
+        } else {
+          process.env.CORSA_MOCK_COUNT_DIR = previousCountDir;
+        }
+        rmSync(countDir, { force: true, recursive: true });
+      }
+    }
+  });
+
   it("roundtrips through the mock corsa binary without blocking on async APIs", async () => {
     const client = await CorsaApiClient.spawnAsync({
       executable: mockBinary,
@@ -594,6 +769,16 @@ function writeContentMapperProject(projectRoot: string): void {
 function readText(source: Uint8Array | null): string {
   expect(source).not.toBeNull();
   return Buffer.from(source!).toString("utf8");
+}
+
+function readMockCallCount(dir: string, method: string): number {
+  const file = join(dir, `${method}.count`);
+  if (!existsSync(file)) {
+    return 0;
+  }
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line.trim() === "1").length;
 }
 
 async function removeTemporaryProject(projectRoot: string): Promise<void> {

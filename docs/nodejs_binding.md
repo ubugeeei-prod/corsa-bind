@@ -180,6 +180,26 @@ flags before calling `getAliasedSymbol`, matching the upstream checker contract.
 Module exports likewise use the checker symbol handle rather than a source name.
 For endpoints without a typed wrapper, drop down to the raw calls below.
 
+For N+1-prone checker workflows, keep these primitives but run them through the
+batch helpers:
+
+```ts
+import { resolveCheckerBatch } from "@corsa-bind/napi";
+
+const facts = resolveCheckerBatch(client, { snapshot, project: project.id }, [
+  { key: "nodes", kind: "typesAtPositions", file, positions: nodeStarts },
+  { key: "value", kind: "propertyOfType", type: valueType.id, name: "value" },
+  { key: "assignable", kind: "isTypeAssignableTo", source: valueType.id, target: targetType.id },
+]);
+```
+
+`resolveCheckerBatch` coalesces repeated positions per file, uses
+`getTypesOfSymbols` for symbol-type fan-out, and sends the remaining relation
+queries (`propertyOfType`, `typeArguments`, `constraintOfType`, alias
+resolution, assignability, and similar follow-ups) through upstream
+`batchRequests`. Use `batchCheckerRequests` when you need the lower-level raw
+batch primitive directly.
+
 ## Raw calls (escape hatch)
 
 When you need an endpoint that does not have a dedicated method, call it
