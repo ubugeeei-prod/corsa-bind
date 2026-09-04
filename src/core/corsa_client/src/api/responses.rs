@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{NodeHandle, ProjectHandle, SignatureHandle, SymbolHandle, TypeHandle};
+use super::{
+    ContentMapperDefinition, NodeHandle, ProjectHandle, SignatureHandle, SymbolHandle, TypeHandle,
+};
 
 /// Response returned by the `initialize` endpoint.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -21,6 +23,52 @@ pub struct ConfigResponse {
     pub options: Value,
     /// Files that belong to the parsed config according to Corsa.
     pub file_names: Vec<String>,
+    /// Raw `tsconfig` object as Corsa read it, when the runtime reports one.
+    ///
+    /// Top-level settings that are not compiler options — `contentMappers`
+    /// among them — only exist here, so [`Self::content_mappers`] reads them
+    /// from this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw: Option<Value>,
+}
+
+impl ConfigResponse {
+    /// Content mappers the config declares, in declaration order.
+    ///
+    /// Returns an empty vector when the config declares none, and also when the
+    /// runtime predates `raw` on this response.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use corsa_client::ConfigResponse;
+    ///
+    /// let response: ConfigResponse = serde_json::from_value(serde_json::json!({
+    ///     "options": {},
+    ///     "fileNames": ["/workspace/src/App.vue"],
+    ///     "raw": { "contentMappers": [{ "package": "vue-mapper", "extensions": [".vue"] }] },
+    /// }))
+    /// .unwrap();
+    ///
+    /// let mappers = response.content_mappers();
+    /// assert_eq!(mappers.len(), 1);
+    /// assert!(mappers[0].handles_extension(".vue"));
+    /// ```
+    pub fn content_mappers(&self) -> Vec<ContentMapperDefinition> {
+        self.raw
+            .as_ref()
+            .map(ContentMapperDefinition::from_raw_config)
+            .unwrap_or_default()
+    }
+
+    /// Reports whether the config declares at least one content mapper.
+    ///
+    /// A workspace that does needs `runExternalCode` before the mapper
+    /// processes are allowed to run; see
+    /// [`ApiSpawnConfig::with_run_external_code`](crate::ApiSpawnConfig::with_run_external_code).
+    pub fn uses_content_mappers(&self) -> bool {
+        !self.content_mappers().is_empty()
+    }
 }
 
 /// Project descriptor returned by endpoints that resolve a project handle.

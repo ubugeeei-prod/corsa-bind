@@ -16,6 +16,7 @@ mod capabilities;
 mod changes;
 mod client;
 mod config;
+mod content_mapper;
 mod diagnostics;
 mod document;
 mod driver;
@@ -40,6 +41,7 @@ mod requests_symbols;
 mod requests_types;
 mod responses;
 mod snapshot;
+mod source_file;
 mod spawn_stdio;
 mod type_probe;
 
@@ -62,6 +64,13 @@ pub use changes::{
 pub use client::ApiClient;
 /// Spawn-time transport and profile configuration.
 pub use config::{ApiMode, ApiProfile, ApiSpawnConfig};
+/// Content mapper definitions and virtual/original position mapping.
+pub use content_mapper::{
+    ContentMapperDefinition, DiagnosticDirectivePolicy, MappedDiagnosticDirective, MappedPosition,
+    MappedRange, SUPPORTED_VIRTUAL_EXTENSIONS, SpanMap, SpanMapFeature, SpanMapFidelity,
+    SpanMapKind, SpanMapSegment, TextRange, UnknownDiagnosticDirectivePolicy,
+    UnknownSpanMapFidelity, UnknownSpanMapKind, is_supported_virtual_extension,
+};
 /// Snapshot/project/file diagnostics grouped by TypeScript category.
 pub use diagnostics::{
     FileDiagnosticsResponse, ProjectDiagnosticsResponse, SnapshotDiagnosticsResponse,
@@ -86,5 +95,10 @@ pub use responses::{
 };
 /// Auto-releasing snapshot wrapper.
 pub use snapshot::ManagedSnapshot;
+/// Source-file fields decoded out of the binary `getSourceFile` payload.
+pub use source_file::{
+    ContentMapping, EncodedSourceFile, MAX_SOURCE_FILE_PROTOCOL_VERSION,
+    MIN_SOURCE_FILE_PROTOCOL_VERSION,
+};
 /// Higher-level checker probe models built from repeated project-session queries.
 pub use type_probe::{TypeProbe, TypeProbeOptions};

@@ -20,6 +20,16 @@ export declare class CorsaApiClient {
   updateSnapshotAsync(params?: any | undefined | null): Promise<unknown>
   /** Fetches a source file through the binary endpoint. */
   getSourceFile(snapshot: string, project: string, file: string): Uint8Array | null
+  /**
+   * Fetches a source file and decodes its source-file level fields.
+   *
+   * Returns `null` when the project does not contain the file. Content
+   * mapped files carry a `contentMapping` block with the mapper identity and
+   * the span map between the virtual TypeScript and the authored file.
+   */
+  getEncodedSourceFile(snapshot: string, project: string, file: string): any
+  /** Decodes a source file on a libuv worker thread. */
+  getEncodedSourceFileAsync(snapshot: string, project: string, file: string): Promise<unknown>
   /** Fetches a source file on a libuv worker thread. */
   getSourceFileAsync(snapshot: string, project: string, file: string): Promise<Uint8Array | null>
   /** Resolves the intrinsic string type for a project. */
@@ -121,6 +131,30 @@ export declare class CorsaDistributedOrchestrator {
   closeVirtualDocument(uri: string): void
 }
 
+/**
+ * Bidirectional mapping between a mapper's virtual text and the original file.
+ *
+ * Every query takes an optional `feature` bitmask (see `SpanMapFeature`); when
+ * omitted, all features are considered, which matches a segment that declared
+ * no restriction.
+ */
+export declare class CorsaSpanMap {
+  /** Builds a span map from raw segments, as reported by `decodeSourceFile`. */
+  static fromSegments(segments: any): CorsaSpanMap
+  /** The segments, ordered by virtual start. */
+  get segments(): any
+  /** Number of segments in the map. */
+  get segmentCount(): number
+  /** Maps a position in the virtual text back to the original file. */
+  virtualToOriginalPosition(position: number, feature?: number | undefined | null): any
+  /** Maps a range in the virtual text back to the original file. */
+  virtualToOriginalSpan(pos: number, end: number, feature?: number | undefined | null): any
+  /** Returns every projection of an original position into the virtual text. */
+  originalToVirtualPositions(position: number, feature?: number | undefined | null): any
+  /** Returns every projection of an original range into the virtual text. */
+  originalToVirtualSpans(pos: number, end: number, feature?: number | undefined | null): any
+}
+
 /** Mutable virtual document mirrored through the LSP overlay layer. */
 export declare class CorsaVirtualDocument {
   /** Creates an `untitled:` document. */
@@ -145,11 +179,35 @@ export declare class CorsaVirtualDocument {
 
 export declare function classifyTypeText(text?: string | undefined | null): string
 
+/**
+ * Reads the content mappers a parsed `tsconfig` declares.
+ *
+ * Accepts either a `parseConfigFile` response or the raw `tsconfig` object,
+ * and returns an empty array when neither declares any.
+ */
+export declare function contentMappersFromConfig(config: any): any
+
+/**
+ * Decodes the source-file fields of a `getSourceFile` payload.
+ *
+ * Throws when the payload is not an encoded source file, or when it was
+ * produced by a binary protocol version this addon does not decode.
+ */
+export declare function decodeSourceFile(payload: Uint8Array): any
+
 export declare function isAnyLikeTypeTexts(typeTexts: Array<string>): boolean
 
 export declare function isArrayLikeTypeTexts(typeTexts: Array<string>): boolean
 
 export declare function isBigIntLikeTypeTexts(typeTexts: Array<string>): boolean
+
+/**
+ * Reports whether a `getSourceFile` payload came out of a content mapper.
+ *
+ * Cheaper than decoding when a caller only needs to branch on it, and never
+ * throws: an undecodable payload is simply not content mapped.
+ */
+export declare function isContentMappedSourceFile(payload: Uint8Array): boolean
 
 export declare function isErrorLikeTypeTexts(typeTexts: Array<string>, propertyNames?: Array<string> | undefined | null): boolean
 
@@ -173,6 +231,14 @@ export declare function runNativeLintRule(ruleName: string, node: any): any
 
 /** Spawns a new client on a libuv worker thread. */
 export declare function spawnCorsaApiClientAsync(options: any): Promise<CorsaApiClient>
+
+/**
+ * Builds the span map of a `getSourceFile` payload.
+ *
+ * Returns `null` when the file did not go through a content mapper, and throws
+ * when the payload is not a source file this addon can decode.
+ */
+export declare function spanMapForSourceFile(payload: Uint8Array): CorsaSpanMap | null
 
 export declare function splitTopLevelTypeText(text: string, delimiter: string): Array<string>
 

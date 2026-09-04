@@ -54,6 +54,12 @@ export function createProgram(
     getSourceFile(fileName = context.filename) {
       return { fileName, text: context.sourceCode.text };
     },
+    getContentMapping(fileName = context.filename) {
+      return sessionForContext(context).session.getContentMapping(fileName);
+    },
+    getContentMappers() {
+      return sessionForContext(context).session.getContentMappers();
+    },
     getTypeChecker() {
       return createTypeChecker(context);
     },

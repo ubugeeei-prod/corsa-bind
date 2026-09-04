@@ -123,6 +123,11 @@ such as `printNode` disabled.
 Leave `runExternalCode` unset unless the workspace is trusted and its
 `tsconfig.json` uses TypeScript `contentMappers`; when enabled, it forwards the
 checker-side `--runExternalCode` gate so those mapper processes can run.
+`corsa-oxlint` then translates lint positions in a mapped file into the
+positions the checker knows before every type and symbol lookup, and rules can
+read the mapping themselves through `program.getContentMapping()`. Projects
+without `contentMappers` pay nothing for this. See
+[Content mappers](./content_mappers.md).
 Explicit resource management syntax is supported in both lanes: custom
 type-aware rules can inspect `using` declarations through parser services, and
 the built-in `require-await` rule treats `await using` as an await-like

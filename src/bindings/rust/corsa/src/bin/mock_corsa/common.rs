@@ -347,3 +347,180 @@ fn handle_text(value: &Value) -> Option<String> {
         _ => None,
     }
 }
+
+/// Virtual TypeScript the mock's content mapper "produces" for a `.vue` file.
+const MAPPED_VIRTUAL_TEXT: &str = "export const count: number = 1;\n";
+/// Text the same file has on disk.
+const MAPPED_ORIGINAL_TEXT: &str = "<script>\nconst count = 1;\n</script>\n";
+
+const NO_STRUCTURED_DATA: u32 = 0xffff_ffff;
+const SOURCE_FILE_PROTOCOL_VERSION: u32 = 8;
+
+/// Returns the binary `getSourceFile` payload for `file`.
+///
+/// Files a content mapper would own (`.vue` here) get a real payload in the
+/// layout `tsc/internal/api/encoder/encoder.go` documents, so binding tests can
+/// decode span maps without a Corsa build. Everything else keeps the historic
+/// placeholder bytes.
+pub fn source_file_payload(file: &str) -> Vec<u8> {
+    if file.ends_with(".vue") {
+        content_mapped_source_file(file)
+    } else {
+        b"source-file".to_vec()
+    }
+}
+
+/// Builds a content-mapped source file payload for `file`.
+fn content_mapped_source_file(file: &str) -> Vec<u8> {
+    let mut strings = SourceFileStrings::new(MAPPED_VIRTUAL_TEXT);
+    let text = strings.add_file_text();
+    let file_name = strings.add(file);
+    let path = strings.add(&file.to_lowercase());
+    let original_text = strings.add(MAPPED_ORIGINAL_TEXT);
+    let content_mapper = strings.add("mock-mapper@1.0.0");
+    let virtual_file_name = strings.add(&format!("{file}.ts"));
+
+    let mut structured = Vec::new();
+    // [virtualStart, virtualLength, originalStart, originalLength, kind]
+    let span_map = append_structured(
+        &mut structured,
+        &[
+            source_file_tuple(&[13, 5, 15, 5, 0]), // `count`, copied verbatim
+            source_file_tuple(&[29, 1, 23, 1, 1]), // the `1` literal, an atom
+        ],
+    );
+    // [originalStart, originalLength, virtualStart, virtualLength, policy, unusedCode]
+    let directives = append_structured(&mut structured, &[source_file_tuple(&[0, 9, 0, 7, 0, 0])]);
+
+    let extended = [
+        text,
+        file_name,
+        path,
+        0, // languageVariant
+        3, // scriptKind
+        NO_STRUCTURED_DATA,
+        NO_STRUCTURED_DATA,
+        NO_STRUCTURED_DATA,
+        NO_STRUCTURED_DATA,
+        NO_STRUCTURED_DATA,
+        NO_STRUCTURED_DATA,
+        0,
+        original_text,
+        span_map,
+        NO_STRUCTURED_DATA,
+        NO_STRUCTURED_DATA,
+        content_mapper,
+        virtual_file_name,
+        directives,
+    ];
+    strings.finish(&extended, &structured)
+}
+
+/// String table plus payload assembly for [`content_mapped_source_file`].
+struct SourceFileStrings {
+    offsets: Vec<u32>,
+    file_text: String,
+    other: String,
+}
+
+impl SourceFileStrings {
+    fn new(file_text: &str) -> Self {
+        Self {
+            offsets: Vec::new(),
+            file_text: file_text.to_owned(),
+            other: String::new(),
+        }
+    }
+
+    fn add_file_text(&mut self) -> u32 {
+        let end = self.file_text.len();
+        self.push(0, end)
+    }
+
+    fn add(&mut self, value: &str) -> u32 {
+        let start = self.file_text.len() + self.other.len();
+        self.other.push_str(value);
+        self.push(start, start + value.len())
+    }
+
+    fn push(&mut self, start: usize, end: usize) -> u32 {
+        let index = self.offsets.len() as u32;
+        self.offsets.push(start as u32);
+        self.offsets.push(end as u32);
+        index
+    }
+
+    fn finish(self, extended: &[u32; 19], structured: &[u8]) -> Vec<u8> {
+        let string_offsets = 44_usize;
+        let string_data = string_offsets + self.offsets.len() * 4;
+        let extended_data = string_data + self.file_text.len() + self.other.len();
+        let structured_data = extended_data + extended.len() * 4;
+        let nodes = structured_data + structured.len();
+
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(SOURCE_FILE_PROTOCOL_VERSION << 24).to_le_bytes());
+        payload.extend_from_slice(&[0; 16]); // content hash
+        payload.extend_from_slice(&0_u32.to_le_bytes()); // parse options
+        for offset in [
+            string_offsets,
+            string_data,
+            extended_data,
+            structured_data,
+            nodes,
+        ] {
+            payload.extend_from_slice(&(offset as u32).to_le_bytes());
+        }
+        for offset in &self.offsets {
+            payload.extend_from_slice(&offset.to_le_bytes());
+        }
+        payload.extend_from_slice(self.file_text.as_bytes());
+        payload.extend_from_slice(self.other.as_bytes());
+        for field in extended {
+            payload.extend_from_slice(&field.to_le_bytes());
+        }
+        payload.extend_from_slice(structured);
+        payload.extend_from_slice(&[0; 28]); // nil sentinel node
+        for field in [308_u32, 0, 0, 0, 0, 2 << 30, 0] {
+            payload.extend_from_slice(&field.to_le_bytes());
+        }
+        payload
+    }
+}
+
+/// Writes a msgpack array of tuples and returns its structured-data offset.
+fn append_structured(structured: &mut Vec<u8>, tuples: &[Vec<u8>]) -> u32 {
+    let offset = structured.len() as u32;
+    structured.extend_from_slice(&msgpack_array(tuples.len()));
+    for chunk in tuples {
+        structured.extend_from_slice(chunk);
+    }
+    offset
+}
+
+fn source_file_tuple(values: &[u32]) -> Vec<u8> {
+    let mut bytes = msgpack_array(values.len());
+    for &value in values {
+        bytes.extend(msgpack_uint(value));
+    }
+    bytes
+}
+
+fn msgpack_array(length: usize) -> Vec<u8> {
+    vec![0x90 | length as u8]
+}
+
+fn msgpack_uint(value: u32) -> Vec<u8> {
+    if value <= 0x7f {
+        vec![value as u8]
+    } else if value <= 0xffff {
+        vec![0xcd, (value >> 8) as u8, value as u8]
+    } else {
+        vec![
+            0xce,
+            (value >> 24) as u8,
+            (value >> 16) as u8,
+            (value >> 8) as u8,
+            value as u8,
+        ]
+    }
+}

@@ -60,7 +60,12 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             ),
             "getCompletionAtPosition" => crate::common::completion(),
             "getSourceFile" => {
-                write_tuple(&mut writer, MSG_RESPONSE, method.as_bytes(), b"source-file")?;
+                let file = params
+                    .get("file")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let payload = crate::common::source_file_payload(file);
+                write_tuple(&mut writer, MSG_RESPONSE, method.as_bytes(), &payload)?;
                 continue;
             }
             "typeToTypeNode" => {
@@ -223,11 +228,19 @@ fn parse_config<R: Read, W: Write>(
         return Ok(json!({
             "options": { "virtual": response.get("content").is_some() },
             "fileNames": ["/workspace/src/index.ts"],
+            "raw": {
+            "compilerOptions": { "strict": true },
+            "contentMappers": [{ "package": "mock-mapper", "extensions": [".vue"] }],
+        },
         }));
     }
     Ok(json!({
         "options": { "strict": true },
         "fileNames": ["/workspace/src/index.ts"],
+        "raw": {
+            "compilerOptions": { "strict": true },
+            "contentMappers": [{ "package": "mock-mapper", "extensions": [".vue"] }],
+        },
     }))
 }
 

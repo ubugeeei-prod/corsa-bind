@@ -416,6 +416,25 @@ impl ApiClient {
             .await
     }
 
+    /// Fetches a source file and decodes its source-file level fields.
+    ///
+    /// This is [`Self::get_source_file`] followed by
+    /// [`EncodedPayload::decode_source_file`], which is the supported way to
+    /// learn whether a file went through a content mapper and to get the span
+    /// map that turns checker positions in the virtual TypeScript back into
+    /// positions in the file the user edits.
+    pub async fn get_encoded_source_file(
+        &self,
+        snapshot: super::SnapshotHandle,
+        project: super::ProjectHandle,
+        file: impl Into<DocumentIdentifier>,
+    ) -> Result<Option<super::EncodedSourceFile>> {
+        self.get_source_file(snapshot, project, file)
+            .await?
+            .map(|payload| payload.decode_source_file())
+            .transpose()
+    }
+
     /// Closes the client and shuts down the underlying worker process.
     ///
     /// This is idempotent. After closing, further requests return

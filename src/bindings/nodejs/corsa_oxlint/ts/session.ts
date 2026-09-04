@@ -1,6 +1,14 @@
 import { readFileSync, statSync } from "node:fs";
 
-import { type ProjectResponse, CorsaApiClient } from "@corsa-bind/napi";
+import {
+  type ContentMapperDefinition,
+  type EncodedSourceFile,
+  type ProjectResponse,
+  CorsaApiClient,
+  CorsaSpanMap,
+  SpanMap,
+  contentMappersFromConfig,
+} from "@corsa-bind/napi";
 
 import type {
   CorsaCallSignatureFacts,
@@ -21,6 +29,20 @@ type FileCache = {
   typeByPosition: Map<number, CorsaType | undefined>;
   typeBySourceRange: Map<string, CorsaType | undefined>;
   symbolByPosition: Map<number, CorsaSymbol | undefined>;
+  /** `undefined` until resolved, `null` once known not to be content mapped. */
+  contentMapping?: ContentMapping | null;
+};
+
+/** Content mapper state the session resolved for one file. */
+export type ContentMapping = {
+  /** `name@version` identity of the mapper that produced the virtual text. */
+  readonly contentMapper: string;
+  /** Filename whose extension decided how the virtual text was parsed. */
+  readonly virtualFileName: string;
+  /** Virtual TypeScript the checker sees for this file. */
+  readonly virtualText: string;
+  /** Mapping between authored and virtual positions. */
+  readonly spanMap: CorsaSpanMap;
 };
 
 type PreparedFileState = {
@@ -97,6 +119,7 @@ export class CorsaProjectSession {
   #snapshotHasIssuedHandles = false;
   #supportsOverlayChanges?: boolean;
   #fatalTransportError?: Error;
+  #mapperExtensions?: readonly string[];
 
   constructor(
     readonly project: ResolvedProjectConfig,
@@ -142,11 +165,17 @@ export class CorsaProjectSession {
   ): CorsaType | undefined {
     const state = this.fileState(fileName, sourceText);
     if (!state.typeByPosition.has(position)) {
+      const checkerPosition = this.checkerPosition(fileName, state, position);
       state.typeByPosition.set(
         position,
-        this.client().getTypeAtPosition(this.#snapshot!, state.projectId, fileName, position) as
-          | CorsaType
-          | undefined,
+        checkerPosition === undefined
+          ? undefined
+          : (this.client().getTypeAtPosition(
+              this.#snapshot!,
+              state.projectId,
+              fileName,
+              checkerPosition,
+            ) as CorsaType | undefined),
       );
     }
     const type = this.rememberType(state.typeByPosition.get(position));
@@ -185,6 +214,12 @@ export class CorsaProjectSession {
       return this.getTypeAtPositionUnchecked(fileName, start, sourceText);
     }
     const state = this.fileState(fileName, sourceText);
+    if (this.contentMappingFor(fileName, state)) {
+      // The range hints disambiguate against the file's text, which for a
+      // mapped file is the mapper's virtual TypeScript rather than what the
+      // linter is holding. Fall back to the position lookup, which is mapped.
+      return this.getTypeAtPositionUnchecked(fileName, start, sourceText);
+    }
     const key = `${start}:${end}:${kind ?? ""}`;
     if (!state.typeBySourceRange.has(key)) {
       state.typeBySourceRange.set(
@@ -233,11 +268,17 @@ export class CorsaProjectSession {
   ): CorsaSymbol | undefined {
     const state = this.fileState(fileName, sourceText);
     if (!state.symbolByPosition.has(position)) {
+      const checkerPosition = this.checkerPosition(fileName, state, position);
       state.symbolByPosition.set(
         position,
-        this.client().getSymbolAtPosition(this.#snapshot!, state.projectId, fileName, position) as
-          | CorsaSymbol
-          | undefined,
+        checkerPosition === undefined
+          ? undefined
+          : (this.client().getSymbolAtPosition(
+              this.#snapshot!,
+              state.projectId,
+              fileName,
+              checkerPosition,
+            ) as CorsaSymbol | undefined),
       );
     }
     return this.rememberSymbol(state.symbolByPosition.get(position));
@@ -1500,6 +1541,7 @@ export class CorsaProjectSession {
     this.#lastRefreshMs = 0;
     this.#supportsOverlayChanges = undefined;
     this.#fatalTransportError = undefined;
+    this.#mapperExtensions = undefined;
   }
 
   private tryReleaseHandle(handle: string): void {
@@ -1567,6 +1609,102 @@ export class CorsaProjectSession {
     };
     this.#files.set(fileName, state);
     return state;
+  }
+
+  /**
+   * Content mapper state for `fileName`, or `undefined` when no mapper owns it.
+   *
+   * Resolving it costs one `getSourceFile` request per file, so the lookup is
+   * skipped entirely unless the project declares a mapper that claims the
+   * file's extension.
+   */
+  getContentMapping(fileName: string, sourceText?: string): ContentMapping | undefined {
+    return this.withTransportRecovery(
+      () => this.contentMappingFor(fileName, this.fileState(fileName, sourceText)),
+      "reading content mapper state",
+    );
+  }
+
+  /** Content mappers the project's `tsconfig` declares. */
+  getContentMappers(): readonly ContentMapperDefinition[] {
+    return this.withTransportRecovery(
+      () => contentMappersFromConfig(this.config()),
+      "reading content mappers",
+    );
+  }
+
+  private contentMappingFor(fileName: string, state: FileCache): ContentMapping | undefined {
+    if (state.contentMapping !== undefined) {
+      return state.contentMapping ?? undefined;
+    }
+    state.contentMapping = null;
+    if (!this.mapperOwnedExtensions().some((extension) => fileName.endsWith(extension))) {
+      return undefined;
+    }
+    const sourceFile = this.decodeSourceFileForMapping(fileName, state);
+    const mapping = sourceFile?.contentMapping;
+    if (mapping) {
+      state.contentMapping = {
+        contentMapper: mapping.contentMapper,
+        virtualFileName: mapping.virtualFileName,
+        virtualText: sourceFile.text,
+        spanMap: CorsaSpanMap.fromSegments(mapping.spanMap),
+      };
+    }
+    return state.contentMapping ?? undefined;
+  }
+
+  /**
+   * Decodes a file's source-file record, or `undefined` when it cannot be read.
+   *
+   * A runtime whose binary source-file protocol this build does not decode is
+   * treated as "not content mapped", which is how the bridge behaved before it
+   * understood mappers at all. Transport failures still propagate so the
+   * session can restart the worker.
+   */
+  private decodeSourceFileForMapping(
+    fileName: string,
+    state: FileCache,
+  ): EncodedSourceFile | undefined {
+    try {
+      return (
+        this.client().getEncodedSourceFile(this.#snapshot!, state.projectId, fileName) ?? undefined
+      );
+    } catch (error) {
+      if (isRecoverableTransportError(error)) {
+        throw error;
+      }
+      return undefined;
+    }
+  }
+
+  /**
+   * Translates an authored position into the position the checker knows.
+   *
+   * Returns the position unchanged for files no mapper owns, and `undefined`
+   * when the authored position has no counterpart in the virtual text — text
+   * the checker never saw has no type or symbol to report.
+   */
+  private checkerPosition(
+    fileName: string,
+    state: FileCache,
+    position: number,
+  ): number | undefined {
+    const mapping = this.contentMappingFor(fileName, state);
+    if (!mapping) {
+      return position;
+    }
+    const projections = mapping.spanMap.originalToVirtualPositions(position, SpanMap.Feature.Hover);
+    return projections[0]?.position;
+  }
+
+  private mapperOwnedExtensions(): readonly string[] {
+    if (!this.#mapperExtensions) {
+      this.#mapperExtensions = contentMappersFromConfig(this.config()).flatMap(
+        (mapper) => mapper.extensions,
+      );
+    }
+    return this.#mapperExtensions;
   }
 
   private refreshIfNeeded(fileName: string, sourceText?: string): PreparedFileState {

@@ -8,9 +8,15 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CorsaApiClient,
   CorsaDistributedOrchestrator,
+  CorsaSpanMap,
   CorsaVirtualDocument,
+  SpanMap,
   batchCheckerRequests,
   classifyTypeText,
+  contentMappersFromConfig,
+  decodeSourceFile,
+  isContentMappedSourceFile,
+  spanMapForSourceFile,
   isAnyLikeTypeTexts,
   isArrayLikeTypeTexts,
   isErrorLikeTypeTexts,
@@ -885,6 +891,189 @@ function isRetryableWindowsRmError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
   return code === "EBUSY" || code === "ENOTEMPTY" || code === "EPERM";
 }
+
+describe("content mappers", () => {
+  function withMockClient<T>(run: (client: ReturnType<typeof CorsaApiClient.spawn>) => T): T {
+    const client = CorsaApiClient.spawn({
+      executable: mockBinary,
+      cwd: workspaceRoot,
+      mode: "msgpack",
+    });
+    try {
+      client.initialize();
+      return run(client);
+    } finally {
+      client.close();
+    }
+  }
+
+  it("reads the content mappers a parsed tsconfig declares", () => {
+    withMockClient((client) => {
+      const config = client.parseConfigFile("/workspace/tsconfig.json");
+
+      const mappers = contentMappersFromConfig(config);
+
+      expect(mappers).toEqual([{ package: "mock-mapper", extensions: [".vue"] }]);
+      expect(contentMappersFromConfig({ compilerOptions: {} })).toEqual([]);
+    });
+  });
+
+  it("decodes the mapper identity and both texts of a mapped source file", () => {
+    withMockClient((client) => {
+      const snapshot = client.updateSnapshot({ openProject: "/workspace/tsconfig.json" });
+      const project = snapshot.projects[0];
+
+      const sourceFile = client.getEncodedSourceFile(
+        snapshot.snapshot,
+        project.id,
+        "/workspace/src/App.vue",
+      );
+
+      expect(sourceFile?.fileName).toBe("/workspace/src/App.vue");
+      expect(sourceFile?.text).toBe("export const count: number = 1;\n");
+      expect(sourceFile?.originalText).toBe("<script>\nconst count = 1;\n</script>\n");
+      expect(sourceFile?.contentMapping?.contentMapper).toBe("mock-mapper@1.0.0");
+      expect(sourceFile?.contentMapping?.virtualFileName).toBe("/workspace/src/App.vue.ts");
+      expect(sourceFile?.contentMapping?.diagnosticDirectives).toEqual([
+        {
+          originalRange: { pos: 0, end: 9 },
+          virtualRange: { pos: 0, end: 7 },
+          policy: 0,
+          unusedCode: 0,
+        },
+      ]);
+      expect(sourceFile?.contentMapping?.spanMap).toEqual([
+        {
+          virtualStart: 13,
+          virtualEnd: 18,
+          originalStart: 15,
+          originalEnd: 20,
+          kind: SpanMap.Kind.Verbatim,
+          features: SpanMap.Feature.All,
+        },
+        {
+          virtualStart: 29,
+          virtualEnd: 30,
+          originalStart: 23,
+          originalEnd: 24,
+          kind: SpanMap.Kind.Atom,
+          features: SpanMap.Feature.All,
+        },
+      ]);
+    });
+  });
+
+  it("decodes the same record off a raw getSourceFile payload", () => {
+    withMockClient((client) => {
+      const snapshot = client.updateSnapshot({ openProject: "/workspace/tsconfig.json" });
+      const project = snapshot.projects[0];
+      const payload = client.getSourceFile(snapshot.snapshot, project.id, "/workspace/src/App.vue");
+
+      expect(payload).not.toBeNull();
+      expect(isContentMappedSourceFile(payload!)).toBe(true);
+      expect(decodeSourceFile(payload!)).toEqual(
+        client.getEncodedSourceFile(snapshot.snapshot, project.id, "/workspace/src/App.vue"),
+      );
+    });
+  });
+
+  it("leaves files no mapper touched without mapping state", () => {
+    withMockClient((client) => {
+      const snapshot = client.updateSnapshot({ openProject: "/workspace/tsconfig.json" });
+      const project = snapshot.projects[0];
+      const payload = client.getSourceFile(
+        snapshot.snapshot,
+        project.id,
+        "/workspace/src/index.ts",
+      );
+
+      expect(isContentMappedSourceFile(payload!)).toBe(false);
+      expect(() => decodeSourceFile(payload!)).toThrow(/shorter than the 44 byte header/);
+    });
+  });
+
+  it("maps checker positions back into the authored file", () => {
+    withMockClient((client) => {
+      const snapshot = client.updateSnapshot({ openProject: "/workspace/tsconfig.json" });
+      const project = snapshot.projects[0];
+      const payload = client.getSourceFile(snapshot.snapshot, project.id, "/workspace/src/App.vue");
+      const spanMap = spanMapForSourceFile(payload!);
+
+      expect(spanMap?.segmentCount).toBe(2);
+      // `count` lives at offset 13 of the virtual text and 15 of the `.vue` file.
+      expect(spanMap?.virtualToOriginalPosition(13)).toEqual({
+        position: 15,
+        fidelity: SpanMap.Fidelity.Exact,
+      });
+      expect(spanMap?.virtualToOriginalSpan(13, 18)).toEqual({
+        range: { pos: 15, end: 20 },
+        fidelity: SpanMap.Fidelity.Exact,
+      });
+      // Synthesized prologue text has no counterpart in the original file.
+      expect(spanMap?.virtualToOriginalPosition(2).fidelity).toBe(SpanMap.Fidelity.None);
+      expect(spanMap?.originalToVirtualPositions(16, SpanMap.Feature.Hover)).toEqual([
+        { position: 14, fidelity: SpanMap.Fidelity.Exact },
+      ]);
+      expect(spanMap?.originalToVirtualSpans(15, 20, SpanMap.Feature.Definition)).toEqual([
+        { range: { pos: 13, end: 18 }, fidelity: SpanMap.Fidelity.Exact },
+      ]);
+    });
+  });
+
+  it("builds a span map from decoded segments and honours feature limits", () => {
+    const spanMap = CorsaSpanMap.fromSegments([
+      {
+        virtualStart: 0,
+        virtualEnd: 4,
+        originalStart: 8,
+        originalEnd: 12,
+        kind: SpanMap.Kind.Verbatim,
+        features: SpanMap.Feature.Hover,
+      },
+    ]);
+
+    expect(spanMap.segmentCount).toBe(1);
+    expect(spanMap.virtualToOriginalPosition(1, SpanMap.Feature.Hover).fidelity).toBe(
+      SpanMap.Fidelity.Exact,
+    );
+    expect(spanMap.virtualToOriginalPosition(1, SpanMap.Feature.Rename).fidelity).toBe(
+      SpanMap.Fidelity.None,
+    );
+    expect(spanMap.originalToVirtualPositions(9, SpanMap.Feature.Rename)).toEqual([]);
+  });
+
+  it("decodes on a worker thread too", async () => {
+    const client = CorsaApiClient.spawn({
+      executable: mockBinary,
+      cwd: workspaceRoot,
+      mode: "jsonrpc",
+    });
+    try {
+      await client.initializeAsync();
+      const snapshot = await client.updateSnapshotAsync({
+        openProject: "/workspace/tsconfig.json",
+      });
+      const project = snapshot.projects[0];
+
+      const sourceFile = await client.getEncodedSourceFileAsync(
+        snapshot.snapshot,
+        project.id,
+        "/workspace/src/App.vue",
+      );
+
+      expect(sourceFile?.contentMapping?.contentMapper).toBe("mock-mapper@1.0.0");
+      expect(
+        await client.getEncodedSourceFileAsync(
+          snapshot.snapshot,
+          project.id,
+          "/workspace/src/missing.vue",
+        ),
+      ).not.toBeNull();
+    } finally {
+      client.close();
+    }
+  });
+});
 
 describe("CorsaVirtualDocument", () => {
   it("tracks incremental virtual file changes", () => {
