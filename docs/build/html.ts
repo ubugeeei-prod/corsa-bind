@@ -12,12 +12,17 @@ const SITE_NAME = "corsa-bind";
 const SITE_URL = "https://ubugeeei-prod.github.io/corsa-bind";
 
 const DEFAULT_DESCRIPTION =
-  "Native Rust and JavaScript bindings for the Corsa TypeScript checker — type-aware Oxlint, stdio API + LSP, and zero-cost hot paths.";
+  "A stable systems interface for the Corsa TypeScript checker — type-aware Oxlint, stdio API + LSP, and zero-cost hot paths.";
 
 const NAV_GROUPS = [
   {
     title: "Start",
-    routes: ["index.html", "getting_started/index.html", "project_guide/index.html"],
+    routes: [
+      "index.html",
+      "getting_started/index.html",
+      "architecture_charter/index.html",
+      "project_guide/index.html",
+    ],
   },
   {
     title: "Use",
@@ -58,6 +63,7 @@ const NAV_GROUPS = [
 const ROUTE_TITLES = new Map<string, string>([
   ["index.html", "Overview"],
   ["getting_started/index.html", "Getting started"],
+  ["architecture_charter/index.html", "Architecture charter"],
   ["project_guide/index.html", "Architecture"],
   ["nodejs_binding/index.html", "Node.js binding"],
   ["language_bindings/index.html", "Language bindings"],

@@ -297,16 +297,18 @@ classifyTypeText("string[]");
 (`runNativeLintRule`, `nativeLintRuleMetas`) are also exported here and are
 what `corsa-oxlint` builds on.
 
-## LSP and distributed orchestration
+## LSP and orchestration
 
 - The Rust crate `corsa_lsp` provides full LSP client support with virtual
   document overlays; the Node binding surfaces the document primitives shown
   above. See the Rust `lsp_overlay` example for the `didOpen`/`didChange`/
   `didClose` flow.
-- `CorsaDistributedOrchestrator` exposes the experimental replicated-state API
-  (`campaign`, `leaderId`, `openVirtualDocument`, `changeVirtualDocument`). This
-  is behind the experimental distributed work — see
-  [Support policy](./support_policy.md) for its scope.
+- `CorsaDistributedOrchestrator` was removed in 2.0 along with the rest of the
+  Raft-backed replication layer. Worker pooling, project affinity, and caching
+  live in `ApiOrchestrator` on the Rust side; the Node binding's orchestration
+  entry point is `@corsa-bind/napi/orchestrator`. See the
+  [Architecture charter](./architecture_charter.md) for why replication went
+  away.
 
 ## Development
 

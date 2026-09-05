@@ -185,7 +185,6 @@ dependencies = [
  "corsa_lsp",
  "corsa_runtime",
  "log",
- "lsp-types",
  "parking_lot",
  "serde",
  "serde_json",

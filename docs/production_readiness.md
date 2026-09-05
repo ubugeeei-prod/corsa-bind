@@ -15,9 +15,10 @@ The current production target is:
 
 The following remains experimental:
 
-- the `experimental-distributed` cargo feature
-- the in-process Raft replication layer
 - upstream endpoints called out as unstable by this repository
+
+Distributed orchestration was removed in 2.0; see
+[support_policy.md](./support_policy.md).
 
 ## Default Safety Controls
 
@@ -48,15 +49,34 @@ For editor-like integrations:
 
 - use stable cache keys for snapshots
 - prewarm a small worker fleet instead of spawning per request
-- treat the distributed orchestrator as experimental unless you are actively developing it
+- acquire project leases (`ApiOrchestrator::acquire_project`) instead of leasing
+  raw workers, so each project stays on the worker that is already warm for it
+- drain a fleet with `ApiOrchestrator::shutdown_profile` after a `tsconfig`
+  change or an upstream binary upgrade, rather than letting it grow
+
+## Scaling Story
+
+Scale a single machine first:
+
+```text
+one machine
+  ├ worker 1 — project A
+  ├ worker 2 — project B
+  ├ worker 3 — project C
+  └ worker 4 — spare
+```
+
+Checker state has strong affinity to a repo and its project graph, so requests
+are not interchangeable across nodes and replicated snapshot state buys little.
+When one machine is genuinely not enough, shard at the repo level — repo A to
+machine A, repo B to machine B. That is why the Raft-backed replication layer
+was removed in 2.0 rather than promoted.
 
 ## Release Checklist
 
 - `vp check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `vp run -w test`
-- `cargo test -p corsa --no-default-features --test orchestrator`
-- `cargo test -p corsa --features experimental-distributed --test orchestrator`
 - `vp run -w bench_verify`
 - `vp run -w verify_ref`
 - `cargo deny check advisories bans licenses sources`

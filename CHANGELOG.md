@@ -20,6 +20,31 @@ published versions.
 
 ### Added
 
+- `docs/architecture_charter.md` states the ownership boundary the project is
+  built on — **own integration, not TypeScript semantics** — together with the
+  rules that follow from it (stable API layer, snapshots wrap upstream, the
+  process boundary stays, orchestration is the product, virtual projects stay
+  ours, foreign ASTs ask for facts, opaque handles only, distributed
+  orchestration out of scope, C ABI as the core with tiered language bindings)
+  and the convergence rule: when upstream ships it, delete ours and wrap theirs.
+  The README, docs index, project guide, support policy, production readiness,
+  language bindings, and Oxlint guide are aligned with it, and single-machine
+  pools plus repo-level sharding are documented as the scaling story.
+- `ProjectSession::semantics()` returns `SemanticQuery`, the `corsa-bind`-owned
+  semantic-fact vocabulary that stays stable across upstream endpoint churn:
+  `symbol_at`, `type_at`, `types_at`, `type_of`, `types_of`, `declared_type_of`,
+  `resolve_symbol`, `resolve_type`, `properties_of`, `property_of`,
+  `signatures_of`, `return_type_of`, `is_assignable`, and `type_text`. Answers
+  are opaque handles (`SymbolRef`, `TypeRef`) rather than mirrors of the
+  checker's object graph, and `SEMANTIC_QUERY_VERSION` records the contract. The
+  upstream-shaped `ApiClient` / `ProjectSession` methods are unchanged and remain
+  the escape hatch for callers who want the full upstream payload.
+- the orchestrator gains project lifecycle: `acquire_project` returns a
+  `ProjectLease` pinned to one warm worker, `lease_for_project` exposes the same
+  affinity for raw client leases, `project_affinity_count` and
+  `release_project_affinity` manage the pin, and `shutdown_profile` drains a
+  fleet. Pinning matters because the program graph belongs to a process — a
+  round-robin lease rebuilds it on every worker the project lands on.
 - full support for TypeScript content mappers. `--runExternalCode` was already forwarded, but everything downstream of that gate was opaque: a mapped file's `getSourceFile` payload arrived as bytes with no way to tell a mapper had produced it, and the checker's positions — which for such a file are positions in the mapper's virtual TypeScript — had no route back to the file the user edits. `EncodedSourceFile::decode` (also `EncodedPayload::decode_source_file` and `ApiClient::get_encoded_source_file`) reads the source-file level fields out of that payload: mapper identity, virtual filename, both texts, span map, diagnostic directives, supplemental outputs, and the canonical file a supplemental output belongs to. `SpanMap` ports upstream's `spanmap.go`/`spanMap.ts` mapping in full — verbatim/atom/alias segments, per-feature opt-outs, exact/atom/approximate/none fidelity, and the duplicate-group rules that keep an original range from projecting onto one span covering every copy. `ConfigResponse::raw` and `ConfigResponse::content_mappers()` expose the mappers a project declares. The Node binding mirrors all of it: `getEncodedSourceFile`, `decodeSourceFile`, `isContentMappedSourceFile`, `spanMapForSourceFile`, `contentMappersFromConfig`, the `CorsaSpanMap` class, and the `SpanMap.Kind`/`.Fidelity`/`.Feature` enums. [`docs/content_mappers.md`](./docs/content_mappers.md) documents the semantics.
 - `corsa-oxlint` translates lint positions through the span map before every type and symbol lookup in a content-mapped file, so a mapper-owned file resolves the node the checker actually holds instead of whatever sits at that raw offset, and authored text the mapper never emitted resolves to no type rather than to a neighbouring one. Rules reach the mapping through `program.getContentMapping()` and `program.getContentMappers()`. Projects that declare no `contentMappers` issue no extra requests at all.
 - the Node binding adds `batchCheckerRequests` / `batchCheckerRequestsAsync`
@@ -58,7 +83,13 @@ published versions.
 
 ### Removed
 
-- `corsa_core::fast` no longer re-exports `Bump`/`BumpString`, and the workspace no longer depends on `bumpalo`; `corsa_lsp` drops its unused `log` dependency; `corsa_orchestrator` only pulls `lsp-types` when the `experimental-distributed` feature is enabled.
+- **Breaking (2.0):** distributed orchestration is gone. Deleted: the `experimental-distributed` cargo feature on `corsa_orchestrator`, `corsa`, and `corsa_node`; `DistributedApiOrchestrator`; the in-process Raft implementation (`RaftCluster`, `RaftClusterBuilder`, `RaftConfig`, `RaftRole`, `RaftMessage`, `RaftSnapshot`, `RaftStorage`, `RaftTransport`, `InMemoryStorage`, `FileStorage`, `ChannelTransport`, `InProcessTransport`, `HardState`, `PersistedLogEntry`); the replicated-state model (`ReplicatedState`, `ReplicatedCommand`, `ReplicatedSnapshot`, `ReplicatedCacheEntry`); the `CorsaDistributedOrchestrator` N-API class and its JS wrapper; and the `distributed_orchestrator` Rust and Node examples. About 3,400 lines of deleted files, with no replacement.
+
+  Checker state has strong affinity to a repo and its project graph, so requests are not interchangeable across nodes and replicating snapshot state buys little. The supported scaling story is a well-tuned single-machine pool — `ApiOrchestrator::acquire_project` pins a project to one warm worker — with repo-level sharding above it. Keeping a consensus implementation alive "just in case" is exactly the sunk cost that [architecture_charter.md](docs/architecture_charter.md) rule 8 and the convergence rule exist to prevent. The layer was always behind a cargo feature and always outside the production support commitment.
+
+  Fallout for consumers: `vp run -w test` no longer runs the two feature-combo cargo invocations, `vp run -w examples_rust_experimental` is gone, and `pnpm --dir examples run distributed-orchestrator` is gone.
+
+- `corsa_core::fast` no longer re-exports `Bump`/`BumpString`, and the workspace no longer depends on `bumpalo`; `corsa_lsp` drops its unused `log` dependency; `corsa_orchestrator` no longer depends on `lsp-types` at all.
 - default runtime discovery no longer looks for `@typescript/native-preview`. TypeScript 7 ships the same native binary through the same mechanism — `typescript` declares `@typescript/typescript-<platform>-<arch>` as an optional dependency and reads `lib/tsc` out of it, exactly as the preview channel did with `lib/tsgo` — so the preview lookup only ever won on machines with no TypeScript 7 installed. Resolution is now `typescript` 7 or newer, then `.cache/corsa`. Consumers still on the preview package can point at it with `CORSA_EXECUTABLE`, `parserOptions.corsa.executable`, or `resolveFrom`. This supersedes the `@typescript/native-preview` discovery entries in 1.0.0-beta.2 and 1.6.0.
 
 ## 1.9.0 - 2026-08-18

@@ -13,7 +13,7 @@ If you are picking a first example, use this quick map:
 | edit in-memory documents                     | `minimal_start.ts`, `virtual_document.ts` | `minimal_start.rs`, `virtual_document.rs`     |
 | inspect symbols, types, and signatures       | `checker_queries.ts`                      | `checker_queries.rs`                          |
 | drive snapshot queries with a mock server    | `mock_client.ts`, `raw_calls.ts`          | `mock_client.rs`                              |
-| exercise orchestration and observability     | `distributed_orchestrator.ts`             | `orchestrator_cache.rs`, `observer_events.rs` |
+| exercise orchestration and observability     | -                                         | `orchestrator_cache.rs`, `observer_events.rs` |
 | use upstream-only printer APIs intentionally | -                                         | `print_node_opt_in.rs`                        |
 | author type-aware Oxlint rules               | `corsa_oxlint/*`                          | -                                             |
 
@@ -55,12 +55,6 @@ vp run -w build_corsa
 vp run -w examples_real
 ```
 
-Run the experimental distributed Rust example:
-
-```bash
-vp run -w examples_rust_experimental
-```
-
 ## Minimal Start
 
 These examples do not require a real Corsa binary and are the best first touchpoints.
@@ -85,7 +79,6 @@ These examples use the repo-local mock Corsa binary so you can exercise realisti
 - `examples/nodejs/checker_queries.ts`: advanced checker walkthrough using `callJson()` for symbols, types, signatures, and relation endpoints
 - `examples/nodejs/mock_client.ts`: high-level mock API roundtrip through `CorsaApiClient`
 - `examples/nodejs/raw_calls.ts`: low-level `callJson()` / `callBinary()` escape hatches for custom endpoints
-- `examples/nodejs/distributed_orchestrator.ts`: in-process distributed state replication for virtual documents
 - `examples/rust/checker_queries.rs`: typed symbol/type/signature traversal with parsed declaration handles and relation helpers
 - `examples/rust/mock_client.rs`: typed snapshot, source-file, and type-string queries through the Rust API client
 - `examples/rust/filesystem_callbacks.rs`: custom `ApiFileSystem` callbacks with a virtualized workspace
@@ -126,18 +119,6 @@ Run one directly with:
 ```bash
 pnpm --dir examples run real-snapshot
 cargo run -p corsa --example real_snapshot
-```
-
-## Experimental Distributed
-
-This example is intentionally separated because it requires the cargo feature.
-
-- `examples/rust/distributed_orchestrator.rs`: replicated document and cached-result flow through `DistributedApiOrchestrator`
-
-Run it with:
-
-```bash
-cargo run -p corsa --features experimental-distributed --example distributed_orchestrator
 ```
 
 ## `corsa-oxlint` Examples

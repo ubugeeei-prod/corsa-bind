@@ -245,21 +245,6 @@ export interface CorsaApiClient {
   closeAsync(): Promise<void>;
 }
 
-type CorsaDistributedOrchestratorConstructor = {
-  new (nodeIds: string[]): CorsaDistributedOrchestrator;
-};
-
-export interface CorsaDistributedOrchestrator {
-  campaign(nodeId: string): number;
-  leaderId(): string | null;
-  state<T>(): T | null;
-  nodeState<T>(nodeId: string): T | null;
-  document(nodeId: string, uri: string): VirtualDocumentState | null;
-  openVirtualDocument(document: VirtualDocumentState): VirtualDocumentState;
-  changeVirtualDocument(uri: string, changes: VirtualChange[]): VirtualDocumentState;
-  closeVirtualDocument(uri: string): void;
-}
-
 type CorsaVirtualDocumentConstructor = {
   untitled(path: string, languageId: string, text: string): CorsaVirtualDocument;
   inMemory(authority: string, path: string, languageId: string, text: string): CorsaVirtualDocument;
@@ -276,8 +261,6 @@ export interface CorsaVirtualDocument {
 }
 
 export const CorsaApiClient = binding.CorsaApiClient as unknown as CorsaApiClientConstructor;
-export const CorsaDistributedOrchestrator =
-  binding.CorsaDistributedOrchestrator as unknown as CorsaDistributedOrchestratorConstructor;
 export const CorsaVirtualDocument =
   binding.CorsaVirtualDocument as unknown as CorsaVirtualDocumentConstructor;
 

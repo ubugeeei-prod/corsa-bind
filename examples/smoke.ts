@@ -1,5 +1,4 @@
 import { runCheckerQueriesExample } from "./nodejs/checker_queries.ts";
-import { runDistributedOrchestratorExample } from "./nodejs/distributed_orchestrator.ts";
 import { runMinimalStartExample } from "./nodejs/minimal_start.ts";
 import { runMockClientExample } from "./nodejs/mock_client.ts";
 import { runRawCallsExample } from "./nodejs/raw_calls.ts";
@@ -26,7 +25,6 @@ const result = {
       ?.description ?? null,
   customRuleEntries: ruleCount(customRulesConfig),
   checkerQueries: runCheckerQueriesExample(),
-  distributedOrchestrator: runDistributedOrchestratorExample(),
   minimalStart: runMinimalStartExample(),
   mockClient: runMockClientExample(),
   nativeRuleEntries: ruleCount(nativeRulesConfig),

@@ -23,6 +23,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Maximum number of project-to-worker affinity entries retained per fleet.
+///
+/// Entries are a project key plus a worker index, so this bound exists to keep
+/// a long-lived server from accumulating pins for projects it stopped serving,
+/// not to protect a meaningful memory budget.
+const MAX_PROJECT_AFFINITIES: usize = 1_024;
+
 /// Local pool/cache orchestrator for multiple Corsa API workers.
 ///
 /// This type is where session reuse becomes a first-class concept. It can:
@@ -110,9 +117,11 @@ pub struct ApiOrchestrator {
     cached_order: Mutex<VecDeque<CompactString>>,
 }
 
-struct ClientFleet {
+pub(super) struct ClientFleet {
     next: AtomicUsize,
     clients: RwLock<SmallVec<[ApiClient; 4]>>,
+    affinity: RwLock<FastMap<CompactString, usize>>,
+    affinity_order: Mutex<VecDeque<CompactString>>,
 }
 
 struct CachedValue {
@@ -196,12 +205,121 @@ impl ApiOrchestrator {
     ///
     /// The returned client is shared and cheaply clonable; leasing does not
     /// transfer ownership of the underlying process.
+    ///
+    /// Returns an error rather than panicking when the fleet is empty, which a
+    /// concurrent [`Self::shutdown_profile`] can cause between the `prewarm`
+    /// above and the read below.
     pub async fn lease(&self, profile: &ApiProfile) -> Result<ApiClient> {
         self.prewarm(profile, 1).await?;
         let fleet = self.fleet(profile).await?;
         let clients = fleet.clients.read();
-        let index = fleet.next.fetch_add(1, Ordering::Relaxed) % clients.len();
+        let index = round_robin_index(&fleet, clients.len(), profile)?;
         Ok(clients[index].clone())
+    }
+
+    /// Leases a worker that is pinned to a logical project key.
+    ///
+    /// Checker state has strong project affinity: the program graph, the
+    /// resolved module map, and every snapshot derived from them belong to one
+    /// worker. Round-robin leasing spreads the same project across the fleet
+    /// and pays that construction cost again on each worker. Pinning keeps a
+    /// project on the worker that is already warm for it.
+    ///
+    /// The first lease for a key picks a worker round-robin and remembers it.
+    /// Later leases reuse that worker as long as it is still in the fleet.
+    pub async fn lease_for_project(
+        &self,
+        profile: &ApiProfile,
+        project_key: &str,
+    ) -> Result<ApiClient> {
+        self.prewarm(profile, 1).await?;
+        let fleet = self.fleet(profile).await?;
+        let clients = fleet.clients.read();
+        // Look up and insert under one write lock. Two callers racing to lease
+        // the same project for the first time would otherwise both observe no
+        // pin, pick different workers, and end up with two checker states for
+        // one project — the affinity contract broken by the code meant to
+        // enforce it.
+        let (index, pinned_now) = {
+            let mut affinity = fleet.affinity.write();
+            match affinity
+                .get(project_key)
+                .copied()
+                .filter(|index| *index < clients.len())
+            {
+                Some(index) => (index, false),
+                None => {
+                    let index = round_robin_index(&fleet, clients.len(), profile)?;
+                    affinity.insert(CompactString::from(project_key), index);
+                    (index, true)
+                }
+            }
+        };
+        if pinned_now {
+            // Bookkeeping only, and it takes the same lock, so it has to run
+            // after the guard above is dropped.
+            self.remember_affinity_key(&fleet, CompactString::from(project_key));
+        }
+        Ok(clients[index].clone())
+    }
+
+    /// Returns how many project affinities are currently pinned for `profile`.
+    ///
+    /// A profile that has never been leased reports `0` rather than being
+    /// created as a side effect of asking.
+    pub fn project_affinity_count(&self, profile: &ApiProfile) -> usize {
+        self.fleets
+            .read()
+            .get(profile.id.as_str())
+            .map(|fleet| fleet.affinity.read().len())
+            .unwrap_or(0)
+    }
+
+    /// Drops the pinned worker for a logical project key.
+    ///
+    /// The next lease for that key picks a worker round-robin again.
+    pub fn release_project_affinity(&self, profile: &ApiProfile, project_key: &str) {
+        let Some(fleet) = self.fleets.read().get(profile.id.as_str()).cloned() else {
+            return;
+        };
+        fleet.affinity.write().remove(project_key);
+        fleet
+            .affinity_order
+            .lock()
+            .retain(|entry| entry.as_str() != project_key);
+    }
+
+    /// Shuts every worker in a profile fleet down and forgets its affinities.
+    ///
+    /// Process lifecycle is something this layer owns on purpose: a checker
+    /// worker is a real OS process, and a pool that can only grow is an
+    /// operational liability. Use this to drain a profile after a `tsconfig`
+    /// change, on upstream binary upgrade, or when a fleet has gone bad.
+    ///
+    /// Errors from individual workers are reported after every worker has been
+    /// asked to stop, so one stuck process cannot strand the rest.
+    pub async fn shutdown_profile(&self, profile: &ApiProfile) -> Result<()> {
+        let Some(fleet) = self.fleets.write().remove(profile.id.as_str()) else {
+            return Ok(());
+        };
+        let clients = std::mem::take(&mut *fleet.clients.write());
+        fleet.affinity.write().clear();
+        fleet.affinity_order.lock().clear();
+
+        let mut first_error = None;
+        for client in clients {
+            if let Err(error) = client.close().await {
+                warn!(
+                    "failed to close worker for profile `{}`: {error}",
+                    profile.id
+                );
+                first_error.get_or_insert(error);
+            }
+        }
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 
     /// Returns a cached snapshot or creates one lazily.
@@ -362,7 +480,7 @@ impl ApiOrchestrator {
         Ok(values.into_iter().map(|(_, value)| value).collect())
     }
 
-    async fn fleet(&self, profile: &ApiProfile) -> Result<Arc<ClientFleet>> {
+    pub(super) async fn fleet(&self, profile: &ApiProfile) -> Result<Arc<ClientFleet>> {
         if let Some(fleet) = self.fleets.read().get(profile.id.as_str()) {
             return Ok(fleet.clone());
         }
@@ -375,6 +493,8 @@ impl ApiOrchestrator {
                 Arc::new(ClientFleet {
                     next: AtomicUsize::new(0),
                     clients: RwLock::new(SmallVec::new()),
+                    affinity: RwLock::new(FastMap::default()),
+                    affinity_order: Mutex::new(VecDeque::new()),
                 })
             })
             .clone();
@@ -401,6 +521,28 @@ impl ApiOrchestrator {
         }
     }
 
+    fn remember_affinity_key(&self, fleet: &ClientFleet, key: CompactString) {
+        let mut order = fleet.affinity_order.lock();
+        order.retain(|existing| *existing != key);
+        order.push_back(key);
+        while fleet.affinity.read().len() > MAX_PROJECT_AFFINITIES {
+            let Some(evicted) = order.pop_front() else {
+                break;
+            };
+            if fleet.affinity.write().remove(evicted.as_str()).is_some() {
+                observe(
+                    self.config.observer.as_ref(),
+                    CorsaEvent::OrchestratorProjectAffinityEvicted {
+                        project: evicted.clone(),
+                    },
+                );
+                warn!(
+                    "evicted project affinity `{evicted}` to stay within the {MAX_PROJECT_AFFINITIES} entry limit"
+                );
+            }
+        }
+    }
+
     fn remember_cached_key(&self, key: CompactString) {
         let mut order = self.cached_order.lock();
         order.retain(|existing| existing != key);
@@ -420,6 +562,21 @@ impl ApiOrchestrator {
             }
         }
     }
+}
+
+/// Picks the next round-robin worker index, or reports an empty fleet.
+///
+/// The emptiness check and the modulo belong together: `% 0` panics, and a
+/// fleet can be emptied by [`ApiOrchestrator::shutdown_profile`] at any point
+/// after a lease has prewarmed it.
+fn round_robin_index(fleet: &ClientFleet, len: usize, profile: &ApiProfile) -> Result<usize> {
+    if len == 0 {
+        return Err(crate::CorsaError::Protocol(compact_format(format_args!(
+            "profile `{}` has no workers to lease",
+            profile.id
+        ))));
+    }
+    Ok(fleet.next.fetch_add(1, Ordering::Relaxed) % len)
 }
 
 fn batch_worker_panic(panic: Box<dyn Any + Send>) -> crate::CorsaError {

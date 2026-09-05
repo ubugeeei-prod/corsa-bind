@@ -109,28 +109,6 @@ export declare class CorsaApiClient {
   closeAsync(): Promise<void>
 }
 
-/** N-API wrapper for the distributed orchestration layer. */
-export declare class CorsaDistributedOrchestrator {
-  /** Creates a new in-process Raft cluster. */
-  constructor(nodeIds: Array<string>)
-  /** Starts a leader election and returns the resulting term. */
-  campaign(nodeId: string): number
-  /** Returns the current leader identifier. */
-  leaderId(): string | null
-  /** Returns the leader state. */
-  state(): any | null
-  /** Returns the state for a single node. */
-  nodeState(nodeId: string): any | null
-  /** Returns a replicated document if it exists. */
-  document(nodeId: string, uri: string): any | null
-  /** Replicates an opened document and returns the state. */
-  openVirtualDocument(document: any): any
-  /** Applies replicated incremental changes and returns the state. */
-  changeVirtualDocument(uri: string, changes: any): any
-  /** Removes a replicated document. */
-  closeVirtualDocument(uri: string): void
-}
-
 /**
  * Bidirectional mapping between a mapper's virtual text and the original file.
  *

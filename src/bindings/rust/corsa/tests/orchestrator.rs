@@ -1,11 +1,7 @@
 mod support;
 
-#[cfg(feature = "experimental-distributed")]
-use corsa::lsp::{VirtualChange, VirtualDocument};
-#[cfg(feature = "experimental-distributed")]
-use corsa::orchestrator::{DistributedApiOrchestrator, RaftCluster, ReplicatedCommand};
 use corsa::{
-    api::{ApiClient, ApiMode, UpdateSnapshotParams},
+    api::{ApiClient, ApiMode, ApiProfile, UpdateSnapshotParams},
     observability::{CorsaEvent, CorsaObserver},
     orchestrator::{ApiOrchestrator, ApiOrchestratorConfig},
     runtime::block_on,
@@ -217,141 +213,6 @@ fn orchestrator_recomputes_expired_cached_values() {
 }
 
 #[test]
-#[cfg(feature = "experimental-distributed")]
-fn raft_cluster_elects_a_leader_and_rejects_follower_writes() {
-    let cluster = RaftCluster::new(["n1", "n2", "n3"]);
-    let document =
-        VirtualDocument::in_memory("cluster", "/main.ts", "typescript", "let value = 1;").unwrap();
-    assert!(
-        cluster
-            .append(
-                "n1",
-                ReplicatedCommand::PutDocument {
-                    document: document.clone(),
-                },
-            )
-            .is_err()
-    );
-    assert_eq!(cluster.campaign("n2").unwrap(), 1);
-    cluster
-        .append(
-            "n2",
-            ReplicatedCommand::PutDocument {
-                document: document.clone(),
-            },
-        )
-        .unwrap();
-    assert!(
-        cluster
-            .append(
-                "n1",
-                ReplicatedCommand::PutDocument {
-                    document: document.clone(),
-                },
-            )
-            .is_err()
-    );
-    for node in ["n1", "n2", "n3"] {
-        let state = cluster.node_state(node).unwrap();
-        assert_eq!(state.documents[document.uri.as_str()], document);
-    }
-}
-
-#[test]
-#[cfg(feature = "experimental-distributed")]
-fn distributed_orchestrator_replicates_virtual_documents_and_results() {
-    run_async_test(async {
-        let orchestrator = DistributedApiOrchestrator::new(["n1", "n2", "n3"]);
-        let profile = support::api_profile("dist-cache", ApiMode::AsyncJsonRpcStdio);
-        let document =
-            VirtualDocument::in_memory("cluster", "/main.ts", "typescript", "let value = 1;")
-                .unwrap();
-        orchestrator.campaign("n1").unwrap();
-        orchestrator
-            .open_virtual_document("n1", document.clone())
-            .unwrap();
-        let updated = orchestrator
-            .change_virtual_document(
-                "n1",
-                &document.uri,
-                [VirtualChange::splice(
-                    lsp_types::Range::new(
-                        lsp_types::Position::new(0, 12),
-                        lsp_types::Position::new(0, 13),
-                    ),
-                    "2",
-                )],
-            )
-            .unwrap();
-        assert_eq!(updated.text, "let value = 2;");
-        let calls = Arc::new(AtomicUsize::new(0));
-        let first: Value = orchestrator
-            .cached(&profile, "n1", "ping", Some(Duration::from_secs(30)), {
-                let calls = calls.clone();
-                move |client| async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    client.raw_json_request("ping", Value::Null).await
-                }
-            })
-            .await
-            .unwrap();
-        let second: Value = orchestrator
-            .cached(&profile, "n1", "ping", Some(Duration::from_secs(30)), {
-                let calls = calls.clone();
-                move |client| async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    client.raw_json_request("ping", Value::Null).await
-                }
-            })
-            .await
-            .unwrap();
-        assert_eq!(first, json!("pong"));
-        assert_eq!(second, json!("pong"));
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-        for node in ["n1", "n2", "n3"] {
-            let state = orchestrator.node_state(node).unwrap();
-            assert_eq!(
-                state.documents[document.uri.as_str()].text,
-                "let value = 2;"
-            );
-            assert_eq!(
-                state.result::<Value>("ping").unwrap().unwrap(),
-                json!("pong")
-            );
-        }
-    });
-}
-
-#[test]
-#[cfg(feature = "experimental-distributed")]
-fn distributed_orchestrator_replicates_snapshot_records() {
-    run_async_test(async {
-        let orchestrator = DistributedApiOrchestrator::new(["leader", "follower-a", "follower-b"]);
-        let profile = support::api_profile("dist-snapshot", ApiMode::AsyncJsonRpcStdio);
-        orchestrator.campaign("leader").unwrap();
-        let snapshot = orchestrator
-            .cached_snapshot(
-                &profile,
-                "leader",
-                "workspace",
-                UpdateSnapshotParams {
-                    open_project: Some("/workspace/tsconfig.json".into()),
-                    file_changes: None,
-                    overlay_changes: None,
-                },
-            )
-            .await
-            .unwrap();
-        let record = orchestrator.snapshot_record("leader", "workspace").unwrap();
-        assert_eq!(record.handle, snapshot.handle);
-        for node in ["leader", "follower-a", "follower-b"] {
-            let state = orchestrator.node_state(node).unwrap();
-            assert_eq!(state.snapshots["workspace"].handle, snapshot.handle);
-        }
-    });
-}
-
-#[test]
 fn orchestrator_enforces_cache_limits() {
     run_async_test(async {
         let orchestrator = ApiOrchestrator::new(ApiOrchestratorConfig {
@@ -530,5 +391,201 @@ fn orchestrator_rejects_worker_requests_above_limit() {
             error,
             corsa::CorsaError::Protocol(message) if message.contains("exceeds the configured maximum")
         ));
+    });
+}
+
+fn count_lines(path: impl AsRef<std::path::Path>) -> usize {
+    std::fs::read_to_string(path)
+        .map(|text| text.lines().count())
+        .unwrap_or(0)
+}
+
+#[test]
+fn orchestrator_pins_a_project_to_one_warm_worker() {
+    let pinned_dir = tempfile::tempdir().unwrap();
+    let round_robin_dir = tempfile::tempdir().unwrap();
+
+    run_async_test({
+        let pinned = pinned_dir.path().display().to_string();
+        let round_robin = round_robin_dir.path().display().to_string();
+        async move {
+            let orchestrator = ApiOrchestrator::default();
+
+            let pinned_profile = ApiProfile::new(
+                "pinned",
+                support::api_config(ApiMode::AsyncJsonRpcStdio)
+                    .with_env("CORSA_MOCK_COUNT_DIR", pinned),
+            );
+            orchestrator.prewarm(&pinned_profile, 3).await.unwrap();
+            for _ in 0..4 {
+                let project = orchestrator
+                    .acquire_project(
+                        &pinned_profile,
+                        "/workspace/tsconfig.json",
+                        Some("/workspace/src/index.ts".into()),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    project.project().config_file_name,
+                    "/workspace/tsconfig.json"
+                );
+                project.release();
+            }
+
+            // The same project keeps landing on the worker that is already warm
+            // for it, so only one of the three ever runs `initialize`.
+            let round_robin_profile = ApiProfile::new(
+                "round-robin",
+                support::api_config(ApiMode::AsyncJsonRpcStdio)
+                    .with_env("CORSA_MOCK_COUNT_DIR", round_robin),
+            );
+            orchestrator.prewarm(&round_robin_profile, 3).await.unwrap();
+            for _ in 0..4 {
+                let client = orchestrator.lease(&round_robin_profile).await.unwrap();
+                client
+                    .update_snapshot(UpdateSnapshotParams {
+                        open_project: Some("/workspace/tsconfig.json".into()),
+                        file_changes: None,
+                        overlay_changes: None,
+                    })
+                    .await
+                    .unwrap();
+            }
+
+            orchestrator
+                .shutdown_profile(&pinned_profile)
+                .await
+                .unwrap();
+            orchestrator
+                .shutdown_profile(&round_robin_profile)
+                .await
+                .unwrap();
+        }
+    });
+
+    assert_eq!(count_lines(pinned_dir.path().join("initialize.count")), 1);
+    assert_eq!(
+        count_lines(round_robin_dir.path().join("initialize.count")),
+        3
+    );
+}
+
+#[test]
+fn concurrent_first_leases_for_one_project_agree_on_one_worker() {
+    let count_dir = tempfile::tempdir().unwrap();
+
+    run_async_test({
+        let count_path = count_dir.path().display().to_string();
+        async move {
+            let orchestrator = Arc::new(ApiOrchestrator::default());
+            let profile = ApiProfile::new(
+                "affinity-race",
+                support::api_config(ApiMode::AsyncJsonRpcStdio)
+                    .with_env("CORSA_MOCK_COUNT_DIR", count_path),
+            );
+            // Three workers, so a lost race hands the same project to a
+            // different one instead of silently agreeing.
+            orchestrator.prewarm(&profile, 3).await.unwrap();
+
+            let racers = (0..8)
+                .map(|_| {
+                    let orchestrator = orchestrator.clone();
+                    let profile = profile.clone();
+                    thread::spawn(move || {
+                        block_on(async move {
+                            let client = orchestrator
+                                .lease_for_project(&profile, "/workspace/tsconfig.json")
+                                .await
+                                .unwrap();
+                            client
+                                .update_snapshot(UpdateSnapshotParams {
+                                    open_project: Some("/workspace/tsconfig.json".into()),
+                                    file_changes: None,
+                                    overlay_changes: None,
+                                })
+                                .await
+                                .unwrap();
+                        })
+                    })
+                })
+                .collect::<Vec<_>>();
+            for racer in racers {
+                racer.join().unwrap();
+            }
+
+            assert_eq!(orchestrator.project_affinity_count(&profile), 1);
+            orchestrator.shutdown_profile(&profile).await.unwrap();
+        }
+    });
+
+    // One worker initialized means all eight leases landed on it. Before the
+    // lookup-and-insert was made atomic, racing first leases could each pick a
+    // different worker and build the project graph more than once.
+    assert_eq!(count_lines(count_dir.path().join("initialize.count")), 1);
+}
+
+#[test]
+fn orchestrator_tracks_and_releases_project_affinities() {
+    run_async_test(async {
+        let orchestrator = ApiOrchestrator::default();
+        let profile = support::api_profile("affinity-bookkeeping", ApiMode::AsyncJsonRpcStdio);
+
+        assert_eq!(orchestrator.project_affinity_count(&profile), 0);
+
+        orchestrator
+            .lease_for_project(&profile, "/workspace/tsconfig.json")
+            .await
+            .unwrap();
+        orchestrator
+            .lease_for_project(&profile, "/other/tsconfig.json")
+            .await
+            .unwrap();
+        assert_eq!(orchestrator.project_affinity_count(&profile), 2);
+
+        orchestrator.release_project_affinity(&profile, "/other/tsconfig.json");
+        assert_eq!(orchestrator.project_affinity_count(&profile), 1);
+
+        orchestrator.shutdown_profile(&profile).await.unwrap();
+        assert_eq!(orchestrator.stats().worker_count, 0);
+        assert_eq!(orchestrator.project_affinity_count(&profile), 0);
+    });
+}
+
+#[test]
+fn project_lease_exposes_the_stable_semantic_query_surface() {
+    run_async_test(async {
+        let orchestrator = ApiOrchestrator::default();
+        let profile = support::api_profile("lease-semantics", ApiMode::AsyncJsonRpcStdio);
+
+        let mut project = orchestrator
+            .acquire_project(
+                &profile,
+                "/workspace/tsconfig.json",
+                Some("/workspace/src/index.ts".into()),
+            )
+            .await
+            .unwrap();
+
+        let symbol = project
+            .semantics()
+            .symbol_at("/workspace/src/index.ts", 1)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(symbol.name, "value");
+
+        project.session_mut().refresh(None).await.unwrap();
+        assert!(
+            project
+                .semantics()
+                .type_of(&symbol.id)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        project.release();
+        orchestrator.shutdown_profile(&profile).await.unwrap();
     });
 }

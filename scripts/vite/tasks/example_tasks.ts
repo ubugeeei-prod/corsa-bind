@@ -1,7 +1,7 @@
 import { noopCommand } from "../paths.ts";
 import type { RunTasks } from "../task_types.ts";
 
-/** Executable example tasks for Node, Rust, real-upstream, and experimental flows. */
+/** Executable example tasks for Node, Rust, and real-upstream flows. */
 export const exampleTasks = {
   examples_node_smoke: {
     command: "pnpm run smoke",
@@ -25,10 +25,6 @@ export const exampleTasks = {
   examples_rust_real: {
     command: "node --strip-types ./scripts/run_rust_examples.ts real",
     dependsOn: ["sync_ref", "verify_ref", "build_corsa"],
-  },
-  examples_rust_experimental: {
-    command: "node --strip-types ./scripts/run_rust_examples.ts experimental",
-    dependsOn: ["build_mock"],
   },
   examples_smoke: {
     command: noopCommand,

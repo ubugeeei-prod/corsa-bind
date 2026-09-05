@@ -15,10 +15,6 @@ rust-version.workspace = true
 name = "corsa"
 path = "src/lib.rs"
 
-[features]
-default = []
-experimental-distributed = ["corsa_orchestrator/experimental-distributed"]
-
 [[bin]]
 name = "mock_corsa"
 path = "src/bin/mock_corsa/main.rs"
@@ -70,11 +66,6 @@ path = "../../../../examples/rust/print_node_opt_in.rs"
 [[example]]
 name = "real_snapshot"
 path = "../../../../examples/rust/real_snapshot.rs"
-
-[[example]]
-name = "distributed_orchestrator"
-path = "../../../../examples/rust/distributed_orchestrator.rs"
-required-features = ["experimental-distributed"]
 
 [dependencies]
 base64 = "0.23"

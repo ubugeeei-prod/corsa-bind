@@ -1,30 +1,38 @@
 //! Orchestration layers for coordinating one or more Corsa workers.
 //!
-//! The orchestration crates are where `corsa` can outperform naive CLI usage:
-//! by prewarming workers, reusing snapshots, memoizing results, and replicating
-//! editor state, higher-level workflows avoid paying full initialization cost
-//! for every query.
+//! This crate is where `corsa` outperforms naive CLI usage: by prewarming
+//! workers, pinning a project to the worker that is already warm for it,
+//! reusing snapshots, and memoizing results, higher-level workflows avoid
+//! paying full initialization cost for every query.
+//!
+//! Upstream Corsa builds a compiler service. This crate builds the runtime
+//! service on top of it — process lifecycle, pooling, affinity, caching, and
+//! backpressure — without taking on any checker semantics. See
+//! `docs/architecture_charter.md`.
 //!
 //! # Entry Points
 //!
 //! - [`ApiOrchestrator`] manages a local pool of API workers plus caches.
-//! - Distributed replication is gated behind the `experimental-distributed`
-//!   cargo feature and, like the higher-level
-//!   [`orchestrator::DistributedApiOrchestrator`] surface, sits outside the
-//!   production support commitment (see `docs/support_policy.md`). The
-//!   underlying Raft implementation, exposed as
-//!   [`orchestrator::RaftCluster`], carries pluggable
-//!   [`orchestrator::RaftStorage`] and [`orchestrator::RaftTransport`]
-//!   traits, implements log replication with the conflict-index backfill
-//!   optimisation, randomized election timing, snapshot-based log
-//!   compaction, and a simplified single-server membership change protocol.
+//! - [`ApiOrchestrator::acquire_project`] is the session-shaped entry point:
+//!   acquire a [`ProjectLease`] for one `tsconfig`, query it, then release it.
+//! - [`ApiOrchestrator::shutdown_profile`] drains a fleet when a `tsconfig` or
+//!   the upstream binary changes.
+//!
+//! # Scaling
+//!
+//! Checker state has strong affinity to a repo and its project graph, so
+//! requests are not interchangeable across nodes. The scaling story is a
+//! well-tuned single-machine pool with repo-level sharding above it, not
+//! consensus over snapshot state. The experimental Raft-backed replication
+//! layer that used to live here was removed for exactly that reason; see
+//! `docs/architecture_charter.md`.
 
 /// Re-exports the typed stdio API client layer used by the orchestrators.
 pub mod api {
     pub use corsa_client::*;
 }
 
-/// Re-exports the LSP overlay types used for replicated virtual documents.
+/// Re-exports the LSP overlay types used for editor-style virtual documents.
 pub mod lsp {
     pub use corsa_lsp::*;
 }
@@ -37,7 +45,7 @@ pub mod observability {
 pub use corsa_core::{CorsaError, CorsaEvent, CorsaObserver, Result, SharedObserver};
 
 #[path = "orchestrator/mod.rs"]
-/// Local and distributed orchestration helpers.
+/// Local orchestration helpers.
 pub mod orchestrator;
 
 pub use orchestrator::*;

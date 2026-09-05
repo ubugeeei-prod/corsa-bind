@@ -57,6 +57,11 @@ pub enum CorsaEvent {
         /// Caller-provided result cache key that was evicted.
         key: CompactString,
     },
+    /// A project-to-worker affinity entry was evicted to stay within configured limits.
+    OrchestratorProjectAffinityEvicted {
+        /// Logical project key whose worker affinity was dropped.
+        project: CompactString,
+    },
 }
 
 /// Sink for structured operational events emitted by the workspace.
