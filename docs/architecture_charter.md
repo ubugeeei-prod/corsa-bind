@@ -204,7 +204,7 @@ the display name or rendering Corsa already sent along. Consumers that want the
 full upstream-shaped payload can still reach `ApiClient`, and in doing so they
 knowingly accept upstream's churn.
 
-### 8. Distributed orchestration is frozen
+### 8. Distributed orchestration is out of scope
 
 Checker workloads have strong affinity to a repo, its project graph, and mutable
 snapshot state. That makes them a poor fit for a stateless "any node can serve
@@ -224,10 +224,17 @@ one machine
 When scale genuinely demands more, the answer is repo-level sharding —
 repo A to machine A, repo B to machine B — not consensus over checker state.
 
-The existing `experimental-distributed` code stays where it is, behind its
-feature gate and outside the support commitment. It is **frozen**: no new
-capability, no promotion, and it is not part of the project's identity. It is a
-candidate for removal once nothing depends on it.
+This rule was applied to the repository itself in 2.0: the
+`experimental-distributed` cargo feature, `DistributedApiOrchestrator`, the
+in-process Raft implementation, the replicated-state model, and the
+`CorsaDistributedOrchestrator` N-API class were all deleted — roughly 3,400
+lines. Nothing replaced them, because nothing needed to. What remains is
+`ApiOrchestrator`: pooling, project affinity, leases, and caches on one machine.
+
+Keeping a consensus implementation alive "just in case" is exactly the sunk-cost
+pattern the convergence rule below exists to prevent. Should a real distributed
+requirement appear, it starts from repo-level sharding and gets designed against
+that requirement, not resurrected from git history.
 
 ### 9. The C ABI is the core; language bindings are tiered
 

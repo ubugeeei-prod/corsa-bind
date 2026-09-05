@@ -7,8 +7,7 @@
 //! - [`jsonrpc`] for stdio JSON-RPC framing and transport
 //! - [`lint`] for Rust-authored rule primitives behind Oxlint JS plugins
 //! - [`lsp`] for LSP clients and virtual-document overlays
-//! - [`orchestrator`] for local orchestration plus optional experimental
-//!   distributed helpers
+//! - [`orchestrator`] for local worker pools, project leases, and caches
 //! - [`observability`] for structured runtime events
 //! - [`runtime`] for the lightweight in-house executor
 //! - [`utils`] for shared type-text and checker-adjacent helpers
@@ -69,17 +68,10 @@ pub mod observability {
     pub use corsa_core::{CorsaEvent, CorsaObserver, SharedObserver};
 }
 
-/// Re-exports client orchestration and replicated-state helpers.
+/// Re-exports client orchestration helpers.
 pub mod orchestrator {
     pub use corsa_orchestrator::{
         ApiOrchestrator, ApiOrchestratorConfig, ApiOrchestratorStats, ProjectLease,
-    };
-    #[cfg(feature = "experimental-distributed")]
-    pub use corsa_orchestrator::{
-        ChannelTransport, DistributedApiOrchestrator, FileStorage, HardState, InMemoryStorage,
-        InProcessTransport, PersistedLogEntry, RaftCluster, RaftClusterBuilder, RaftConfig,
-        RaftMessage, RaftRole, RaftSnapshot, RaftStorage, RaftTransport, ReplicatedCacheEntry,
-        ReplicatedCommand, ReplicatedSnapshot, ReplicatedState,
     };
 }
 

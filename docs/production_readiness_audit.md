@@ -6,10 +6,10 @@ lifecycle, orchestrator, real Corsa typecheck/type emit coverage, Node binding,
 oxlint integration, C ABI, non-Node bindings, CI, and release workflows.
 
 The project already had meaningful production controls: bounded defaults,
-release dry runs, cargo-deny, pinned GitHub Actions, npm provenance, Scorecard
-monitoring, and an explicit experimental scope for distributed mode. The items
-below are the issues that were tracked from the audit and their remediation
-status.
+release dry runs, cargo-deny, pinned GitHub Actions, npm provenance, and
+Scorecard monitoring. The items below are the issues that were tracked from the
+audit and their remediation status. The audit's "experimental distributed mode"
+scope no longer applies: that layer was removed in 2.0.
 
 ## Remediation Status
 

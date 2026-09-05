@@ -266,7 +266,6 @@ Role:
 - profile shutdown
 - snapshot caching
 - result memoization
-- frozen distributed replicated state behind a cargo feature
 
 Why it exists:
 
@@ -428,8 +427,8 @@ Important properties:
 - project affinity is deliberate: the program graph belongs to a process, so
   round-robining one project across the fleet pays to build it more than once
 - workflow speedup comes from reuse and narrower queries
-- distributed replication is frozen; single-machine pools plus repo-level
-  sharding are the scaling story
+- there is no distributed layer; single-machine pools plus repo-level sharding
+  are the scaling story
 
 ### Node Flow
 

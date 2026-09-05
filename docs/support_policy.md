@@ -19,8 +19,6 @@ The supported production surface is currently:
 The following remains experimental and outside the production support
 commitment:
 
-- the `experimental-distributed` cargo feature
-- the in-process Raft replication layer
 - upstream endpoints explicitly called out as unstable
 - C#, Swift, Zig, MoonBit, and Elixir wrappers until their toolchains are added
   to the required CI matrix
@@ -45,19 +43,22 @@ Practically:
 Go and C++ currently sit in tier 2 by API commitment while still being covered
 by the non-Node binding smoke suite listed above.
 
-## Frozen Surfaces
+## Removed Surfaces
 
-Distributed orchestration — the `experimental-distributed` feature, the
-`DistributedApiOrchestrator`, and the in-process Raft layer — is **frozen**.
-
-- it stays behind the cargo feature and outside the support commitment
-- it does not receive new capability and is not on a path to promotion
-- it is a candidate for removal once nothing depends on it
+Distributed orchestration was **removed in 2.0**: the `experimental-distributed`
+cargo feature, `DistributedApiOrchestrator`, the in-process Raft implementation,
+the replicated-state model, and the `CorsaDistributedOrchestrator` N-API class
+are all gone.
 
 Checker workloads have strong affinity to a repo, its project graph, and mutable
 snapshot state, which makes replicated snapshot state a poor fit. The supported
-scaling story is a single machine with a well-tuned worker pool, and repo-level
-sharding above that.
+scaling story is a single machine with a well-tuned worker pool — see
+`ApiOrchestrator::acquire_project` — and repo-level sharding above that.
+
+Consumers of the removed API have no drop-in replacement, which is the honest
+answer: the layer was experimental, never supported for production, and the
+capability it approximated is not one this project should own. See
+[architecture_charter.md](./architecture_charter.md) rule 8.
 
 ## Release Channels
 

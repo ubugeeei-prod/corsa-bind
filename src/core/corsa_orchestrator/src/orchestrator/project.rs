@@ -1,5 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
+use corsa_core::fast::CompactString;
+
 use crate::Result;
 use crate::api::{ApiProfile, DocumentIdentifier, ProjectSession};
 
@@ -105,14 +107,15 @@ impl ApiOrchestrator {
     pub async fn acquire_project(
         &self,
         profile: &ApiProfile,
-        open_project: impl Into<String>,
+        open_project: impl Into<CompactString>,
         preferred_document: Option<DocumentIdentifier>,
     ) -> Result<ProjectLease> {
         let open_project = open_project.into();
         let client = self
             .lease_for_project(profile, open_project.as_str())
             .await?;
-        let session = ProjectSession::open(client, open_project, preferred_document).await?;
+        let session =
+            ProjectSession::open(client, open_project.as_str(), preferred_document).await?;
         Ok(ProjectLease::new(session))
     }
 }

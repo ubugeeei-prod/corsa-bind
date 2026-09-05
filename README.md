@@ -41,9 +41,8 @@ important. See the [Architecture charter](./docs/architecture_charter.md).
 
 > [!WARNING]
 > This repository is still evolving. The local Rust and Node API/LSP surfaces
-> are hardened for production-style use, but distributed orchestration stays
-> behind the `experimental-distributed` cargo feature and some upstream-facing
-> endpoints remain explicitly experimental.
+> are hardened for production-style use, but some upstream-facing endpoints
+> remain explicitly experimental.
 
 > [!IMPORTANT]
 > `corsa-bind` is built around upstream-supported Corsa workflows. We follow
@@ -132,9 +131,9 @@ and is built with `vp run -w docs_build`.
 - **Process isolation:** every checker query crosses a process boundary on
   purpose — crash, GC, ABI, and TypeScript-version isolation, plus timeouts,
   cancellation, restart, and memory kill
-- **Distributed orchestration:** frozen behind the `experimental-distributed`
-  cargo feature; single-machine worker pools and repo-level sharding are the
-  scaling story
+- **Scaling:** single-machine worker pools with project affinity, and
+  repo-level sharding above that; the Raft-backed replication layer was removed
+  in 2.0
 
 Public APIs are still `0.x`, so treat compatibility as conservative. See
 [Known limitations](./docs/support_policy.md) for the current experimental scope.

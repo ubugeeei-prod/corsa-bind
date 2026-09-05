@@ -7,7 +7,6 @@ mod api_client;
 mod content_mapper;
 mod document;
 mod native_lint;
-mod orchestrator;
 mod rule_predicates;
 mod util;
 mod utils;

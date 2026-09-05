@@ -27,23 +27,7 @@ const realExamples: readonly ExampleCommand[] = [
   { name: "real_snapshot", args: ["run", "-p", "corsa", "--example", "real_snapshot"] },
 ];
 
-const experimentalExamples: readonly ExampleCommand[] = [
-  {
-    name: "distributed_orchestrator",
-    args: [
-      "run",
-      "-p",
-      "corsa",
-      "--features",
-      "experimental-distributed",
-      "--example",
-      "distributed_orchestrator",
-    ],
-  },
-];
-
 const groups = {
-  experimental: experimentalExamples,
   real: realExamples,
   smoke: smokeExamples,
 } satisfies Record<string, readonly ExampleCommand[]>;

@@ -18,21 +18,21 @@
 //! - [`ApiOrchestrator::shutdown_profile`] drains a fleet when a `tsconfig` or
 //!   the upstream binary changes.
 //!
-//! # Frozen Surfaces
+//! # Scaling
 //!
-//! Distributed replication is gated behind the `experimental-distributed` cargo
-//! feature, sits outside the production support commitment, and is **frozen**:
-//! it receives no new capability and is a candidate for removal. Checker state
-//! has strong affinity to a repo and its project graph, so the supported
-//! scaling story is a well-tuned single-machine pool with repo-level sharding
-//! above it, not consensus over snapshot state. See `docs/support_policy.md`.
+//! Checker state has strong affinity to a repo and its project graph, so
+//! requests are not interchangeable across nodes. The scaling story is a
+//! well-tuned single-machine pool with repo-level sharding above it, not
+//! consensus over snapshot state. The experimental Raft-backed replication
+//! layer that used to live here was removed for exactly that reason; see
+//! `docs/architecture_charter.md`.
 
 /// Re-exports the typed stdio API client layer used by the orchestrators.
 pub mod api {
     pub use corsa_client::*;
 }
 
-/// Re-exports the LSP overlay types used for replicated virtual documents.
+/// Re-exports the LSP overlay types used for editor-style virtual documents.
 pub mod lsp {
     pub use corsa_lsp::*;
 }
@@ -45,7 +45,7 @@ pub mod observability {
 pub use corsa_core::{CorsaError, CorsaEvent, CorsaObserver, Result, SharedObserver};
 
 #[path = "orchestrator/mod.rs"]
-/// Local and distributed orchestration helpers.
+/// Local orchestration helpers.
 pub mod orchestrator;
 
 pub use orchestrator::*;

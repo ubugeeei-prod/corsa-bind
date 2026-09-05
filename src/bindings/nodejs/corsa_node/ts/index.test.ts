@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   CorsaApiClient,
-  CorsaDistributedOrchestrator,
   CorsaSpanMap,
   CorsaVirtualDocument,
   SpanMap,
@@ -47,7 +46,6 @@ describe("CorsaApiClient", () => {
   it("exports the Corsa wrapper classes", () => {
     expect(CorsaApiClient).toBeTypeOf("function");
     expect(CorsaVirtualDocument).toBeTypeOf("function");
-    expect(CorsaDistributedOrchestrator).toBeTypeOf("function");
   });
 
   it("evaluates Rust-backed unsafe type flow predicates", () => {
@@ -1095,32 +1093,5 @@ describe("CorsaVirtualDocument", () => {
     expect(document.version).toBe(2);
     expect(document.text).toBe("const value = 2;\n");
     expect(document.state().uri).toContain("untitled:");
-  });
-});
-
-describe("CorsaDistributedOrchestrator", () => {
-  it("replicates virtual documents after leader election", () => {
-    const cluster = new CorsaDistributedOrchestrator(["n1", "n2", "n3"]);
-    expect(cluster.campaign("n1")).toBe(1);
-
-    const document = CorsaVirtualDocument.inMemory(
-      "cluster",
-      "/main.ts",
-      "typescript",
-      "let value = 1;",
-    );
-    cluster.openVirtualDocument(document.state());
-    const updated = cluster.changeVirtualDocument(document.uri, [
-      {
-        range: {
-          start: { line: 0, character: 12 },
-          end: { line: 0, character: 13 },
-        },
-        text: "2",
-      },
-    ]);
-
-    expect(updated.text).toBe("let value = 2;");
-    expect(cluster.document("n2", document.uri)?.text).toBe("let value = 2;");
   });
 });

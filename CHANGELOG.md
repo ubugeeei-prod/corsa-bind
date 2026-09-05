@@ -25,12 +25,11 @@ published versions.
   rules that follow from it (stable API layer, snapshots wrap upstream, the
   process boundary stays, orchestration is the product, virtual projects stay
   ours, foreign ASTs ask for facts, opaque handles only, distributed
-  orchestration frozen, C ABI as the core with tiered language bindings) and the
-  convergence rule: when upstream ships it, delete ours and wrap theirs. The
-  README, docs index, project guide, support policy, production readiness,
-  language bindings, and Oxlint guide are aligned with it, and distributed
-  orchestration is now documented as frozen with single-machine pools plus
-  repo-level sharding as the scaling story.
+  orchestration out of scope, C ABI as the core with tiered language bindings)
+  and the convergence rule: when upstream ships it, delete ours and wrap theirs.
+  The README, docs index, project guide, support policy, production readiness,
+  language bindings, and Oxlint guide are aligned with it, and single-machine
+  pools plus repo-level sharding are documented as the scaling story.
 - `ProjectSession::semantics()` returns `SemanticQuery`, the `corsa-bind`-owned
   semantic-fact vocabulary that stays stable across upstream endpoint churn:
   `symbol_at`, `type_at`, `types_at`, `type_of`, `types_of`, `declared_type_of`,
@@ -84,7 +83,12 @@ published versions.
 
 ### Removed
 
-- `corsa_core::fast` no longer re-exports `Bump`/`BumpString`, and the workspace no longer depends on `bumpalo`; `corsa_lsp` drops its unused `log` dependency; `corsa_orchestrator` only pulls `lsp-types` when the `experimental-distributed` feature is enabled.
+- **Breaking (2.0):** distributed orchestration is gone. Deleted: the `experimental-distributed` cargo feature on `corsa_orchestrator`, `corsa`, and `corsa_node`; `DistributedApiOrchestrator`; the in-process Raft implementation (`RaftCluster`, `RaftClusterBuilder`, `RaftConfig`, `RaftRole`, `RaftMessage`, `RaftSnapshot`, `RaftStorage`, `RaftTransport`, `InMemoryStorage`, `FileStorage`, `ChannelTransport`, `InProcessTransport`, `HardState`, `PersistedLogEntry`); the replicated-state model (`ReplicatedState`, `ReplicatedCommand`, `ReplicatedSnapshot`, `ReplicatedCacheEntry`); the `CorsaDistributedOrchestrator` N-API class and its JS wrapper; and the `distributed_orchestrator` Rust and Node examples. About 3,400 lines of deleted files, with no replacement.
+
+  Checker state has strong affinity to a repo and its project graph, so requests are not interchangeable across nodes and replicating snapshot state buys little. The supported scaling story is a well-tuned single-machine pool — `ApiOrchestrator::acquire_project` pins a project to one warm worker — with repo-level sharding above it. Keeping a consensus implementation alive "just in case" is exactly the sunk cost that [architecture_charter.md](docs/architecture_charter.md) rule 8 and the convergence rule exist to prevent. The layer was always behind a cargo feature and always outside the production support commitment.
+
+  Fallout for consumers: `vp run -w test` no longer runs the two feature-combo cargo invocations, `vp run -w examples_rust_experimental` is gone, and `pnpm --dir examples run distributed-orchestrator` is gone.
+- `corsa_core::fast` no longer re-exports `Bump`/`BumpString`, and the workspace no longer depends on `bumpalo`; `corsa_lsp` drops its unused `log` dependency; `corsa_orchestrator` no longer depends on `lsp-types` at all.
 - default runtime discovery no longer looks for `@typescript/native-preview`. TypeScript 7 ships the same native binary through the same mechanism — `typescript` declares `@typescript/typescript-<platform>-<arch>` as an optional dependency and reads `lib/tsc` out of it, exactly as the preview channel did with `lib/tsgo` — so the preview lookup only ever won on machines with no TypeScript 7 installed. Resolution is now `typescript` 7 or newer, then `.cache/corsa`. Consumers still on the preview package can point at it with `CORSA_EXECUTABLE`, `parserOptions.corsa.executable`, or `resolveFrom`. This supersedes the `@typescript/native-preview` discovery entries in 1.0.0-beta.2 and 1.6.0.
 
 ## 1.9.0 - 2026-08-18

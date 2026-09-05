@@ -13,13 +13,12 @@ The current production target is:
 - LSP stdio integrations
 - local worker orchestration and cache reuse
 
-The following remains experimental, and the distributed layer is additionally
-**frozen** — no new capability, no promotion path, and a candidate for removal
-(see [support_policy.md](./support_policy.md)):
+The following remains experimental:
 
-- the `experimental-distributed` cargo feature
-- the in-process Raft replication layer
 - upstream endpoints called out as unstable by this repository
+
+Distributed orchestration was removed in 2.0; see
+[support_policy.md](./support_policy.md).
 
 ## Default Safety Controls
 
@@ -54,8 +53,6 @@ For editor-like integrations:
   raw workers, so each project stays on the worker that is already warm for it
 - drain a fleet with `ApiOrchestrator::shutdown_profile` after a `tsconfig`
   change or an upstream binary upgrade, rather than letting it grow
-- treat the distributed orchestrator as frozen unless you are actively
-  developing it
 
 ## Scaling Story
 
@@ -72,16 +69,14 @@ one machine
 Checker state has strong affinity to a repo and its project graph, so requests
 are not interchangeable across nodes and replicated snapshot state buys little.
 When one machine is genuinely not enough, shard at the repo level — repo A to
-machine A, repo B to machine B — instead of reaching for the distributed
-orchestrator.
+machine A, repo B to machine B. That is why the Raft-backed replication layer
+was removed in 2.0 rather than promoted.
 
 ## Release Checklist
 
 - `vp check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `vp run -w test`
-- `cargo test -p corsa --no-default-features --test orchestrator`
-- `cargo test -p corsa --features experimental-distributed --test orchestrator`
 - `vp run -w bench_verify`
 - `vp run -w verify_ref`
 - `cargo deny check advisories bans licenses sources`

@@ -59,5 +59,5 @@ vp test run --config ./vite.config.ts src/bindings/nodejs/corsa_node/ts/**/*.tes
 ```
 
 Repository-level executable examples live under [`examples/`](../../examples/README.md),
-including mock-client, virtual-document, distributed-orchestrator, and
+including mock-client, virtual-document, and
 real-Corsa snapshot samples.
