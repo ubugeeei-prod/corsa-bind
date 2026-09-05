@@ -14,7 +14,13 @@ The supported production surface is currently:
 - published JS bindings for the documented prebuilt targets
 - LSP stdio integrations
 - local worker orchestration, project leases, and cache reuse
-- C ABI, C++ headers, and Go wrappers that pass the non-Node binding CI smoke suite
+- the C ABI (`corsa_ffi`)
+
+The C++ headers and Go wrappers pass the non-Node binding CI smoke suite, so
+they are known to build and run against every released C ABI. That is a
+coverage guarantee, not the same commitment as the list above: like the other
+tier 2 wrappers they may lag a release, and a regression in one does not hold a
+release back. See [Binding Tiers](#binding-tiers).
 
 The following remains experimental and outside the production support
 commitment:
@@ -40,8 +46,10 @@ Practically:
 - tier 2 promotion means adding the toolchain to the required CI matrix, not
   rewriting the wrapper by hand
 
-Go and C++ currently sit in tier 2 by API commitment while still being covered
-by the non-Node binding smoke suite listed above.
+Tier 2 is about API commitment, not about whether a wrapper works. Go and C++
+are smoke-tested on every change and C# / Swift / Zig / MoonBit / Elixir are
+not, but all of them are shaped by the C ABI rather than shaping it, and none of
+them can block a release.
 
 ## Removed Surfaces
 

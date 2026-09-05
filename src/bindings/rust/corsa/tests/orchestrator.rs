@@ -472,6 +472,60 @@ fn orchestrator_pins_a_project_to_one_warm_worker() {
 }
 
 #[test]
+fn concurrent_first_leases_for_one_project_agree_on_one_worker() {
+    let count_dir = tempfile::tempdir().unwrap();
+
+    run_async_test({
+        let count_path = count_dir.path().display().to_string();
+        async move {
+            let orchestrator = Arc::new(ApiOrchestrator::default());
+            let profile = ApiProfile::new(
+                "affinity-race",
+                support::api_config(ApiMode::AsyncJsonRpcStdio)
+                    .with_env("CORSA_MOCK_COUNT_DIR", count_path),
+            );
+            // Three workers, so a lost race hands the same project to a
+            // different one instead of silently agreeing.
+            orchestrator.prewarm(&profile, 3).await.unwrap();
+
+            let racers = (0..8)
+                .map(|_| {
+                    let orchestrator = orchestrator.clone();
+                    let profile = profile.clone();
+                    thread::spawn(move || {
+                        block_on(async move {
+                            let client = orchestrator
+                                .lease_for_project(&profile, "/workspace/tsconfig.json")
+                                .await
+                                .unwrap();
+                            client
+                                .update_snapshot(UpdateSnapshotParams {
+                                    open_project: Some("/workspace/tsconfig.json".into()),
+                                    file_changes: None,
+                                    overlay_changes: None,
+                                })
+                                .await
+                                .unwrap();
+                        })
+                    })
+                })
+                .collect::<Vec<_>>();
+            for racer in racers {
+                racer.join().unwrap();
+            }
+
+            assert_eq!(orchestrator.project_affinity_count(&profile), 1);
+            orchestrator.shutdown_profile(&profile).await.unwrap();
+        }
+    });
+
+    // One worker initialized means all eight leases landed on it. Before the
+    // lookup-and-insert was made atomic, racing first leases could each pick a
+    // different worker and build the project graph more than once.
+    assert_eq!(count_lines(count_dir.path().join("initialize.count")), 1);
+}
+
+#[test]
 fn orchestrator_tracks_and_releases_project_affinities() {
     run_async_test(async {
         let orchestrator = ApiOrchestrator::default();

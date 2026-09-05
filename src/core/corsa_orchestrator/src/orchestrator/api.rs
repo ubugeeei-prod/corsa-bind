@@ -205,11 +205,15 @@ impl ApiOrchestrator {
     ///
     /// The returned client is shared and cheaply clonable; leasing does not
     /// transfer ownership of the underlying process.
+    ///
+    /// Returns an error rather than panicking when the fleet is empty, which a
+    /// concurrent [`Self::shutdown_profile`] can cause between the `prewarm`
+    /// above and the read below.
     pub async fn lease(&self, profile: &ApiProfile) -> Result<ApiClient> {
         self.prewarm(profile, 1).await?;
         let fleet = self.fleet(profile).await?;
         let clients = fleet.clients.read();
-        let index = fleet.next.fetch_add(1, Ordering::Relaxed) % clients.len();
+        let index = round_robin_index(&fleet, clients.len(), profile)?;
         Ok(clients[index].clone())
     }
 
@@ -231,24 +235,31 @@ impl ApiOrchestrator {
         self.prewarm(profile, 1).await?;
         let fleet = self.fleet(profile).await?;
         let clients = fleet.clients.read();
-        if clients.is_empty() {
-            return Err(crate::CorsaError::Protocol(compact_format(format_args!(
-                "profile `{}` has no workers to lease",
-                profile.id
-            ))));
+        // Look up and insert under one write lock. Two callers racing to lease
+        // the same project for the first time would otherwise both observe no
+        // pin, pick different workers, and end up with two checker states for
+        // one project — the affinity contract broken by the code meant to
+        // enforce it.
+        let (index, pinned_now) = {
+            let mut affinity = fleet.affinity.write();
+            match affinity
+                .get(project_key)
+                .copied()
+                .filter(|index| *index < clients.len())
+            {
+                Some(index) => (index, false),
+                None => {
+                    let index = round_robin_index(&fleet, clients.len(), profile)?;
+                    affinity.insert(CompactString::from(project_key), index);
+                    (index, true)
+                }
+            }
+        };
+        if pinned_now {
+            // Bookkeeping only, and it takes the same lock, so it has to run
+            // after the guard above is dropped.
+            self.remember_affinity_key(&fleet, CompactString::from(project_key));
         }
-        // Read the pin into a local before touching the write lock below: the
-        // guard must be gone before `remember_affinity_key` asks for it.
-        let pinned = fleet.affinity.read().get(project_key).copied();
-        if let Some(index) = pinned
-            && index < clients.len()
-        {
-            return Ok(clients[index].clone());
-        }
-        let index = fleet.next.fetch_add(1, Ordering::Relaxed) % clients.len();
-        let key = CompactString::from(project_key);
-        fleet.affinity.write().insert(key.clone(), index);
-        self.remember_affinity_key(&fleet, key);
         Ok(clients[index].clone())
     }
 
@@ -551,6 +562,21 @@ impl ApiOrchestrator {
             }
         }
     }
+}
+
+/// Picks the next round-robin worker index, or reports an empty fleet.
+///
+/// The emptiness check and the modulo belong together: `% 0` panics, and a
+/// fleet can be emptied by [`ApiOrchestrator::shutdown_profile`] at any point
+/// after a lease has prewarmed it.
+fn round_robin_index(fleet: &ClientFleet, len: usize, profile: &ApiProfile) -> Result<usize> {
+    if len == 0 {
+        return Err(crate::CorsaError::Protocol(compact_format(format_args!(
+            "profile `{}` has no workers to lease",
+            profile.id
+        ))));
+    }
+    Ok(fleet.next.fetch_add(1, Ordering::Relaxed) % len)
 }
 
 fn batch_worker_panic(panic: Box<dyn Any + Send>) -> crate::CorsaError {

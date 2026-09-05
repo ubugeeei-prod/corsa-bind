@@ -142,15 +142,11 @@ fn main() -> Result<(), corsa::CorsaError> {
         .await?;
 
         let facts = session.semantics();
-        if let Some(symbol) = facts
-            .symbol_at(
-                "ref/corsa-upstream/packages/typescript/src/typescript.ts",
-                0,
-            )
-            .await?
-            && let Some(value_type) = facts.type_of(&symbol.id).await?
-        {
-            println!("{} : {}", symbol.name, facts.type_text(&value_type.id).await?);
+        let file = "ref/corsa-upstream/packages/typescript/src/typescript.ts";
+        if let Some(symbol) = facts.symbol_at(file, 0).await? {
+            if let Some(value_type) = facts.type_of(&symbol.id).await? {
+                println!("{} : {}", symbol.name, facts.type_text(&value_type.id).await?);
+            }
         }
 
         session.close().await?;

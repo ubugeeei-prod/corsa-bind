@@ -121,7 +121,7 @@ fn semantic_query_resolves_names_and_batches() {
 }
 
 #[test]
-fn semantic_query_survives_snapshot_refresh() {
+fn a_query_made_after_a_refresh_reads_the_new_snapshot() {
     block_on(async {
         let mut session = open_session().await;
 
@@ -137,8 +137,11 @@ fn semantic_query_survives_snapshot_refresh() {
             .await
             .unwrap();
 
-        // The query surface reads the session's current snapshot rather than
-        // capturing one, so a refresh does not invalidate the query object.
+        // `semantics()` borrows the session rather than capturing a snapshot,
+        // so each call reads whichever snapshot the session holds now. A query
+        // cannot outlive a refresh either way: `refresh` takes `&mut self`, so
+        // the borrow checker rejects holding one across it, which is what keeps
+        // a query from ever answering out of a stale snapshot.
         assert_eq!(before.map(handle_of), after.map(handle_of));
 
         session.close().await.unwrap();
