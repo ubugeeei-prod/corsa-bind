@@ -78,7 +78,7 @@ The repository binds the checker; it never models it.
 That means:
 
 - answers cross the boundary as opaque handles, not as mirrored `Type`/`Symbol`/`Node` graphs
-- snapshots are owned as *handles with a lifetime*, never as a second snapshot implementation
+- snapshots are owned as _handles with a lifetime_, never as a second snapshot implementation
 - when upstream ships a real version of something approximated here, the approximation is deleted and upstream's is wrapped
 
 The practical shape of this is two API surfaces, on purpose:

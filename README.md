@@ -18,7 +18,7 @@ ABI carry that performance to JS/TS, Elixir, C, C++, Go, Zig, C#, Swift, and
 MoonBit — so you can author custom checker tooling and lint rules without
 reimplementing the checker.
 
-It is deliberately *not* a reimplementation of the TypeScript Compiler API. It
+It is deliberately _not_ a reimplementation of the TypeScript Compiler API. It
 is the layer between upstream's checker and everything that wants to use it:
 
 ```text
@@ -36,7 +36,7 @@ is the layer between upstream's checker and everything that wants to use it:
                  TypeScript 7+
 ```
 
-As upstream's own API matures, this layer should get *thinner* — and more
+As upstream's own API matures, this layer should get _thinner_ — and more
 important. See the [Architecture charter](./docs/architecture_charter.md).
 
 > [!WARNING]

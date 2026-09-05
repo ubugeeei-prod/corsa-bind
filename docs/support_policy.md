@@ -3,7 +3,7 @@
 This document defines what `corsa-bind` treats as supported for production-style
 use and what remains experimental.
 
-For *why* the surface is shaped this way, see
+For _why_ the surface is shaped this way, see
 [architecture_charter.md](./architecture_charter.md).
 
 ## Supported Surface

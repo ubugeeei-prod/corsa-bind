@@ -28,7 +28,7 @@ internal representation and its lifecycle rules and we do not.
 
 This is not a threat to the project. It is the project getting smaller and more
 important at the same time. As upstream's API matures, `corsa-bind` should get
-*thinner*, not wider.
+_thinner_, not wider.
 
 ## The Boundary
 
@@ -39,7 +39,7 @@ things this repository will not trade away. Concretely:
 
 | Concern                                        | Owner          |
 | ---------------------------------------------- | -------------- |
-| What a type *means*                            | upstream       |
+| What a type _means_                            | upstream       |
 | What is assignable to what                     | upstream       |
 | How a project graph is built                   | upstream       |
 | How a snapshot is invalidated internally       | upstream       |
@@ -63,7 +63,7 @@ flowchart TD
 ```
 
 Every layer above the bottom one is ours to design. The bottom one is ours to
-*use*, exactly as upstream intends it to be used.
+_use_, exactly as upstream intends it to be used.
 
 ## Rules
 
@@ -99,7 +99,7 @@ commitment, so keep that vocabulary small and answer-shaped.
 
 ### 2. Snapshots wrap upstream, they never reimplement it
 
-`ManagedSnapshot` owns a *handle*: its cache identity, its lifetime, its
+`ManagedSnapshot` owns a _handle_: its cache identity, its lifetime, its
 eviction, its release-on-drop, its pool affinity, its transport. It does not
 own what a snapshot contains or when the checker considers it stale.
 
@@ -189,9 +189,9 @@ OXC AST
 ```
 
 The lint host walks its own AST and asks narrow questions. The checker's AST is
-never adopted as the lint AST. `corsa-bind`'s future is *"query TypeScript
-semantic facts from a foreign AST"*, not *"export the TypeScript AST to every
-language."*
+never adopted as the lint AST. `corsa-bind`'s future is _"query TypeScript
+semantic facts from a foreign AST"_, not _"export the TypeScript AST to every
+language."_
 
 ### 7. Export opaque handles, not a mirrored object graph
 
