@@ -1,5 +1,13 @@
 import type { Context, Node, SourceCode } from "@oxlint/plugins";
-import type { ApiMode, ConfigResponse, ProjectResponse, TypeResponse } from "@corsa-bind/napi";
+import type {
+  ApiMode,
+  ConfigResponse,
+  ContentMapperDefinition,
+  ProjectResponse,
+  TypeResponse,
+} from "@corsa-bind/napi";
+
+import type { ContentMapping } from "./session";
 
 export interface CorsaRuntimeOptions {
   executable?: string;
@@ -119,6 +127,16 @@ export interface CorsaProgramShape {
     readonly fileName: string;
     readonly text: string;
   };
+  /**
+   * Content mapper state for a file, or `undefined` when no mapper owns it.
+   *
+   * Rules that report positions the checker handed back have to project them
+   * through `contentMapping.spanMap` before they name a place in the authored
+   * file.
+   */
+  getContentMapping(fileName?: string): ContentMapping | undefined;
+  /** Content mappers the project's `tsconfig` declares. */
+  getContentMappers(): readonly ContentMapperDefinition[];
   getTypeChecker(): CorsaTypeCheckerShape;
 }
 

@@ -21,6 +21,9 @@ class FakeClient {
     name: "value",
   }));
   readonly getSymbolAtPosition = vi.fn(() => undefined as { id: string; name: string } | undefined);
+  readonly getEncodedSourceFile = vi.fn(
+    () => undefined as { text: string; contentMapping?: unknown } | undefined,
+  );
   readonly typeToString = vi.fn(() => "type:string");
   readonly releaseHandle = vi.fn();
   readonly close = vi.fn();
@@ -40,17 +43,22 @@ class FakeClient {
   }
 }
 
-vi.mock("@corsa-bind/napi", () => ({
-  CorsaApiClient: {
-    spawn: vi.fn((options: unknown) => {
-      spawnOptions.push(options);
-      const client = new FakeClient();
-      clients.push(client);
-      return client;
-    }),
-  },
-}));
+vi.mock("@corsa-bind/napi", async () => {
+  const actual = await vi.importActual<typeof import("@corsa-bind/napi")>("@corsa-bind/napi");
+  return {
+    ...actual,
+    CorsaApiClient: {
+      spawn: vi.fn((options: unknown) => {
+        spawnOptions.push(options);
+        const client = new FakeClient();
+        clients.push(client);
+        return client;
+      }),
+    },
+  };
+});
 
+const { SpanMap } = await import("@corsa-bind/napi");
 const { CorsaProjectSession, uniqueClassDeclarationPosition } = await import("./session");
 
 describe("CorsaProjectSession", () => {
@@ -793,6 +801,180 @@ describe("CorsaProjectSession", () => {
 
     expect(session.getSymbolOfType(type as never)?.name).toBe("value");
     expect(client.getSymbolOfType).toHaveBeenCalledWith(expect.any(String), "type-1", "project-2");
+  });
+});
+
+describe("CorsaProjectSession content mappers", () => {
+  const runtime = {
+    executable: "/tmp/corsa",
+    cwd: "/tmp",
+    mode: "msgpack",
+    runExternalCode: true,
+    cacheLifetimeMs: 60_000,
+  } as const;
+
+  /** `<script>\nconst count = 1;\n</script>` mapped to virtual TypeScript. */
+  const mappedSourceFile = {
+    text: "export const count: number = 1;\n",
+    contentMapping: {
+      contentMapper: "vue-mapper@1.2.3",
+      virtualFileName: "/tmp/App.vue.ts",
+      spanMap: [
+        {
+          virtualStart: 13,
+          virtualEnd: 18,
+          originalStart: 15,
+          originalEnd: 20,
+          kind: 0,
+          features: SpanMap.Feature.All,
+        },
+      ],
+      diagnosticDirectives: [],
+      supplementalSourceFileNames: [],
+    },
+  };
+
+  function newSession(filename: string) {
+    return new CorsaProjectSession(
+      { filename, rootDir: "/tmp", configPath: "/tmp/tsconfig.json", runtime },
+      runtime,
+    );
+  }
+
+  function declareVueMapper(client: FakeClient): void {
+    client.parseConfigFile.mockReturnValue({
+      options: {},
+      fileNames: [],
+      raw: { contentMappers: [{ package: "vue-mapper", extensions: [".vue"] }] },
+    } as never);
+  }
+
+  beforeEach(() => {
+    clients.length = 0;
+    clientSetups.length = 0;
+  });
+
+  it("leaves projects without content mappers untouched", () => {
+    const session = newSession("/tmp/one.ts");
+
+    session.getTypeAtPosition("/tmp/one.ts", 7);
+
+    expect(clients[0]?.getEncodedSourceFile).not.toHaveBeenCalled();
+    expect(clients[0]?.getTypeAtPosition).toHaveBeenCalledWith(
+      expect.any(String),
+      "project-1",
+      "/tmp/one.ts",
+      7,
+    );
+  });
+
+  it("reads the content mappers the tsconfig declares", () => {
+    clientSetups.push(declareVueMapper);
+    const session = newSession("/tmp/App.vue");
+
+    expect(session.getContentMappers()).toEqual([{ package: "vue-mapper", extensions: [".vue"] }]);
+  });
+
+  it("only inspects files whose extension a mapper claims", () => {
+    clientSetups.push(declareVueMapper);
+    const session = newSession("/tmp/one.ts");
+
+    session.getTypeAtPosition("/tmp/one.ts", 7);
+
+    expect(clients[0]?.getEncodedSourceFile).not.toHaveBeenCalled();
+  });
+
+  it("asks the checker at the mapped position for a content mapped file", () => {
+    clientSetups.push((client) => {
+      declareVueMapper(client);
+      client.getEncodedSourceFile.mockReturnValue(mappedSourceFile as never);
+    });
+    const session = newSession("/tmp/App.vue");
+
+    // Offset 15 is `count` in the `.vue` file; the checker knows it at 13.
+    session.getTypeAtPosition("/tmp/App.vue", 15);
+    session.getSymbolAtPosition("/tmp/App.vue", 16);
+
+    expect(clients[0]?.getTypeAtPosition).toHaveBeenCalledWith(
+      expect.any(String),
+      "project-1",
+      "/tmp/App.vue",
+      13,
+    );
+    expect(clients[0]?.getSymbolAtPosition).toHaveBeenCalledWith(
+      expect.any(String),
+      "project-1",
+      "/tmp/App.vue",
+      14,
+    );
+    expect(clients[0]?.getEncodedSourceFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports no type for text the mapper never emitted", () => {
+    clientSetups.push((client) => {
+      declareVueMapper(client);
+      client.getEncodedSourceFile.mockReturnValue(mappedSourceFile as never);
+    });
+    const session = newSession("/tmp/App.vue");
+
+    // Offset 2 is inside the `<script>` tag, which is not in the virtual text.
+    expect(session.getTypeAtPosition("/tmp/App.vue", 2)).toBeUndefined();
+    expect(clients[0]?.getTypeAtPosition).not.toHaveBeenCalled();
+  });
+
+  it("treats an undecodable payload as not content mapped", () => {
+    clientSetups.push((client) => {
+      declareVueMapper(client);
+      client.getEncodedSourceFile.mockImplementation(() => {
+        throw new Error("unsupported encoded source file protocol version 9");
+      });
+    });
+    const session = newSession("/tmp/App.vue");
+
+    expect(session.getContentMapping("/tmp/App.vue")).toBeUndefined();
+    expect(session.getTypeAtPosition("/tmp/App.vue", 15)).toBeDefined();
+    expect(clients[0]?.getTypeAtPosition).toHaveBeenCalledWith(
+      expect.any(String),
+      "project-1",
+      "/tmp/App.vue",
+      15,
+    );
+  });
+
+  it("still restarts the worker when the decode request hits a closed transport", () => {
+    clientSetups.push((client) => {
+      declareVueMapper(client);
+      client.getEncodedSourceFile.mockImplementation(() => {
+        throw new Error("process is closed: msgpack worker");
+      });
+    });
+    clientSetups.push((client) => {
+      declareVueMapper(client);
+      client.getEncodedSourceFile.mockReturnValue(mappedSourceFile as never);
+    });
+    const session = newSession("/tmp/App.vue");
+
+    expect(session.getContentMapping("/tmp/App.vue")?.contentMapper).toBe("vue-mapper@1.2.3");
+    expect(clients).toHaveLength(2);
+  });
+
+  it("exposes the resolved mapping to rule authors", () => {
+    clientSetups.push((client) => {
+      declareVueMapper(client);
+      client.getEncodedSourceFile.mockReturnValue(mappedSourceFile as never);
+    });
+    const session = newSession("/tmp/App.vue");
+
+    const mapping = session.getContentMapping("/tmp/App.vue");
+
+    expect(mapping?.contentMapper).toBe("vue-mapper@1.2.3");
+    expect(mapping?.virtualFileName).toBe("/tmp/App.vue.ts");
+    expect(mapping?.virtualText).toBe("export const count: number = 1;\n");
+    expect(mapping?.spanMap.virtualToOriginalPosition(13)).toEqual({
+      position: 15,
+      fidelity: SpanMap.Fidelity.Exact,
+    });
+    expect(session.getContentMapping("/tmp/plain.ts")).toBeUndefined();
   });
 });
 

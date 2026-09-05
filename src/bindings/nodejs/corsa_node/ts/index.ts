@@ -13,7 +13,12 @@ import type {
 import type {
   ApiClientOptions,
   ConfigResponse,
+  ContentMapperDefinition,
+  EncodedSourceFile,
   InitializeResponse,
+  MappedPosition,
+  MappedRange,
+  SpanMapSegment,
   NativeLintDiagnostic,
   NativeLintNode,
   NativeLintRuleMeta,
@@ -45,6 +50,12 @@ export interface CorsaApiClient {
   updateSnapshotAsync(params?: UpdateSnapshotParams): Promise<UpdateSnapshotResponse>;
   getSourceFile(snapshot: string, project: string, file: string): Uint8Array | null;
   getSourceFileAsync(snapshot: string, project: string, file: string): Promise<Uint8Array | null>;
+  getEncodedSourceFile(snapshot: string, project: string, file: string): EncodedSourceFile | null;
+  getEncodedSourceFileAsync(
+    snapshot: string,
+    project: string,
+    file: string,
+  ): Promise<EncodedSourceFile | null>;
   getStringType(snapshot: string, project: string): TypeResponse;
   getStringTypeAsync(snapshot: string, project: string): Promise<TypeResponse>;
   getTypeAtPosition(
@@ -269,6 +280,80 @@ export const CorsaDistributedOrchestrator =
   binding.CorsaDistributedOrchestrator as unknown as CorsaDistributedOrchestratorConstructor;
 export const CorsaVirtualDocument =
   binding.CorsaVirtualDocument as unknown as CorsaVirtualDocumentConstructor;
+
+/**
+ * Bidirectional mapping between a mapper's virtual text and the original file.
+ *
+ * Every query takes an optional `feature` bitmask (see {@link SpanMap}); when it
+ * is omitted, all features are considered.
+ */
+export interface CorsaSpanMap {
+  readonly segments: SpanMapSegment[];
+  readonly segmentCount: number;
+  virtualToOriginalPosition(position: number, feature?: number): MappedPosition;
+  virtualToOriginalSpan(pos: number, end: number, feature?: number): MappedRange;
+  originalToVirtualPositions(position: number, feature?: number): MappedPosition[];
+  originalToVirtualSpans(pos: number, end: number, feature?: number): MappedRange[];
+}
+
+type CorsaSpanMapConstructor = {
+  fromSegments(segments: readonly SpanMapSegment[]): CorsaSpanMap;
+};
+
+export const CorsaSpanMap = binding.CorsaSpanMap as unknown as CorsaSpanMapConstructor;
+
+/** Decodes the source-file fields of a `getSourceFile` payload. */
+export const decodeSourceFile = binding.decodeSourceFile as (
+  payload: Uint8Array,
+) => EncodedSourceFile;
+
+/** Reports whether a `getSourceFile` payload came out of a content mapper. */
+export const isContentMappedSourceFile = binding.isContentMappedSourceFile as (
+  payload: Uint8Array,
+) => boolean;
+
+/** Builds the span map of a payload, or `null` when the file is not mapped. */
+export const spanMapForSourceFile = binding.spanMapForSourceFile as (
+  payload: Uint8Array,
+) => CorsaSpanMap | null;
+
+/** Reads the content mappers a parsed `tsconfig` declares. */
+export const contentMappersFromConfig = binding.contentMappersFromConfig as (
+  config: unknown,
+) => ContentMapperDefinition[];
+
+/**
+ * Numeric enums mirrored from upstream `spanMapKind`, `spanMapFidelity`, and
+ * `spanMapFeature`.
+ */
+export const SpanMap = Object.freeze({
+  Kind: Object.freeze({ Verbatim: 0, Atom: 1, Alias: 2 }),
+  Fidelity: Object.freeze({ Exact: 0, Atom: 1, Approximate: 2, None: 3 }),
+  Feature: Object.freeze({
+    Hover: 1 << 0,
+    SignatureHelp: 1 << 1,
+    Completion: 1 << 2,
+    Definition: 1 << 3,
+    TypeDefinition: 1 << 4,
+    Implementation: 1 << 5,
+    References: 1 << 6,
+    DocumentHighlights: 1 << 7,
+    Rename: 1 << 8,
+    CallHierarchy: 1 << 9,
+    CodeActions: 1 << 10,
+    Formatting: 1 << 11,
+    InlayHints: 1 << 12,
+    SemanticTokens: 1 << 13,
+    FoldingRanges: 1 << 14,
+    SelectionRanges: 1 << 15,
+    LinkedEditing: 1 << 16,
+    AutoInsert: 1 << 17,
+    DocumentSymbols: 1 << 18,
+    CodeLens: 1 << 19,
+    None: 0,
+    All: (1 << 20) - 1,
+  }),
+} as const);
 
 export const version = binding.version as () => string;
 export const spawnCorsaApiClientAsync = binding.spawnCorsaApiClientAsync as (

@@ -167,6 +167,11 @@ enum JsonTaskKind {
     ParseConfigFile {
         file: String,
     },
+    GetEncodedSourceFile {
+        snapshot: String,
+        project: String,
+        file: String,
+    },
     UpdateSnapshot {
         params: Option<Value>,
         snapshots: SnapshotStore,
@@ -299,6 +304,19 @@ impl<'task> ScopedTask<'task> for JsonApiTask {
                 let response = block_on(self.client.parse_config_file(file.clone()))
                     .map_err(into_napi_error)?;
                 to_value(&response)
+            }
+            JsonTaskKind::GetEncodedSourceFile {
+                snapshot,
+                project,
+                file,
+            } => {
+                let response = block_on(self.client.get_encoded_source_file(
+                    SnapshotHandle::from(snapshot.as_str()),
+                    ProjectHandle::from(project.as_str()),
+                    file.clone(),
+                ))
+                .map_err(into_napi_error)?;
+                response.as_ref().map_or(Ok(Value::Null), to_value)
             }
             JsonTaskKind::UpdateSnapshot { params, snapshots } => {
                 let params = from_optional_value::<UpdateSnapshotParams>(params.take())?;
@@ -816,6 +834,45 @@ impl CorsaApiClient {
         ))
         .map_err(into_napi_error)?;
         Ok(payload.map(|payload| Buffer::from(payload.into_bytes())))
+    }
+
+    /// Fetches a source file and decodes its source-file level fields.
+    ///
+    /// Returns `null` when the project does not contain the file. Content
+    /// mapped files carry a `contentMapping` block with the mapper identity and
+    /// the span map between the virtual TypeScript and the authored file.
+    #[napi]
+    pub fn get_encoded_source_file(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+    ) -> Result<Value> {
+        let response = block_on(self.inner.get_encoded_source_file(
+            SnapshotHandle::from(snapshot.as_str()),
+            ProjectHandle::from(project.as_str()),
+            file,
+        ))
+        .map_err(into_napi_error)?;
+        response.as_ref().map_or(Ok(Value::Null), to_value)
+    }
+
+    /// Decodes a source file on a libuv worker thread.
+    #[napi]
+    pub fn get_encoded_source_file_async(
+        &self,
+        snapshot: String,
+        project: String,
+        file: String,
+    ) -> AsyncTask<JsonApiTask> {
+        AsyncTask::new(JsonApiTask {
+            client: self.inner.clone(),
+            kind: JsonTaskKind::GetEncodedSourceFile {
+                snapshot,
+                project,
+                file,
+            },
+        })
     }
 
     /// Fetches a source file on a libuv worker thread.

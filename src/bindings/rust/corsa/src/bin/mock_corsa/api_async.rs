@@ -60,7 +60,12 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
                 &params,
             )),
             "getDefaultProjectForFile" => Some(common::project("/workspace/tsconfig.json")),
-            "getSourceFile" => Some(common::encoded(b"source-file")),
+            "getSourceFile" => Some(common::encoded(&common::source_file_payload(
+                params
+                    .get("file")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            ))),
             "getDiagnosticsForSnapshot" => Some(common::snapshot_diagnostics(json!(
                 "/workspace/src/index.ts"
             ))),
@@ -415,6 +420,10 @@ fn parse_config<R: std::io::BufRead, W: std::io::Write>(
     Ok(json!({
         "options": options,
         "fileNames": ["/workspace/src/index.ts"],
+        "raw": {
+            "compilerOptions": { "strict": true },
+            "contentMappers": [{ "package": "mock-mapper", "extensions": [".vue"] }],
+        },
     }))
 }
 

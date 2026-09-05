@@ -131,7 +131,28 @@ try {
 For TypeScript content mappers, keep `runExternalCode` unset unless the
 workspace is trusted. Setting it to `true` forwards TypeScript's
 `--runExternalCode` gate to the spawned checker so configured `contentMappers`
-may launch their mapper processes.
+may launch their mapper processes. Mapped files then need their positions
+translated, because the checker sees the mapper's virtual TypeScript rather
+than the file on disk:
+
+```ts
+import { SpanMap, contentMappersFromConfig, spanMapForSourceFile } from "@corsa-bind/napi";
+
+contentMappersFromConfig(client.parseConfigFile("./tsconfig.json"));
+// -> [{ package: "vue-mapper", extensions: [".vue"] }]
+
+const sourceFile = client.getEncodedSourceFile(snapshot.snapshot, project.id, "./src/App.vue");
+sourceFile?.contentMapping?.contentMapper; // "vue-mapper@1.2.3"
+
+const payload = client.getSourceFile(snapshot.snapshot, project.id, "./src/App.vue");
+const spanMap = spanMapForSourceFile(payload!);
+spanMap?.virtualToOriginalSpan(13, 18, SpanMap.Feature.Hover);
+// -> { range: { pos: 15, end: 20 }, fidelity: 0 /* Exact */ }
+```
+
+[Content mappers](./content_mappers.md) covers the span map semantics —
+fidelity, per-feature segments, and text that exists in only one of the two
+files.
 The same checker path understands TypeScript explicit resource management
 syntax, including `using` declarations and `await using` inside async scopes.
 
@@ -158,6 +179,7 @@ All of these have `*Async` counterparts.
 | `parseConfigFile(file)`                                     | `ConfigResponse`                               |
 | `updateSnapshot(params?)`                                   | `{ snapshot, projects }`                       |
 | `getSourceFile(snapshot, project, file)`                    | `Buffer \| null`                               |
+| `getEncodedSourceFile(snapshot, project, file)`             | `EncodedSourceFile \| null`                    |
 | `getStringType(snapshot, project)`                          | `TypeResponse`                                 |
 | `getTypeAtPosition(snapshot, project, file, position)`      | `TypeResponse \| null`                         |
 | `getTypesAtPositions(snapshot, project, file, positions)`   | type response list                             |
@@ -306,5 +328,6 @@ vp run -w bench_ts
 
 - [Getting started](./getting_started.md) — first program in Node and Rust
 - [Oxlint guide](./oxlint_guide.md) — type-aware rules on the same Rust core
+- [Content mappers](./content_mappers.md) — mapped files, span maps, and `runExternalCode`
 - [Performance](./performance.md) — transport measurements and benchmark entry points
 - [Examples](https://github.com/ubugeeei/corsa-bind/tree/main/examples) — runnable Node samples

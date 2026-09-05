@@ -20,6 +20,99 @@ export interface InitializeResponse {
 export interface ConfigResponse {
   options: unknown;
   fileNames: string[];
+  /**
+   * Raw `tsconfig` object as Corsa read it, when the runtime reports one.
+   * Top-level settings that are not compiler options — `contentMappers` among
+   * them — only exist here.
+   */
+  raw?: unknown;
+}
+
+/** A content mapper as declared in a `tsconfig.json` `contentMappers` entry. */
+export interface ContentMapperDefinition {
+  /** npm package that implements the mapper. */
+  package: string;
+  /** Otherwise unsupported file extensions the mapper registers. */
+  extensions: string[];
+  /** Mapper-specific options forwarded verbatim to the mapper process. */
+  options?: unknown;
+}
+
+/** `0` verbatim, `1` atom, `2` alias. */
+export type SpanMapKind = 0 | 1 | 2;
+
+/** `0` exact, `1` atom, `2` approximate, `3` none. */
+export type SpanMapFidelity = 0 | 1 | 2 | 3;
+
+/** `0` ignore, `1` expect. */
+export type DiagnosticDirectivePolicy = 0 | 1;
+
+/** Half-open range of UTF-16 code unit offsets. */
+export interface TextRange {
+  pos: number;
+  end: number;
+}
+
+/** One half-open virtual range mapped onto one half-open original range. */
+export interface SpanMapSegment {
+  virtualStart: number;
+  virtualEnd: number;
+  originalStart: number;
+  originalEnd: number;
+  kind: SpanMapKind;
+  /** `SpanMap.Feature` bitmask; every feature when the mapper set no limit. */
+  features: number;
+}
+
+/** One projection of a position, with how faithful it is. */
+export interface MappedPosition {
+  position: number;
+  fidelity: SpanMapFidelity;
+}
+
+/** One projection of a range, with how faithful it is. */
+export interface MappedRange {
+  range: TextRange;
+  fidelity: SpanMapFidelity;
+}
+
+/** A directive controlling TypeScript diagnostics inside a mapped range. */
+export interface MappedDiagnosticDirective {
+  originalRange: TextRange;
+  virtualRange: TextRange;
+  policy: DiagnosticDirectivePolicy;
+  unusedCode: number;
+}
+
+/** Content mapper state attached to one source file. */
+export interface ContentMapping {
+  /** `name@version` identity of the mapper that produced the file. */
+  contentMapper: string;
+  /** Filename whose extension decided how the virtual text was parsed. */
+  virtualFileName: string;
+  /** Mapping between virtual and original positions, in UTF-16 code units. */
+  spanMap: SpanMapSegment[];
+  /** Directives that control diagnostics inside mapped ranges. */
+  diagnosticDirectives: MappedDiagnosticDirective[];
+  /** Compiler-assigned filenames of supplemental outputs for this file. */
+  supplementalSourceFileNames: string[];
+  /** Canonical file this output supplements, when it is a supplemental one. */
+  canonicalSourceFileName?: string;
+}
+
+/** Source-file fields decoded from a `getSourceFile` payload. */
+export interface EncodedSourceFile {
+  protocolVersion: number;
+  fileName: string;
+  path: string;
+  /** Text the checker parsed. For a mapped file this is the virtual text. */
+  text: string;
+  /** Text on disk. Equal to `text` for files no mapper touched. */
+  originalText: string;
+  languageVariant: number;
+  scriptKind: number;
+  /** Present only when a content mapper produced this file. */
+  contentMapping?: ContentMapping;
 }
 
 export interface ProjectResponse {
