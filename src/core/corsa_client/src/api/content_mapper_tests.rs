@@ -326,3 +326,102 @@ fn only_upstream_virtual_extensions_are_supported() {
     assert!(!is_supported_virtual_extension(".vue"));
     assert!(!is_supported_virtual_extension("ts"));
 }
+
+/// The `counter.demo` fixture from `sxzz/ts-content-mapper`'s example mapper.
+///
+/// ```text
+/// <template>
+///   <button>Count: {count}</button>
+/// </template>
+///
+/// <script>
+/// export const count: number = 1
+/// export const label = `Count: ${count}`
+/// </script>
+/// ```
+///
+/// Its mapper lifts the `<script>` body out with a single
+/// `MappedCodeBuilder(content).appendVerbatim(66, 137)`, which emits the one
+/// merged segment below — real mappers produce few, large verbatim runs rather
+/// than one segment per token.
+fn script_block_extraction() -> SpanMap {
+    SpanMap::new([SpanMapSegment::verbatim(0, 71, 66, 137)])
+}
+
+#[test]
+fn a_real_mappers_script_extraction_round_trips_both_ways() {
+    let map = script_block_extraction();
+
+    // `count` sits at offset 14 of the virtual text and 80 of the `.demo` file.
+    let to_original = map.virtual_to_original_span(TextRange::new(14, 19));
+    assert_eq!(to_original.range, TextRange::new(80, 85));
+    assert_eq!(to_original.fidelity, SpanMapFidelity::Exact);
+
+    let to_virtual = map.original_to_virtual_spans(TextRange::new(80, 85), SpanMapFeature::HOVER);
+    assert_eq!(to_virtual.len(), 1);
+    assert_eq!(to_virtual[0].range, TextRange::new(14, 19));
+    assert_eq!(to_virtual[0].fidelity, SpanMapFidelity::Exact);
+}
+
+#[test]
+fn text_outside_the_extracted_block_has_no_virtual_counterpart() {
+    let map = script_block_extraction();
+
+    // `{count}` inside `<template>` is never handed to the checker, so a lint
+    // or editor request there must not resolve to whatever the checker holds
+    // at that raw offset.
+    assert!(
+        map.original_to_virtual_positions(29, SpanMapFeature::HOVER)
+            .is_empty()
+    );
+    assert!(
+        map.original_to_virtual_spans(TextRange::new(29, 34), SpanMapFeature::HOVER)
+            .is_empty()
+    );
+}
+
+#[test]
+fn anchored_insertion_points_map_through_zero_length_segments() {
+    // `MappedCodeBuilder::appendAnchored` emits an atom whose original span is
+    // empty, defaulting to the definition and references features.
+    let anchor = SpanMapFeature::DEFINITION | SpanMapFeature::REFERENCES;
+    let map = SpanMap::new([
+        SpanMapSegment::verbatim(0, 12, 8, 20),
+        SpanMapSegment::new(12, 30, 20, 20, SpanMapKind::Atom).with_features(anchor),
+    ]);
+
+    let definitions = map.original_to_virtual_positions(20, SpanMapFeature::DEFINITION);
+
+    assert_eq!(
+        definitions,
+        [
+            super::MappedPosition {
+                position: 12,
+                fidelity: SpanMapFidelity::Exact,
+            },
+            super::MappedPosition {
+                position: 12,
+                fidelity: SpanMapFidelity::Atom,
+            },
+        ],
+        "the verbatim segment's exclusive end and the anchor both answer here"
+    );
+    assert!(
+        map.original_to_virtual_positions(20, SpanMapFeature::HOVER)
+            .iter()
+            .all(|projection| projection.fidelity == SpanMapFidelity::Exact),
+        "the anchor opted out of hover, so only the verbatim segment answers"
+    );
+}
+
+#[test]
+fn generated_text_with_no_original_counterpart_reports_no_fidelity() {
+    // A mapper's synthesized prologue — `MappedCodeBuilder::append` adds text
+    // without recording a segment for it.
+    let map = SpanMap::new([SpanMapSegment::verbatim(24, 95, 66, 137)]);
+
+    let mapped = map.virtual_to_original_position(8);
+
+    assert_eq!(mapped.fidelity, SpanMapFidelity::None);
+    assert_eq!(mapped.position, 0);
+}
