@@ -74,6 +74,23 @@ is re-run only when a file's content changes. `dynamicConfig` says the mapper
 resolves configuration of its own at `openProject` time and reports the files
 that invalidate it.
 
+`dynamicConfig` is a two-way contract on the `openProject` response, and
+upstream rejects the project when either side of it is broken
+(`internal/contentmapper/hostimpl.go`):
+
+| `dynamicConfig` | `configIdentity`        | `watchedFiles`           |
+| --------------- | ----------------------- | ------------------------ |
+| `true`          | **required**, non-empty | optional, absolute paths |
+| `false`         | must be absent          | must be absent           |
+
+`configIdentity` is a stable fingerprint of every piece of dynamic
+configuration that can affect a transform; TypeScript combines it with the
+mapper identity, its options, and the declared `compilerOptions` into the cache
+key, so a mapper that reports the same identity is not re-run.
+`watchedFiles` are the files whose changes may alter that identity or the
+transform output, and **must be absolute** — a relative entry is rejected as
+well.
+
 `corsa-bind` reads the declared mappers back off a parsed config:
 
 ```rust
@@ -105,12 +122,21 @@ segments as it emits text:
 ```ts
 import { MappedCodeBuilder, runContentMapper } from "ts-content-mapper";
 
+const OPEN = "<script>";
+const CLOSE = "</script>";
+
 runContentMapper({
   diagnosticSource: "demo",
   transform({ content }) {
-    const start = content.indexOf("<script>") + "<script>".length;
-    const end = content.indexOf("</script>", start);
-    return new MappedCodeBuilder(content).appendVerbatim(start, end).build(".ts");
+    const builder = new MappedCodeBuilder(content);
+    const open = content.indexOf(OPEN);
+    const end = open < 0 ? -1 : content.indexOf(CLOSE, open + OPEN.length);
+    // A file with no complete `<script>` block maps to empty TypeScript rather
+    // than to a reversed range: `indexOf` returns -1 on both misses.
+    if (end < 0) {
+      return builder.build(".ts");
+    }
+    return builder.appendVerbatim(open + OPEN.length, end).build(".ts");
   },
 });
 ```
