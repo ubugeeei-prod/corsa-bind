@@ -34,6 +34,23 @@ The Node.js binding is documented separately in the
 [Node binding guide](./nodejs_binding.md); it uses `napi-rs` rather than this
 C ABI.
 
+## Tiers
+
+The C ABI is the core, and everything below it is a wrapper over that one
+surface. That is deliberate: hand-maintaining a first-class binding per language
+does not scale, while one stable ABI does.
+
+- **Tier 1** — Rust, Node.js, and the C ABI itself. Covered by the required CI
+  matrix, and where API design decisions are made.
+- **Tier 2** — Go, C++, Swift, Zig, C#, MoonBit, and Elixir. Maintained
+  best-effort on top of the C ABI; they may lag tier 1 and do not shape the core
+  API.
+
+New capability therefore lands in the core, reaches tier 1 first, and becomes
+available to tier 2 through the ABI rather than through per-language work. See
+[support_policy.md](./support_policy.md) for the commitment attached to each
+tier.
+
 ## What each binding exposes
 
 All language wrappers cover the same three surfaces:
@@ -46,16 +63,16 @@ All language wrappers cover the same three surfaces:
 - **API client** — spawn a Corsa process and run checker queries
   (`spawn`, `initialize`, `update_snapshot`, …).
 
-| Language | Wrapper location                   | Header / module                                                   |
-| -------- | ---------------------------------- | ----------------------------------------------------------------- |
-| C        | `src/bindings/c/corsa_ffi`         | `include/corsa_utils.h`                                           |
-| C++      | `src/bindings/cpp`                 | `corsa_api.hpp`, `corsa_utils.hpp`, `corsa_virtual_document.hpp`  |
-| Go       | `src/bindings/go/corsa_utils`      | `github.com/ubugeeei-prod/corsa-bind/src/bindings/go/corsa_utils` |
-| Zig      | `src/bindings/zig`                 | `corsa_api.zig`, `corsa_utils.zig`, `corsa_virtual_document.zig`  |
-| C#       | `src/bindings/csharp/CorsaUtils`   | `CorsaUtils.csproj`                                               |
-| Swift    | `src/bindings/swift/CorsaUtils`    | `Package.swift`                                                   |
-| MoonBit  | `src/bindings/moonbit/corsa_utils` | `moon.pkg.json`                                                   |
-| Elixir   | `src/bindings/elixir/corsa_utils`  | `Corsa`, `Corsa.VirtualDocument`, `Corsa.ApiClient`               |
+| Language | Tier | Wrapper location                   | Header / module                                                   |
+| -------- | ---- | ---------------------------------- | ----------------------------------------------------------------- |
+| C        | 1    | `src/bindings/c/corsa_ffi`         | `include/corsa_utils.h`                                           |
+| C++      | 2    | `src/bindings/cpp`                 | `corsa_api.hpp`, `corsa_utils.hpp`, `corsa_virtual_document.hpp`  |
+| Go       | 2    | `src/bindings/go/corsa_utils`      | `github.com/ubugeeei-prod/corsa-bind/src/bindings/go/corsa_utils` |
+| Zig      | 2    | `src/bindings/zig`                 | `corsa_api.zig`, `corsa_utils.zig`, `corsa_virtual_document.zig`  |
+| C#       | 2    | `src/bindings/csharp/CorsaUtils`   | `CorsaUtils.csproj`                                               |
+| Swift    | 2    | `src/bindings/swift/CorsaUtils`    | `Package.swift`                                                   |
+| MoonBit  | 2    | `src/bindings/moonbit/corsa_utils` | `moon.pkg.json`                                                   |
+| Elixir   | 2    | `src/bindings/elixir/corsa_utils`  | `Corsa`, `Corsa.VirtualDocument`, `Corsa.ApiClient`               |
 
 > [!IMPORTANT]
 > Like the Node binding, these wrappers do **not** bundle a Corsa executable.

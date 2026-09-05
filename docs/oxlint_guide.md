@@ -11,6 +11,20 @@ Rust and is bridged into Node through `@corsa-bind/napi`, while you keep
 authoring custom rules in plain JS/TS with the familiar
 `typescript-eslint`-style model.
 
+The shape matters. `typescript-eslint` routes everything through
+ESTree → parser services → `Program` → checker, so the checker's AST becomes the
+lint AST. Here the lint host keeps its own AST and asks the checker narrow
+questions instead:
+
+```text
+OXC AST
+   ├── syntactic rules
+   └── Corsa fact queries → semantic rules
+```
+
+That is the direction the rest of the project is built around too — see rule 6
+in the [Architecture charter](./architecture_charter.md).
+
 > [!WARNING]
 > This package is an early WIP. The core direction is stable, but the API
 > surface will keep moving while Corsa upstream, Oxlint's JS plugin APIs, and

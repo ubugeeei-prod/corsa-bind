@@ -71,7 +71,9 @@ pub mod observability {
 
 /// Re-exports client orchestration and replicated-state helpers.
 pub mod orchestrator {
-    pub use corsa_orchestrator::{ApiOrchestrator, ApiOrchestratorConfig, ApiOrchestratorStats};
+    pub use corsa_orchestrator::{
+        ApiOrchestrator, ApiOrchestratorConfig, ApiOrchestratorStats, ProjectLease,
+    };
     #[cfg(feature = "experimental-distributed")]
     pub use corsa_orchestrator::{
         ChannelTransport, DistributedApiOrchestrator, FileStorage, HardState, InMemoryStorage,

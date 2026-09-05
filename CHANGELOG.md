@@ -20,6 +20,32 @@ published versions.
 
 ### Added
 
+- `docs/architecture_charter.md` states the ownership boundary the project is
+  built on — **own integration, not TypeScript semantics** — together with the
+  rules that follow from it (stable API layer, snapshots wrap upstream, the
+  process boundary stays, orchestration is the product, virtual projects stay
+  ours, foreign ASTs ask for facts, opaque handles only, distributed
+  orchestration frozen, C ABI as the core with tiered language bindings) and the
+  convergence rule: when upstream ships it, delete ours and wrap theirs. The
+  README, docs index, project guide, support policy, production readiness,
+  language bindings, and Oxlint guide are aligned with it, and distributed
+  orchestration is now documented as frozen with single-machine pools plus
+  repo-level sharding as the scaling story.
+- `ProjectSession::semantics()` returns `SemanticQuery`, the `corsa-bind`-owned
+  semantic-fact vocabulary that stays stable across upstream endpoint churn:
+  `symbol_at`, `type_at`, `types_at`, `type_of`, `types_of`, `declared_type_of`,
+  `resolve_symbol`, `resolve_type`, `properties_of`, `property_of`,
+  `signatures_of`, `return_type_of`, `is_assignable`, and `type_text`. Answers
+  are opaque handles (`SymbolRef`, `TypeRef`) rather than mirrors of the
+  checker's object graph, and `SEMANTIC_QUERY_VERSION` records the contract. The
+  upstream-shaped `ApiClient` / `ProjectSession` methods are unchanged and remain
+  the escape hatch for callers who want the full upstream payload.
+- the orchestrator gains project lifecycle: `acquire_project` returns a
+  `ProjectLease` pinned to one warm worker, `lease_for_project` exposes the same
+  affinity for raw client leases, `project_affinity_count` and
+  `release_project_affinity` manage the pin, and `shutdown_profile` drains a
+  fleet. Pinning matters because the program graph belongs to a process — a
+  round-robin lease rebuilds it on every worker the project lands on.
 - full support for TypeScript content mappers. `--runExternalCode` was already forwarded, but everything downstream of that gate was opaque: a mapped file's `getSourceFile` payload arrived as bytes with no way to tell a mapper had produced it, and the checker's positions — which for such a file are positions in the mapper's virtual TypeScript — had no route back to the file the user edits. `EncodedSourceFile::decode` (also `EncodedPayload::decode_source_file` and `ApiClient::get_encoded_source_file`) reads the source-file level fields out of that payload: mapper identity, virtual filename, both texts, span map, diagnostic directives, supplemental outputs, and the canonical file a supplemental output belongs to. `SpanMap` ports upstream's `spanmap.go`/`spanMap.ts` mapping in full — verbatim/atom/alias segments, per-feature opt-outs, exact/atom/approximate/none fidelity, and the duplicate-group rules that keep an original range from projecting onto one span covering every copy. `ConfigResponse::raw` and `ConfigResponse::content_mappers()` expose the mappers a project declares. The Node binding mirrors all of it: `getEncodedSourceFile`, `decodeSourceFile`, `isContentMappedSourceFile`, `spanMapForSourceFile`, `contentMappersFromConfig`, the `CorsaSpanMap` class, and the `SpanMap.Kind`/`.Fidelity`/`.Feature` enums. [`docs/content_mappers.md`](./docs/content_mappers.md) documents the semantics.
 - `corsa-oxlint` translates lint positions through the span map before every type and symbol lookup in a content-mapped file, so a mapper-owned file resolves the node the checker actually holds instead of whatever sits at that raw offset, and authored text the mapper never emitted resolves to no type rather than to a neighbouring one. Rules reach the mapping through `program.getContentMapping()` and `program.getContentMappers()`. Projects that declare no `contentMappers` issue no extra requests at all.
 - the Node binding adds `batchCheckerRequests` / `batchCheckerRequestsAsync`

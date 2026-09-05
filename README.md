@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  Rust, Node.js, and native bindings for the upstream Corsa checker — over stdio, with no forks and no patches.
+  A stable systems interface for the native TypeScript compiler — over stdio, with no forks and no patches.
 </p>
 
 ---
@@ -17,6 +17,27 @@ Hot paths live in Rust and stay zero-cost; `napi-rs`, Rustler, and a shared C
 ABI carry that performance to JS/TS, Elixir, C, C++, Go, Zig, C#, Swift, and
 MoonBit — so you can author custom checker tooling and lint rules without
 reimplementing the checker.
+
+It is deliberately *not* a reimplementation of the TypeScript Compiler API. It
+is the layer between upstream's checker and everything that wants to use it:
+
+```text
+  Vize · Oxlint · Node · Rust · C · Go · Swift · …
+                       │
+  ┌────────────────────▼────────────────────┐
+  │              corsa-bind                 │
+  │  stable API/ABI · worker pools          │
+  │  snapshot + process lifecycle           │
+  │  virtual projects · cancellation        │
+  │  backpressure · observability           │
+  └────────────────────┬────────────────────┘
+                       │
+        upstream native compiler service
+                 TypeScript 7+
+```
+
+As upstream's own API matures, this layer should get *thinner* — and more
+important. See the [Architecture charter](./docs/architecture_charter.md).
 
 > [!WARNING]
 > This repository is still evolving. The local Rust and Node API/LSP surfaces
@@ -29,6 +50,13 @@ reimplementing the checker.
 > Corsa's recommended stdio/API/LSP integration points, keep
 > `ref/corsa-upstream` as an exact upstream checkout, and preserve a strict
 > **no forks, no patches** policy.
+>
+> The second half of that policy is **own integration, not TypeScript
+> semantics**: checker semantics are never ours, checker lifecycle is
+> aggressively ours, and when upstream ships something we approximate today, we
+> delete ours and wrap theirs. The
+> [Architecture charter](./docs/architecture_charter.md) spells out what that
+> rules in and out.
 
 ## Quick start
 
@@ -77,6 +105,7 @@ Full guides live under [`docs/`](./docs/index.md):
 | Guide                                                  | What it covers                                                  |
 | ------------------------------------------------------ | --------------------------------------------------------------- |
 | [Getting started](./docs/getting_started.md)           | First program in Rust, Node.js, and Oxlint                      |
+| [Architecture charter](./docs/architecture_charter.md) | The ownership boundary and the rules that follow from it        |
 | [Architecture](./docs/project_guide.md)                | Workspace shape, upstream policy, extension points, naming      |
 | [Node.js binding](./docs/nodejs_binding.md)            | `@corsa-bind/napi` for Node, Deno, and Bun                      |
 | [Language bindings](./docs/language_bindings.md)       | Native bindings for Elixir, C, C++, Go, Zig, C#, Swift, MoonBit |
@@ -100,7 +129,12 @@ and is built with `vp run -w docs_build`.
 - **Published packages:** [`@corsa-bind/napi`](./src/bindings/nodejs/corsa_node)
   and [`corsa-oxlint`](./src/bindings/nodejs/corsa_oxlint) (both expect a
   caller-provided Corsa executable)
-- **Distributed orchestration:** behind the `experimental-distributed` cargo feature
+- **Process isolation:** every checker query crosses a process boundary on
+  purpose — crash, GC, ABI, and TypeScript-version isolation, plus timeouts,
+  cancellation, restart, and memory kill
+- **Distributed orchestration:** frozen behind the `experimental-distributed`
+  cargo feature; single-machine worker pools and repo-level sharding are the
+  scaling story
 
 Public APIs are still `0.x`, so treat compatibility as conservative. See
 [Known limitations](./docs/support_policy.md) for the current experimental scope.

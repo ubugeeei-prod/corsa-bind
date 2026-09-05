@@ -40,6 +40,7 @@ mod requests_editor;
 mod requests_symbols;
 mod requests_types;
 mod responses;
+mod semantics;
 mod snapshot;
 mod source_file;
 mod spawn_stdio;
@@ -92,6 +93,10 @@ pub use responses::{
     ConfigResponse, IndexInfo, InitializeResponse, JsDocTagInfo, ProjectResponse,
     SignatureResponse, SourceFileMetadata, SymbolResponse, TypePredicateResponse, TypeResponse,
     WellKnownSymbolsResponse,
+};
+/// Stable `corsa-bind`-owned semantic fact queries.
+pub use semantics::{
+    NameMeaning, SEMANTIC_QUERY_VERSION, SemanticQuery, SignatureKind, SymbolRef, TypeRef,
 };
 /// Auto-releasing snapshot wrapper.
 pub use snapshot::ManagedSnapshot;

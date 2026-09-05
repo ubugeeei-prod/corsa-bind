@@ -1,11 +1,11 @@
 ---
 title: corsa-bind
-description: Native Rust and JavaScript bindings for the Corsa TypeScript checker — type-aware Oxlint, stdio API + LSP, and zero-cost hot paths, with a strict no-forks-no-patches upstream policy.
+description: A stable systems interface for the native TypeScript compiler — type-aware Oxlint, stdio API + LSP, and zero-cost hot paths, with a strict no-forks-no-patches upstream policy.
 ---
 
 # corsa-bind
 
-Native Rust and JavaScript bindings for the **Corsa** TypeScript checker — fast,
+A stable systems interface for the **Corsa** TypeScript checker — fast,
 type-aware tooling without reimplementing the checker and without forking it.
 
 **Corsa** is Microsoft's native Go port of the TypeScript compiler — the
@@ -77,10 +77,15 @@ points.
   Deno, and Bun.
 - **Reproducible upstream.** `ref/corsa-upstream` is pinned by exact commit with
   a strict **no forks, no patches** policy, so behavior stays auditable.
+- **A boundary you can build on.** Checker semantics stay upstream's; process,
+  snapshot, and session lifecycle are ours. The stable query surface keeps its
+  shape while upstream's API moves underneath it — see the
+  [Architecture charter](./architecture_charter.md).
 
 ## Start here
 
 - [Getting started](./getting_started.md) — first program in Rust, Node.js, and Oxlint.
+- [Architecture charter](./architecture_charter.md) — what this project owns, what it never will.
 - [Architecture](./project_guide.md) — workspace shape, upstream policy, extension points.
 
 ## Use the bindings

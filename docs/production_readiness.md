@@ -13,7 +13,9 @@ The current production target is:
 - LSP stdio integrations
 - local worker orchestration and cache reuse
 
-The following remains experimental:
+The following remains experimental, and the distributed layer is additionally
+**frozen** — no new capability, no promotion path, and a candidate for removal
+(see [support_policy.md](./support_policy.md)):
 
 - the `experimental-distributed` cargo feature
 - the in-process Raft replication layer
@@ -48,7 +50,30 @@ For editor-like integrations:
 
 - use stable cache keys for snapshots
 - prewarm a small worker fleet instead of spawning per request
-- treat the distributed orchestrator as experimental unless you are actively developing it
+- acquire project leases (`ApiOrchestrator::acquire_project`) instead of leasing
+  raw workers, so each project stays on the worker that is already warm for it
+- drain a fleet with `ApiOrchestrator::shutdown_profile` after a `tsconfig`
+  change or an upstream binary upgrade, rather than letting it grow
+- treat the distributed orchestrator as frozen unless you are actively
+  developing it
+
+## Scaling Story
+
+Scale a single machine first:
+
+```text
+one machine
+  ├ worker 1 — project A
+  ├ worker 2 — project B
+  ├ worker 3 — project C
+  └ worker 4 — spare
+```
+
+Checker state has strong affinity to a repo and its project graph, so requests
+are not interchangeable across nodes and replicated snapshot state buys little.
+When one machine is genuinely not enough, shard at the repo level — repo A to
+machine A, repo B to machine B — instead of reaching for the distributed
+orchestrator.
 
 ## Release Checklist
 

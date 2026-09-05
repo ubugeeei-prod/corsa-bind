@@ -16,6 +16,20 @@
 //! - [`ApiSpawnConfig`] describes how that worker should be started.
 //! - [`ManagedSnapshot`] keeps snapshot handles alive and releases them on drop.
 //! - [`ApiProfile`] gives orchestrators a stable name for a spawn configuration.
+//! - [`SemanticQuery`], reached via [`ProjectSession::semantics`], is the stable
+//!   fact vocabulary this crate owns.
+//!
+//! # Two API Surfaces
+//!
+//! The endpoint helpers on [`ApiClient`] and [`ProjectSession`] mirror upstream
+//! Corsa naming on purpose, so new upstream capability is cheap to expose and
+//! easy to audit — and so they move when upstream moves.
+//!
+//! [`SemanticQuery`] is the other half: a small, `corsa-bind`-owned vocabulary
+//! that answers with opaque handles and keeps its signatures across upstream
+//! renames, versioned by [`SEMANTIC_QUERY_VERSION`]. Build foreign hosts
+//! against it, and drop to the mirror when you need the full upstream payload.
+//! See `docs/architecture_charter.md`.
 //!
 //! # Performance Model
 //!

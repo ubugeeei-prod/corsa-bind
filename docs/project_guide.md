@@ -3,6 +3,7 @@
 This document is the high-level map for `corsa-bind`.
 It explains what the repository is trying to achieve, which constraints shape the design, how the crates fit together, and what patterns are worth following when extending the project.
 
+If you want the ownership boundary that decides which changes are allowed at all, go to [architecture_charter.md](./architecture_charter.md).
 If you want measured numbers, go to [performance.md](./performance.md).
 If you want benchmark rationale, go to [benchmarking_guide.md](./benchmarking_guide.md).
 If you want CI and local reproduction details, go to [ci_guide.md](./ci_guide.md).
@@ -24,6 +25,14 @@ The key idea is simple:
 - we do want to build a strong systems layer around the real upstream checker
 
 That systems layer is where most of the repository's value lives.
+
+Stated as a boundary: **own integration, not TypeScript semantics.** Checker
+semantics are never ours; checker lifecycle — process, snapshot, session, pool
+— is aggressively ours. As upstream's own programmatic API matures, this
+repository should get thinner rather than wider, and implementations we keep
+only because upstream lacked them should be deleted and replaced with wrappers.
+[architecture_charter.md](./architecture_charter.md) is the full statement of
+that rule, including what it forbids.
 
 ## A Note on the Name
 
@@ -62,7 +71,25 @@ That means:
 
 This policy is enforced through `ref/corsa-upstream`, `corsa_ref.lock.toml`, and `corsa_ref`.
 
-### 2. Reproducibility Beats Convenience
+### 2. Own Integration, Not TypeScript Semantics
+
+The repository binds the checker; it never models it.
+
+That means:
+
+- answers cross the boundary as opaque handles, not as mirrored `Type`/`Symbol`/`Node` graphs
+- snapshots are owned as *handles with a lifetime*, never as a second snapshot implementation
+- when upstream ships a real version of something approximated here, the approximation is deleted and upstream's is wrapped
+
+The practical shape of this is two API surfaces, on purpose:
+
+- `ApiClient` and `ProjectSession` mirror upstream endpoint names, so new upstream capability is cheap to expose and easy to audit — and they move when upstream moves
+- `SemanticQuery` (`ProjectSession::semantics()`) is the `corsa-bind`-owned vocabulary that stays put across upstream churn, versioned by `SEMANTIC_QUERY_VERSION`
+
+See [architecture_charter.md](./architecture_charter.md) for the reasoning and
+the convergence checklist.
+
+### 3. Reproducibility Beats Convenience
 
 The project prefers:
 
@@ -76,7 +103,7 @@ over a looser "mostly works on my machine" development style.
 That strictness is deliberate.
 Without it, regressions in a fast-moving upstream project become very hard to reason about.
 
-### 3. Workflow Speed Matters More Than Single-Call Glory
+### 4. Workflow Speed Matters More Than Single-Call Glory
 
 `corsa` sits on top of Corsa.
 If both are asked to do exactly the same work exactly once, parity is the healthy target.
@@ -91,7 +118,7 @@ The realistic win conditions are:
 
 This shapes almost every performance-related choice in the repository.
 
-### 4. Process Cleanup Is Correctness
+### 5. Process Cleanup Is Correctness
 
 The repository treats subprocess cleanup as part of correctness, not as polish.
 
@@ -102,6 +129,12 @@ Why:
 - unreaped children become operational debt
 
 This is why process guards and explicit kill-plus-wait logic exist even in code that "only benchmarks" or "only runs tests".
+
+The process boundary itself is also a feature rather than a cost. It buys Go
+runtime and GC isolation, crash isolation, ABI independence, TypeScript-version
+isolation, and a place to hang timeouts, cancellation, restart, and memory kill.
+"Call the Go library directly over FFI" would trade all of that away, so it is
+not on the table — see the charter's rule 3.
 
 ## Architectural Overview
 
@@ -186,6 +219,7 @@ Role:
 - support for both async JSON-RPC and sync msgpack stdio transports
 - snapshot lifecycle management
 - symbol, type, and relation query methods
+- the stable `SemanticQuery` vocabulary layered on top of those methods
 
 Why it exists:
 
@@ -197,6 +231,11 @@ Touch this crate when:
 - adding a new upstream API endpoint
 - refining Rust-side response or handle modeling
 - changing transport defaults or behavior
+
+Note the asymmetry: adding an endpoint mirror in `methods_*` is routine, while
+adding a method to `semantics.rs` is a stability commitment that has to survive
+upstream renames. Prefer the mirror unless a foreign host genuinely needs the
+question to stay stable.
 
 ### `corsa_lsp`
 
@@ -222,10 +261,12 @@ Touch this crate when:
 Role:
 
 - worker prewarming
-- round-robin leasing
+- round-robin leasing, plus project-pinned leasing
+- project session acquire/release leases
+- profile shutdown
 - snapshot caching
 - result memoization
-- distributed replicated state for experiments
+- frozen distributed replicated state behind a cargo feature
 
 Why it exists:
 
@@ -363,15 +404,32 @@ Typical path:
 
 1. Name a worker configuration with `ApiProfile`.
 2. Prewarm workers for that profile.
-3. Cache snapshots by stable application keys.
-4. Memoize expensive derived results by key and TTL.
-5. Fan work out across multiple workers when parallelism helps.
+3. Acquire a project lease, which pins that project to one warm worker.
+4. Run queries, refresh the snapshot, run more queries.
+5. Release the lease; shut the profile down when the fleet should go away.
+
+```rust
+let project = orchestrator
+    .acquire_project(&profile, "/repo/tsconfig.json", None)
+    .await?;
+
+let facts = project.semantics();
+let symbol = facts.symbol_at(file, position).await?;
+
+project.release();
+```
+
+Snapshot caching by application key and result memoization by key and TTL are
+still available for workloads that are not session-shaped.
 
 Important properties:
 
 - caching and pooling are explicit, not accidental
+- project affinity is deliberate: the program graph belongs to a process, so
+  round-robining one project across the fleet pays to build it more than once
 - workflow speedup comes from reuse and narrower queries
-- distributed replication mirrors metadata and virtual state, not every live process detail
+- distributed replication is frozen; single-machine pools plus repo-level
+  sharding are the scaling story
 
 ### Node Flow
 
@@ -508,6 +566,7 @@ Checklist:
 - what is keyed by logical workspace or request?
 - what is safe to replicate?
 - what remains process-local?
+- does this belong to a profile, or to a single project pinned inside it?
 
 Good instincts:
 
@@ -601,7 +660,7 @@ If you are new to the codebase, this reading order works well:
 3. crate roots under `src/core/*/src/lib.rs` plus `src/bindings/rust/corsa/src/lib.rs`
 4. `corsa_client` methods and response types
 5. `corsa_lsp` overlay and virtual document logic
-6. `corsa_orchestrator` pooling, state, and Raft code
+6. `corsa_orchestrator` pooling, project leases, and state code
 7. benchmark runners under `src/bindings/rust/corsa/src/bin`
 
 If you are debugging performance:
@@ -630,10 +689,13 @@ That systems layer is responsible for:
 - safe process control
 - transport quality
 - typed API ergonomics
+- a stable query vocabulary that outlives upstream API churn
 - editor-style virtual state
-- worker reuse
+- worker reuse and project affinity
 - benchmark discipline
 - upstream reproducibility
 - JS and TS integration ergonomics
+
+It is not responsible for anything the checker means.
 
 If a proposed change improves one of those without violating the repository's core constraints, it is probably moving in the right direction.

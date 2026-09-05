@@ -8,6 +8,7 @@ mod api;
 #[cfg(feature = "experimental-distributed")]
 mod distributed;
 mod panic_payload;
+mod project;
 #[cfg(feature = "experimental-distributed")]
 mod raft;
 #[cfg(feature = "experimental-distributed")]
@@ -18,6 +19,8 @@ pub use api::{ApiOrchestrator, ApiOrchestratorConfig, ApiOrchestratorStats};
 /// Distributed wrapper that replicates overlay and cache state.
 #[cfg(feature = "experimental-distributed")]
 pub use distributed::DistributedApiOrchestrator;
+/// Project session leased from a pinned worker in the local pool.
+pub use project::ProjectLease;
 /// Raft topology and protocol exports used by the experimental distributed
 /// orchestrator.
 #[cfg(feature = "experimental-distributed")]

@@ -120,6 +120,51 @@ the fastest transport on the pinned upstream commit. See the
 [Architecture guide](./project_guide.md) for the crate layout behind these
 types.
 
+For actual checker questions, open a `ProjectSession` and ask through
+`semantics()`. That surface is `corsa-bind`'s own vocabulary: it answers with
+opaque handles and keeps its signatures when upstream renames endpoints
+underneath it.
+
+```rust
+use corsa::{
+    api::{ApiSpawnConfig, ProjectSession},
+    runtime::block_on,
+};
+
+fn main() -> Result<(), corsa::CorsaError> {
+    block_on(async {
+        let session = ProjectSession::spawn(
+            ApiSpawnConfig::new(".cache/corsa")
+                .with_cwd("ref/corsa-upstream/packages/typescript"),
+            "ref/corsa-upstream/packages/typescript/tsconfig.json",
+            Some("ref/corsa-upstream/packages/typescript/src/typescript.ts".into()),
+        )
+        .await?;
+
+        let facts = session.semantics();
+        if let Some(symbol) = facts
+            .symbol_at(
+                "ref/corsa-upstream/packages/typescript/src/typescript.ts",
+                0,
+            )
+            .await?
+            && let Some(value_type) = facts.type_of(&symbol.id).await?
+        {
+            println!("{} : {}", symbol.name, facts.type_text(&value_type.id).await?);
+        }
+
+        session.close().await?;
+        Ok(())
+    })
+}
+```
+
+The upstream-shaped methods on `ProjectSession` and `ApiClient`
+(`get_type_at_position`, `is_type_assignable_to`, …) stay available underneath
+and mirror upstream naming exactly — reach for them when you need the full
+upstream payload, and accept that they move when upstream moves. The
+[Architecture charter](./architecture_charter.md) explains the split.
+
 ## 3. First program in Node.js
 
 Install the published binding into any Node `22+`, Deno `2.0+`, or Bun `1.2+`
