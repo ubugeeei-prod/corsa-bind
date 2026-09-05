@@ -58,9 +58,38 @@ The mapper package's own `package.json` says how to run it:
 {
   "name": "vue-mapper",
   "version": "1.2.3",
-  "typescript": { "contentMapper": { "exec": ["node", "./mapper.mjs"] } }
+  "typescript": {
+    "contentMapper": {
+      "exec": ["node", "./mapper.mjs"],
+      "compilerOptions": ["jsx", "target"],
+      "dynamicConfig": false
+    }
+  }
 }
 ```
+
+`compilerOptions` names the compiler options whose values change the mapper's
+output; TypeScript folds them into the cache key, so a mapper that declares none
+is re-run only when a file's content changes. `dynamicConfig` says the mapper
+resolves configuration of its own at `openProject` time and reports the files
+that invalidate it.
+
+`dynamicConfig` is a two-way contract on the `openProject` response, and
+upstream rejects the project when either side of it is broken
+(`internal/contentmapper/hostimpl.go`):
+
+| `dynamicConfig` | `configIdentity`        | `watchedFiles`           |
+| --------------- | ----------------------- | ------------------------ |
+| `true`          | **required**, non-empty | optional, absolute paths |
+| `false`         | must be absent          | must be absent           |
+
+`configIdentity` is a stable fingerprint of every piece of dynamic
+configuration that can affect a transform; TypeScript combines it with the
+mapper identity, its options, and the declared `compilerOptions` into the cache
+key, so a mapper that reports the same identity is not re-run.
+`watchedFiles` are the files whose changes may alter that identity or the
+transform output, and **must be absolute** — a relative entry is rejected as
+well.
 
 `corsa-bind` reads the declared mappers back off a parsed config:
 
@@ -82,6 +111,53 @@ Both read the `contentMappers` array out of the raw `tsconfig` object the
 runtime returns alongside the normalized compiler options, and both return an
 empty list when the project declares none — including on runtimes that predate
 content mappers.
+
+## Writing a mapper
+
+`corsa-bind` is the consuming side. To author the mapper itself, the
+[`ts-content-mapper`](https://github.com/sxzz/ts-content-mapper) package wraps
+the stdio JSON-RPC protocol and gives you a `MappedCodeBuilder` that records
+segments as it emits text:
+
+```ts
+import { MappedCodeBuilder, runContentMapper } from "ts-content-mapper";
+
+const OPEN = "<script>";
+const CLOSE = "</script>";
+
+runContentMapper({
+  diagnosticSource: "demo",
+  transform({ content }) {
+    const builder = new MappedCodeBuilder(content);
+    const open = content.indexOf(OPEN);
+    const end = open < 0 ? -1 : content.indexOf(CLOSE, open + OPEN.length);
+    // A file with no complete `<script>` block maps to empty TypeScript rather
+    // than to a reversed range: `indexOf` returns -1 on both misses.
+    if (end < 0) {
+      return builder.build(".ts");
+    }
+    return builder.appendVerbatim(open + OPEN.length, end).build(".ts");
+  },
+});
+```
+
+Because the builder merges adjacent verbatim runs, a real mapper usually emits
+very few, very large segments — the example above produces exactly one for the
+whole `<script>` body. `appendAtom` and `appendAlias` cover generated text that
+stands in for an original span, and `appendAnchored` produces an atom over a
+zero-length original range, which is how a mapper points a generated declaration
+at an insertion point. `corsa-bind` answers queries for all of these, including
+the zero-length case.
+
+> [!IMPORTANT]
+> The mapper-facing protocol and the API payload share a vocabulary but are not
+> the same wire format. Span map segments are the same tuple on both sides, but
+> diagnostic directives are not: a mapper sends
+> `[originalStart, originalLength, virtualStart, virtualEnd, policy, unusedExpectDirectiveIndex?]`,
+> where the last element indexes a diagnostics list it supplied alongside them,
+> while the payload a client decodes carries
+> `[originalStart, originalLength, virtualStart, virtualLength, policy, unusedCode]`
+> with that index already resolved to a code. Do not reuse one decoder for both.
 
 ## Decoding a mapped source file
 
@@ -219,3 +295,5 @@ declares.
 - [Type-aware Oxlint](./oxlint_guide.md) — `settings.corsaOxlint` and rule authoring.
 - [Upstream pin](./corsa_upstream_dependency.md) — the Corsa revision these
   semantics are mirrored from.
+- [`ts-content-mapper`](https://github.com/sxzz/ts-content-mapper) — a library
+  for writing the mapper on the other end of this protocol.
