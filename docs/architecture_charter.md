@@ -167,6 +167,15 @@ side's responsibility, and `corsa-bind` is where the framework side meets the
 checker. `VirtualDocument`, `LspOverlay`, and the projection/mapping concepts
 around them are permanent residents, not scaffolding.
 
+Upstream's **content mappers** are the worked example of how this is supposed to
+go. Upstream owns what a mapper is, when it runs, and what the virtual text
+means; `corsa-bind` owns the integration around it — decoding the mapped source
+file, carrying the span map, and translating positions so a lint diagnostic
+lands where the user is looking rather than in text the user never wrote. The
+`SpanMap` port is a port precisely so it stays faithful to `spanmap.go`, not so
+we get to have opinions about it. See
+[content_mappers.md](./content_mappers.md).
+
 ### 6. Foreign ASTs ask for facts; they do not import the checker's AST
 
 `typescript-eslint` is slow in a structural way: ESTree → parser services →
