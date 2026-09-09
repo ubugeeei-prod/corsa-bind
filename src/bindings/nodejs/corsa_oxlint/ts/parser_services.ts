@@ -186,6 +186,9 @@ function createEslintTypeChecker(
     getPropertiesOfType(type) {
       return asReadonlyArray(callChecker(source, "getPropertiesOfType", type));
     },
+    getIndexInfosOfType(type) {
+      return asReadonlyArray(callChecker(source, "getIndexInfosOfType", type));
+    },
     getSignaturesOfType(type, kind) {
       return asReadonlyArray(callChecker(source, "getSignaturesOfType", type, kind));
     },
@@ -197,6 +200,9 @@ function createEslintTypeChecker(
     },
     getTypePredicateOfSignature(signature) {
       return callChecker(source, "getTypePredicateOfSignature", signature);
+    },
+    getNonNullableType(type) {
+      return callChecker(source, "getNonNullableType", type) ?? type;
     },
     getBaseTypes(type) {
       return asReadonlyArray(callChecker(source, "getBaseTypes", type));
