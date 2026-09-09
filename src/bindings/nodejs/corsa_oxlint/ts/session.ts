@@ -12,6 +12,7 @@ import {
 
 import type {
   CorsaCallSignatureFacts,
+  CorsaIndexInfo,
   CorsaJsDocTagInfo,
   CorsaNode,
   CorsaSignature,
@@ -841,6 +842,18 @@ export class CorsaProjectSession {
     );
   }
 
+  getIndexInfosOfType(type: CorsaType): readonly CorsaIndexInfo[] {
+    return this.withMissingTypeHandleFallback<readonly CorsaIndexInfo[]>(type, [], () =>
+      this.rememberIndexInfos(
+        this.client().callJson<readonly CorsaIndexInfo[] | null>("getIndexInfosOfType", {
+          snapshot: this.#snapshot,
+          project: this.projectIdForType(type),
+          type: type.id,
+        }) ?? [],
+      ),
+    );
+  }
+
   getSignaturesOfType(type: CorsaType, kind: number): readonly CorsaSignature[] {
     return this.withMissingTypeHandleFallback<readonly CorsaSignature[]>(type, [], () => {
       const source = this.sourceContextForType(type);
@@ -938,6 +951,10 @@ export class CorsaProjectSession {
       this.rememberType(predicate.type);
     }
     return predicate;
+  }
+
+  getNonNullableType(type: CorsaType): CorsaType | undefined {
+    return this.callType("getNonNullableType", type);
   }
 
   getBaseTypes(type: CorsaType): readonly CorsaType[] {
@@ -1274,6 +1291,14 @@ export class CorsaProjectSession {
       this.rememberType(type);
     }
     return types;
+  }
+
+  private rememberIndexInfos<T extends readonly CorsaIndexInfo[]>(infos: T): T {
+    for (const info of infos) {
+      this.rememberType(info.keyType);
+      this.rememberType(info.valueType);
+    }
+    return infos;
   }
 
   private rememberTypeSource(type: CorsaType | undefined, handle: string | undefined): void {

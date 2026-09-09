@@ -89,6 +89,12 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
           return resolved;
         }
       }
+      if (kind === "TSNonNullExpression") {
+        const resolved = typeOfNonNullExpression(context, node as Node, this);
+        if (resolved) {
+          return resolved;
+        }
+      }
       if (kind === "MemberExpression") {
         const resolved = typeOfComputedMemberExpression(context, node as Node, this);
         if (resolved) {
@@ -182,6 +188,9 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
     getPropertiesOfType(type) {
       return sessionForContext(context).session.getPropertiesOfType(type);
     },
+    getIndexInfosOfType(type) {
+      return sessionForContext(context).session.getIndexInfosOfType(type);
+    },
     getSignaturesOfType(type, kind) {
       return sessionForContext(context).session.getSignaturesOfType(type, kind);
     },
@@ -198,6 +207,9 @@ export function createTypeChecker(context: ContextWithParserOptions): CorsaTypeC
     },
     getTypePredicateOfSignature(signature) {
       return sessionForContext(context).session.getTypePredicateOfSignature(signature);
+    },
+    getNonNullableType(type) {
+      return sessionForContext(context).session.getNonNullableType(type);
     },
     getBaseTypes(type) {
       // A constructor type in a superclass position resolves to its immediate
@@ -312,6 +324,7 @@ function primeImplementedTypesCacheFromNode(
 }
 
 const typeFlags = {
+  typeParameter: 1 << 19,
   union: 1 << 27,
   intersection: 1 << 28,
 } as const;
@@ -449,13 +462,15 @@ function typeOfCallExpression(
   }
   const rawArgs = (node as unknown as { readonly arguments?: unknown }).arguments;
   const args = Array.isArray(rawArgs) ? rawArgs.filter(isNode) : [];
+  const argumentTypes = args.map((arg) => typeInfoAtCallArgument(context, arg, checker));
+  const signatureFacts = checker.getCallSignatureFacts(
+    calleeType,
+    SignatureKind.Call,
+    argumentTypes.map((arg) => arg.texts),
+    explicitTypeArgumentTexts(context, node),
+  );
   const callSignature =
-    checker.getCallSignatureFacts(
-      calleeType,
-      SignatureKind.Call,
-      args.map((arg) => typeTextsAtCallArgument(context, arg, checker)),
-      explicitTypeArgumentTexts(context, node),
-    ).signature ?? checker.getSignaturesOfType(calleeType, SignatureKind.Call)[0];
+    signatureFacts.signature ?? checker.getSignaturesOfType(calleeType, SignatureKind.Call)[0];
   if (!callSignature) {
     return undefined;
   }
@@ -463,26 +478,42 @@ function typeOfCallExpression(
   if (!returnType) {
     return undefined;
   }
-  sessionForContext(context).session.rememberTypeLookupFromType(returnType, calleeType);
-  return returnType;
+  const inferredReturnType =
+    typeOfInferredGenericReturn(
+      returnType,
+      callSignature,
+      signatureFacts,
+      argumentTypes,
+      checker,
+    ) ?? returnType;
+  sessionForContext(context).session.rememberTypeLookupFromType(inferredReturnType, returnType);
+  sessionForContext(context).session.rememberTypeLookupFromType(inferredReturnType, calleeType);
+  return inferredReturnType;
 }
 
-function typeTextsAtCallArgument(
+interface CallArgumentTypeInfo {
+  readonly type?: CorsaType;
+  readonly texts: readonly string[];
+}
+
+function typeInfoAtCallArgument(
   context: ContextWithParserOptions,
   node: Node,
   checker: CorsaTypeCheckerShape,
-): readonly string[] {
+): CallArgumentTypeInfo {
   const values = new Set<string>();
   const nodeType = checker.getTypeAtLocation(node);
+  collectTexts(nodeType);
   collectTexts(nodeType ? (checker.getBaseTypeOfLiteralType(nodeType) ?? nodeType) : undefined);
   const symbol = checker.getSymbolAtLocation(node);
   const symbolType = symbol
     ? (checker.getTypeOfSymbol(symbol) ?? checker.getDeclaredTypeOfSymbol(symbol))
     : undefined;
+  collectTexts(symbolType);
   collectTexts(
     symbolType ? (checker.getBaseTypeOfLiteralType(symbolType) ?? symbolType) : undefined,
   );
-  return [...values];
+  return { type: nodeType ?? symbolType, texts: [...values] };
 
   function collectTexts(type: CorsaType | undefined): void {
     if (!type) {
@@ -494,6 +525,39 @@ function typeTextsAtCallArgument(
       }
     }
   }
+}
+
+function typeOfInferredGenericReturn(
+  returnType: CorsaType,
+  signature: CorsaSignature,
+  facts: { readonly expectedArgumentTypeTexts?: readonly (readonly string[])[] },
+  argumentTypes: readonly CallArgumentTypeInfo[],
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  if (signature.typeParameters.length === 0) {
+    return undefined;
+  }
+  if ((returnType.flags & typeFlags.typeParameter) === 0) {
+    return undefined;
+  }
+  const returnTexts = typeTexts(returnType, checker).map(normalizeTypeText);
+  if (returnTexts.length === 0) {
+    return undefined;
+  }
+  for (const [index, argument] of argumentTypes.entries()) {
+    if (!argument.type) {
+      continue;
+    }
+    const expectedTexts =
+      facts.expectedArgumentTypeTexts?.[index] ?? signature.parameterTypeTexts?.[index];
+    if (!expectedTexts) {
+      continue;
+    }
+    if (expectedTexts.map(normalizeTypeText).some((text) => returnTexts.includes(text))) {
+      return argument.type;
+    }
+  }
+  return undefined;
 }
 
 function explicitTypeArgumentTexts(
@@ -565,6 +629,24 @@ function typeOfAwaitExpression(
   return awaited;
 }
 
+function typeOfNonNullExpression(
+  context: ContextWithParserOptions,
+  node: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const expression = childNode(node, "expression");
+  if (!expression) {
+    return undefined;
+  }
+  const expressionType = checker.getTypeAtLocation(expression);
+  if (!expressionType) {
+    return undefined;
+  }
+  const nonNullable = checker.getNonNullableType(expressionType) ?? expressionType;
+  sessionForContext(context).session.rememberTypeLookupFromType(nonNullable, expressionType);
+  return nonNullable;
+}
+
 function typeOfComputedMemberExpression(
   context: ContextWithParserOptions,
   node: Node,
@@ -586,7 +668,10 @@ function typeOfComputedMemberExpression(
   const propertyType = propertyName
     ? typeOfNamedProperty(objectType, propertyName, checker)
     : undefined;
-  const indexedType = propertyType ?? typeOfIndexedMember(objectType, property, checker);
+  const indexedType =
+    propertyType ??
+    typeOfIndexSignatureMember(objectType, property, checker) ??
+    typeOfIndexedMember(objectType, property, checker);
   if (indexedType) {
     sessionForContext(context).session.rememberTypeLookupFromType(indexedType, objectType);
   }
@@ -606,6 +691,20 @@ function typeOfNamedProperty(
     : undefined;
 }
 
+function typeOfIndexSignatureMember(
+  objectType: CorsaType,
+  property: Node,
+  checker: CorsaTypeCheckerShape,
+): CorsaType | undefined {
+  const propertyTypes = indexedPropertyTypes(property, checker);
+  for (const info of checker.getIndexInfosOfType(objectType)) {
+    if (indexKeyMatches(property, propertyTypes, info.keyType, checker)) {
+      return info.valueType;
+    }
+  }
+  return undefined;
+}
+
 function typeOfIndexedMember(
   objectType: CorsaType,
   property: Node,
@@ -620,13 +719,85 @@ function typeOfIndexedMember(
   if (index !== undefined && tupleLikeTypeText(text)) {
     return typeArguments[index];
   }
-  if (index !== undefined && arrayLikeTypeText(text)) {
+  const propertyTypes = indexedPropertyTypes(property, checker);
+  if (propertyCanIndexArray(propertyTypes, checker) && tupleLikeTypeText(text)) {
+    return syntheticCompoundType("union", typeArguments, checker);
+  }
+  if (
+    (index !== undefined || propertyCanIndexArray(propertyTypes, checker)) &&
+    !tupleLikeTypeText(text) &&
+    arrayLikeTypeText(text)
+  ) {
     return typeArguments[0];
   }
-  if (computedPropertyName(property) !== undefined && recordLikeTypeText(text)) {
+  if (
+    recordLikeTypeText(text) &&
+    (computedPropertyName(property) !== undefined ||
+      indexKeyMatches(property, propertyTypes, typeArguments[0], checker))
+  ) {
     return typeArguments[1];
   }
   return undefined;
+}
+
+function indexedPropertyTypes(
+  property: Node,
+  checker: CorsaTypeCheckerShape,
+): readonly CorsaType[] {
+  const type = checker.getTypeAtLocation(property);
+  if (!type) {
+    return [];
+  }
+  const base = checker.getBaseTypeOfLiteralType(type);
+  return uniqueTypesById(base ? [type, base] : [type]);
+}
+
+function propertyCanIndexArray(
+  propertyTypes: readonly CorsaType[],
+  checker: CorsaTypeCheckerShape,
+): boolean {
+  return propertyTypes.some((type) =>
+    typeTexts(type, checker).some((text) => normalizeTypeText(text) === "number"),
+  );
+}
+
+function indexKeyMatches(
+  property: Node,
+  propertyTypes: readonly CorsaType[],
+  keyType: CorsaType,
+  checker: CorsaTypeCheckerShape,
+): boolean {
+  if (
+    propertyTypes.some((propertyType) => checker.isTypeAssignableTo(propertyType, keyType) === true)
+  ) {
+    return true;
+  }
+  const keyTexts = typeTexts(keyType, checker).map(normalizeTypeText);
+  if (numericLiteralValue(property) !== undefined) {
+    return keyTexts.includes("number") || keyTexts.includes("string");
+  }
+  if (computedPropertyName(property) !== undefined) {
+    return keyTexts.includes("string");
+  }
+  return false;
+}
+
+function typeTexts(type: CorsaType, checker: CorsaTypeCheckerShape): readonly string[] {
+  const values = new Set<string>();
+  for (const text of type.texts ?? []) {
+    if (text) {
+      values.add(text);
+    }
+  }
+  const rendered = safeTypeToString(checker, type);
+  if (rendered) {
+    values.add(rendered);
+  }
+  return [...values];
+}
+
+function normalizeTypeText(text: string): string {
+  return text.split(/\s+/).join("");
 }
 
 function typeOfConditionalExpression(

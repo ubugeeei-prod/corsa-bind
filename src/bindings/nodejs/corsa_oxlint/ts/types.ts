@@ -97,6 +97,12 @@ export interface CorsaSignature {
   readonly typeParameterDefaultTexts?: readonly string[];
 }
 
+export interface CorsaIndexInfo {
+  readonly keyType: CorsaType;
+  readonly valueType: CorsaType;
+  readonly isReadonly: boolean;
+}
+
 export interface CorsaCallSignatureFacts {
   readonly signature?: CorsaSignature;
   readonly expectedArgumentTypeTexts?: readonly (readonly string[])[];
@@ -159,6 +165,7 @@ export interface CorsaTypeCheckerShape {
   typeToString(type: CorsaType, enclosingDeclaration?: Node | CorsaNode, flags?: number): string;
   getBaseTypeOfLiteralType(type: CorsaType): CorsaType | undefined;
   getPropertiesOfType(type: CorsaType): readonly CorsaSymbol[];
+  getIndexInfosOfType(type: CorsaType): readonly CorsaIndexInfo[];
   getSignaturesOfType(type: CorsaType, kind: SignatureKind): readonly CorsaSignature[];
   getCallSignatureFacts(
     type: CorsaType,
@@ -168,6 +175,7 @@ export interface CorsaTypeCheckerShape {
   ): CorsaCallSignatureFacts;
   getReturnTypeOfSignature(signature: CorsaSignature): CorsaType | undefined;
   getTypePredicateOfSignature(signature: CorsaSignature): CorsaTypePredicate | undefined;
+  getNonNullableType(type: CorsaType): CorsaType | undefined;
   getBaseTypes(type: CorsaType): readonly CorsaType[];
   getImplementedTypes(node: Node | CorsaNode): readonly CorsaType[];
   getImplementedTypesOfType(type: CorsaType): readonly CorsaType[];

@@ -764,6 +764,172 @@ describe("corsa oxlint type locations", () => {
     });
   });
 
+  integrationCase(
+    "resolves expression result types for indexed, non-null, overload, and generic calls",
+    () => {
+      const seen: Record<string, { readonly checker?: string; readonly services?: string }> = {};
+      const expected: Record<string, string> = {
+        target: "Target",
+        "holder.plain": "Target",
+        "make()": "Target",
+        "targets[0]": "Target",
+        "grid[0][1]": "Target",
+        'record["x"]': "Plain",
+        'byType("s")': "Target",
+        "byType(1)": "Plain",
+        "byArity()": "Target",
+        "byArity(1)": "Plain",
+        'classRegistry["x"]': "Plain",
+        'stringRegistry["x"]': "Plain",
+        "numberRegistry[0]": "Plain",
+        "targets[index]": "Target",
+        "grid[index][0]": "Target",
+        "tuple[index]": "Plain | Target",
+        "record[key]": "Plain",
+        "maybe()!": "Target",
+        "targets[0]!": "Target",
+        'byLiteral("a")': "Target",
+        'byLiteral("b")': "Plain",
+        'byLiteralReversed("a")': "Target",
+        'byLiteralReversed("b")': "Plain",
+        "identity(target)": "Target",
+      };
+      const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+      const rule = createRule({
+        name: "expression-result-types",
+        meta: {
+          type: "problem",
+          docs: {
+            description: "exercise expression result type lookup parity",
+            requiresTypeChecking: true,
+          },
+          messages: {
+            unexpected: "unexpected",
+          },
+          schema: [],
+        },
+        defaultOptions: [],
+        create(context: any) {
+          const services = OxlintUtils.getParserServices(context);
+          const checker = services.program.getTypeChecker();
+          return {
+            CallExpression(node: any) {
+              if (node.callee?.type !== "Identifier" || node.callee.name !== "probe") {
+                return;
+              }
+              const argument = node.arguments?.[0];
+              if (!argument) {
+                return;
+              }
+              const source = context.sourceCode.getText(argument);
+              const checkerType = checker.getTypeAtLocation(argument);
+              const servicesType = services.getTypeAtLocation(argument);
+              seen[source] = {
+                checker: checkerType ? checker.typeToString(checkerType) : undefined,
+                services: servicesType ? checker.typeToString(servicesType) : undefined,
+              };
+            },
+          };
+        },
+      });
+
+      const tester = new RuleTester({ languageOptions: { sourceType: "module" } });
+      tester.run("expression-result-types", rule as any, {
+        valid: [
+          {
+            code: [
+              "class Target { marker = 1; }",
+              "class Plain { other = 2; }",
+              "class Holder { plain: Target = new Target(); }",
+              "class ClassRegistry { [key: string]: Plain; }",
+              "interface StringRegistry { [key: string]: Plain; }",
+              "interface NumberRegistry { [index: number]: Plain; }",
+              "function make(): Target { return new Target(); }",
+              "function maybe(): Target | undefined { return new Target(); }",
+              'function byLiteral(kind: "a"): Target;',
+              'function byLiteral(kind: "b"): Plain;',
+              "function byLiteral(kind: string): Target | Plain {",
+              '  return kind === "a" ? new Target() : new Plain();',
+              "}",
+              'function byLiteralReversed(kind: "b"): Plain;',
+              'function byLiteralReversed(kind: "a"): Target;',
+              "function byLiteralReversed(kind: string): Target | Plain {",
+              '  return kind === "a" ? new Target() : new Plain();',
+              "}",
+              "function byType(kind: string): Target;",
+              "function byType(kind: number): Plain;",
+              "function byType(kind: string | number): Target | Plain {",
+              '  return typeof kind === "string" ? new Target() : new Plain();',
+              "}",
+              "function byArity(): Target;",
+              "function byArity(count: number): Plain;",
+              "function byArity(count?: number): Target | Plain {",
+              "  return count === undefined ? new Target() : new Plain();",
+              "}",
+              "function identity<T>(value: T): T { return value; }",
+              "function probe(_value: unknown): void {}",
+              "const target = new Target();",
+              "const holder = new Holder();",
+              "const targets = [new Target()];",
+              "declare const grid: Target[][];",
+              "declare const tuple: readonly [Target, Plain];",
+              "declare const index: number;",
+              "declare const key: string;",
+              "declare const classRegistry: ClassRegistry;",
+              "declare const stringRegistry: StringRegistry;",
+              "declare const numberRegistry: NumberRegistry;",
+              "declare const record: Record<string, Plain>;",
+              "probe(target);",
+              "probe(holder.plain);",
+              "probe(make());",
+              "probe(targets[0]);",
+              "probe(grid[0][1]);",
+              'probe(record["x"]);',
+              'probe(byType("s"));',
+              "probe(byType(1));",
+              "probe(byArity());",
+              "probe(byArity(1));",
+              'probe(classRegistry["x"]);',
+              'probe(stringRegistry["x"]);',
+              "probe(numberRegistry[0]);",
+              "probe(targets[index]);",
+              "probe(grid[index][0]);",
+              "probe(tuple[index]);",
+              "probe(record[key]);",
+              "probe(maybe()!);",
+              "probe(targets[0]!);",
+              'probe(byLiteral("a"));',
+              'probe(byLiteral("b"));',
+              'probe(byLiteralReversed("a"));',
+              'probe(byLiteralReversed("b"));',
+              "probe(identity(target));",
+            ].join("\n"),
+            settings: {
+              corsaOxlint: {
+                parserOptions: {
+                  corsa: {
+                    executable: realCorsaBinary,
+                    mode: "jsonrpc",
+                  },
+                },
+              },
+            },
+          },
+        ],
+        invalid: [],
+      });
+
+      expect(seen).toEqual(
+        Object.fromEntries(
+          Object.entries(expected).map(([source, type]) => [
+            source,
+            { checker: type, services: type },
+          ]),
+        ),
+      );
+    },
+  );
+
   integrationCase("resolves modified property definition nodes to their declared types", () => {
     const seen: Record<string, { readonly node?: string; readonly key?: string }> = {};
     const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
