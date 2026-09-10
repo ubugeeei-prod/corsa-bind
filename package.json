@@ -12,15 +12,15 @@
   },
   "type": "module",
   "devDependencies": {
-    "@napi-rs/cli": "3.8.6",
-    "@types/node": "26.4.0",
-    "@typescript-eslint/utils": "8.68.0",
-    "@void/md": "0.10.12",
-    "eslint": "10.9.1",
+    "@napi-rs/cli": "3.9.0",
+    "@types/node": "26.4.1",
+    "@typescript-eslint/utils": "8.69.0",
+    "@void/md": "0.10.13",
+    "eslint": "10.10.0",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vite-plus": "^0.3.0",
-    "vitest": "4.1.11"
+    "vitest": "5.0.0"
   },
   "engines": {
     "node": ">=24"
