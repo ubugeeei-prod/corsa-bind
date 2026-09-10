@@ -2090,6 +2090,121 @@ describe("corsa oxlint type locations", () => {
   });
 
   /**
+   * Issue #491: rules need the same nullish-stripping route TypeScript exposes
+   * before they can ask for properties shared by non-nullish union members.
+   */
+  integrationCase("exposes non-nullable union types to type-aware rules", () => {
+    const seen: Record<
+      string,
+      {
+        readonly accessorType: string;
+        readonly nonNullableMembers: readonly string[];
+        readonly nonNullableProperties: readonly string[];
+        readonly originalProperties: readonly string[];
+      }
+    > = {};
+    const createRule = OxlintUtils.RuleCreator((name) => `https://example.com/rules/${name}`);
+    const rule = createRule({
+      name: "non-nullable-union-types",
+      meta: {
+        type: "problem",
+        docs: {
+          description: "exercise non-nullable type lookup",
+          requiresTypeChecking: true,
+        },
+        messages: { unexpected: "unexpected" },
+        schema: [],
+      },
+      defaultOptions: [],
+      create(context: any) {
+        const services = OxlintUtils.getParserServices(context);
+        const checker = services.program.getTypeChecker();
+        const names = (type: any): readonly string[] =>
+          checker.getPropertiesOfType(type).map((symbol: any) => symbol.name);
+        return {
+          CallExpression(node: any) {
+            if (node.callee.type !== "Identifier" || node.callee.name !== "probe") {
+              return;
+            }
+            const arg = node.arguments[0];
+            const type = checker.getTypeAtLocation(arg);
+            if (!type) {
+              return;
+            }
+            const nonNullable = checker.getNonNullableType(type);
+            if (!nonNullable) {
+              return;
+            }
+            seen[context.sourceCode.getText(arg)] = {
+              accessorType: typeof checker.getNonNullableType,
+              nonNullableMembers: checker
+                .getTypesOfType(nonNullable)
+                .map((member: any) => checker.typeToString(member)),
+              nonNullableProperties: names(nonNullable),
+              originalProperties: names(type),
+            };
+          },
+        };
+      },
+    });
+
+    const tester = new RuleTester();
+    tester.run("non-nullable-union-types", rule as any, {
+      valid: [
+        {
+          code: [
+            "class Alpha {",
+            "  shared = 1;",
+            "  onlyAlpha = 2;",
+            "}",
+            "class Beta {",
+            "  shared = 1;",
+            "  onlyBeta = 2;",
+            "}",
+            "function probe(_value: unknown): void {}",
+            "declare const required: Alpha | Beta;",
+            "declare const optional: Alpha | Beta | undefined;",
+            "declare const nullable: Alpha | Beta | null;",
+            "declare const voidish: Alpha | Beta | void;",
+            "probe(required);",
+            "probe(optional);",
+            "probe(nullable);",
+            "probe(voidish);",
+          ].join("\n"),
+          settings: {
+            corsaOxlint: {
+              parserOptions: {
+                corsa: {
+                  executable: realCorsaBinary,
+                  mode: "jsonrpc",
+                },
+              },
+            },
+          },
+        },
+      ],
+      invalid: [],
+    });
+
+    expect(seen.required?.accessorType).toBe("function");
+    expect(seen.required?.originalProperties).toEqual(["shared"]);
+    expect(seen.required?.nonNullableMembers).toEqual(expect.arrayContaining(["Alpha", "Beta"]));
+    expect(seen.required?.nonNullableProperties).toEqual(["shared"]);
+    expect(seen.optional?.originalProperties).toEqual([]);
+    expect(seen.optional?.nonNullableMembers).toEqual(expect.arrayContaining(["Alpha", "Beta"]));
+    expect(seen.optional?.nonNullableMembers).not.toContain("undefined");
+    expect(seen.optional?.nonNullableProperties).toEqual(["shared"]);
+    expect(seen.nullable?.originalProperties).toEqual([]);
+    expect(seen.nullable?.nonNullableMembers).toEqual(expect.arrayContaining(["Alpha", "Beta"]));
+    expect(seen.nullable?.nonNullableMembers).not.toContain("null");
+    expect(seen.nullable?.nonNullableProperties).toEqual(["shared"]);
+    expect(seen.voidish?.originalProperties).toEqual([]);
+    expect(seen.voidish?.nonNullableMembers).toEqual(expect.arrayContaining(["Alpha", "Beta"]));
+    expect(seen.voidish?.nonNullableMembers).not.toContain("void");
+    expect(seen.voidish?.nonNullableProperties).toEqual(["shared"]);
+  });
+
+  /**
    * Issue #441: on a stable TypeScript 7 runtime the construct signature of a
    * class with an explicit constructor came back with `parameterSymbols`
    * undefined, because that runtime's compact declaration handle carries no
