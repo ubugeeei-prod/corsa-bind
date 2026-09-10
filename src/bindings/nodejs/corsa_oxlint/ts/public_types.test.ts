@@ -200,7 +200,14 @@ describe("corsa oxlint public types", () => {
             acceptClass(node);
           },
           MethodDefinition(node) {
-            services.getTypeAtLocation(node.value);
+            const type = services.getTypeAtLocation(node.value);
+            const checker = services.program.getTypeChecker();
+            if (type) {
+              const nonNullable = checker.getNonNullableType(type);
+              if (nonNullable) {
+                checker.getPropertiesOfType(nonNullable);
+              }
+            }
           },
           NewExpression(node) {
             acceptNewExpression(node);

@@ -43,6 +43,7 @@ const TRAVERSAL_ACCESSORS = [
   // only falls through to the direct endpoint when that yields nothing.
   "getConstraintOfTypeParameter",
   "getPropertiesOfType",
+  "getNonNullableType",
   "getBaseTypes",
 ] as const;
 
