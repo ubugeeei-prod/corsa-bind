@@ -1,6 +1,6 @@
 [package]
 name = "corsa_node"
-version = "1.14.1"
+version = "1.14.2"
 edition = "2024"
 license.workspace = true
 publish = false
@@ -19,7 +19,7 @@ napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 unicode-ident.workspace = true
-corsa = { version = "1.14.1", path = "../../rust/corsa" }
+corsa = { version = "1.14.2", path = "../../rust/corsa" }
 
 [build-dependencies]
 napi-build = "2"
