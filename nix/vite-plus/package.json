@@ -2,7 +2,7 @@
   "name": "vite-plus-bootstrap",
   "private": true,
   "dependencies": {
-    "vite-plus": "0.3.1"
+    "vite-plus": "0.3.3"
   },
   "packageManager": "pnpm@11.1.2"
 }
