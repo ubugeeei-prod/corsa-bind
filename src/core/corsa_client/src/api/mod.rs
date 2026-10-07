@@ -18,6 +18,7 @@ mod client;
 mod config;
 mod content_mapper;
 mod diagnostics;
+mod dialect;
 mod document;
 mod driver;
 mod encoded;
@@ -44,6 +45,7 @@ mod semantics;
 mod snapshot;
 mod source_file;
 mod spawn_stdio;
+mod symbol_identity;
 mod type_probe;
 
 /// Filesystem callback traits and helper functions used by spawned workers.
@@ -76,6 +78,8 @@ pub use content_mapper::{
 pub use diagnostics::{
     FileDiagnosticsResponse, ProjectDiagnosticsResponse, SnapshotDiagnosticsResponse,
 };
+/// Wire dialect a connected runtime speaks.
+pub use dialect::ApiDialect;
 /// Document identifiers and byte/UTF-16 positions used by many endpoints.
 pub use document::{DocumentIdentifier, DocumentPosition};
 /// Binary payload wrappers and print options.

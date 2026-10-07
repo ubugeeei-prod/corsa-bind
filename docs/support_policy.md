@@ -83,6 +83,10 @@ receives fixes.
 - JavaScript runtimes for published packages: Node.js `22+`, Deno `2.0+`, Bun `1.2+`
 - Node.js tooling for repository scripts and examples: `24+`
 - Go: the version declared by `ref/corsa-upstream/tsc/go.mod`
+- TypeScript runtimes: the current `typescript` release on npm (7.0) and the
+  build pinned in `corsa_ref.lock.toml` (upstream `main`, 7.1 development). They
+  speak different [wire dialects](./corsa_upstream_dependency.md#wire-dialects),
+  and the client adapts both to one API
 - Operating systems: Linux, macOS, and Windows for the supported local surface
 - Published Node prebuilds: `darwin-arm64`, `darwin-x64`, `linux-arm64-gnu`, `linux-arm64-musl`, `linux-x64-gnu`, `linux-x64-musl`, `win32-arm64-msvc`, `win32-x64-msvc`
 
@@ -91,6 +95,8 @@ CI is expected to exercise:
 - workspace quality checks on Linux, macOS, and Windows
 - Deno and Bun runtime smoke coverage for the published JS wrapper on Linux, macOS, and Windows
 - real Corsa smoke coverage on Linux, macOS, and Windows
+- the wire-dialect contract against both the pinned build and the released
+  `typescript` runtime
 - C ABI, C++ header, and Go wrapper smoke coverage on Ubuntu
 - benchmark verification on Ubuntu
 

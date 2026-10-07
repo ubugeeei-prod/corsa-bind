@@ -3,8 +3,8 @@ version = 1
 [corsa_upstream]
 path = "ref/corsa-upstream"
 repository = "https://github.com/microsoft/TypeScript.git"
-commit = "e73c923cb58e9ea8cd75ba41c51b8d8886af3076"
-tree = "4a3b3b3f2c23d4d732d5ab0bcf9cf966643148ad"
-committer_date = "2026-09-03T21:38:15Z"
-author = "Matheus Mol"
-subject = "API: add getChildren and token getters to Node (#63893)"
+commit = "d61a7d235906e78be9b111de0ba060e28e67ecfa"
+tree = "07ca7fcb1496db76af26dcd919f66e8e222ad95d"
+committer_date = "2026-10-06T23:09:58Z"
+author = "Christopher Plieger"
+subject = "[api] Skip disk-layout import diagnostics for customized module resolutions (#64638)"

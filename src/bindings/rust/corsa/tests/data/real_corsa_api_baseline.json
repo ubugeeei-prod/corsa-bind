@@ -1,12 +1,12 @@
 {
   "currentDirectory": ".",
-  "fileCount": 108,
-  "firstFile": "ref/corsa-upstream/packages/typescript/src/api/diagnosticFormatter.ts",
-  "lastFile": "ref/corsa-upstream/packages/typescript/src/internal/utils.ts",
+  "fileCount": 124,
+  "firstFile": "ref/corsa-upstream/packages/typescript/src/api/compilerOptions.generated.ts",
+  "lastFile": "ref/corsa-upstream/packages/typescript/src/vscode/protocol.generated.ts",
   "projectCount": 1,
-  "rootFiles": 108,
+  "rootFiles": 124,
   "configFileName": "ref/corsa-upstream/packages/typescript/tsconfig.json",
-  "primaryFile": "ref/corsa-upstream/packages/typescript/src/api/diagnosticFormatter.ts",
+  "primaryFile": "ref/corsa-upstream/packages/typescript/src/api/compilerOptions.generated.ts",
   "stringTypeFlags": 32,
   "rendered": "string"
 }

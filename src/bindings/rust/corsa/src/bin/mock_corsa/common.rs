@@ -10,6 +10,20 @@ pub fn project(config_file_name: &str) -> Value {
     })
 }
 
+/// Reports whether a `readFile` callback answered with file contents.
+///
+/// TypeScript 7.0 wraps the text as `{ content }`; TypeScript 7.1 tags every
+/// answer as `{ kind, value }`. Reading the wrong shape is how a client that
+/// encodes for the other dialect shows up here.
+pub fn callback_served_content(response: &Value, tagged: bool) -> bool {
+    if tagged {
+        response.get("kind").and_then(Value::as_str) == Some("value")
+            && response.get("value").is_some_and(Value::is_string)
+    } else {
+        response.get("content").is_some()
+    }
+}
+
 pub fn snapshot_from_update_params(config_file_name: &str, params: &Value) -> Value {
     let changed_files = extract_changed_files(params);
     snapshot_with_changed_files(

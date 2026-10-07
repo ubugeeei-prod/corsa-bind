@@ -1,5 +1,5 @@
 use crate::{CorsaError, Result};
-use corsa_core::fast::CompactString;
+use corsa_core::fast::{CompactString, compact_format};
 use parking_lot::Mutex;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -20,20 +20,23 @@ use std::{
 };
 
 use super::{
+    callbacks::CallbackHost,
     capabilities::{CapabilitiesResponse, LspCapabilities, RuntimeCapabilities},
     changes::{UpdateSnapshotParams, UpdateSnapshotResponse},
     config::{ApiMode, ApiSpawnConfig},
+    dialect::{ApiDialect, DialectCell, InitializeWire},
     document::DocumentIdentifier,
     driver::ClientDriver,
     encoded::EncodedPayload,
     profiling::SharedProfiler,
     requests_core::{
-        ParseConfigFileRequest, SnapshotFileRequest, SnapshotProjectFileRequest,
-        UpdateSnapshotRequest,
+        DeriveSnapshotRequest, DerivedSnapshotChanges, ParseConfigFileRequest, SnapshotFileRequest,
+        SnapshotProjectFileRequest, UpdateSnapshotRequest,
     },
     responses::{ConfigResponse, InitializeResponse, ProjectResponse},
-    snapshot::{ManagedSnapshot, SnapshotReleaseQueue},
+    snapshot::{ManagedSnapshot, SnapshotLineage, SnapshotReleaseQueue},
     spawn_stdio::{spawn_jsonrpc_stdio, spawn_msgpack_stdio},
+    symbol_identity::{RequestScope, SymbolIdentity, UNKNOWN_SYMBOL_OWNER},
 };
 
 /// High-level client for the Corsa stdio API.
@@ -68,6 +71,9 @@ pub struct ApiClient {
     initialized: Arc<SingleflightCell<InitializeResponse>>,
     capabilities: Arc<SingleflightCell<CapabilitiesResponse>>,
     release_queue: Arc<SnapshotReleaseQueue>,
+    dialect: Arc<DialectCell>,
+    symbols: Arc<SymbolIdentity>,
+    lineage: Arc<SnapshotLineage>,
     runtime_capabilities: RuntimeCapabilities,
     allow_unstable_upstream_calls: bool,
     profiler: Option<SharedProfiler>,
@@ -226,12 +232,17 @@ impl ApiClient {
     /// production and benchmark workflows, sync msgpack is typically the
     /// preferred choice because it reduces per-request overhead.
     pub async fn spawn(config: ApiSpawnConfig) -> Result<Self> {
+        let dialect = Arc::new(DialectCell::default());
+        let callbacks = config
+            .filesystem
+            .clone()
+            .map(|filesystem| CallbackHost::new(filesystem, Arc::clone(&dialect)));
         let driver = match config.mode {
             ApiMode::AsyncJsonRpcStdio => {
                 let driver = spawn_jsonrpc_stdio(
                     &config.command,
                     config.run_external_code,
-                    config.filesystem.clone(),
+                    callbacks,
                     config.request_timeout,
                     config.shutdown_timeout,
                     config.outbound_capacity,
@@ -244,7 +255,7 @@ impl ApiClient {
                 let driver = spawn_msgpack_stdio(
                     &config.command,
                     config.run_external_code,
-                    config.filesystem.clone(),
+                    callbacks,
                     config.request_timeout,
                     config.outbound_capacity,
                     config.observer.clone(),
@@ -262,6 +273,9 @@ impl ApiClient {
             initialized: Arc::new(SingleflightCell::default()),
             capabilities: Arc::new(SingleflightCell::default()),
             release_queue,
+            dialect,
+            symbols: Arc::new(SymbolIdentity::default()),
+            lineage: Arc::new(SnapshotLineage::default()),
             runtime_capabilities: RuntimeCapabilities::from_spawn_config(&config),
             allow_unstable_upstream_calls: config.allow_unstable_upstream_calls,
             profiler: config.profiler.clone(),
@@ -280,17 +294,34 @@ impl ApiClient {
     /// Initializes the worker and returns the cached `initialize` response.
     ///
     /// Repeated calls are cheap: only the first call performs network I/O.
+    ///
+    /// The handshake is also where the client learns which wire dialect the
+    /// runtime speaks; see [`Self::dialect`].
     pub async fn initialize(&self) -> Result<Arc<InitializeResponse>> {
         self.initialized
             .get_or_try_init(
                 || async {
-                    self.driver
+                    let wire: InitializeWire = self
+                        .driver
                         .request_typed("initialize", &Value::Null, self.profiler.as_ref())
-                        .await
+                        .await?;
+                    let (response, dialect) = wire.into_response()?;
+                    self.dialect.set(dialect);
+                    Ok(response)
                 },
                 "api initialize",
             )
             .await
+    }
+
+    /// Returns the wire dialect the runtime speaks, once the handshake has run.
+    ///
+    /// `None` means [`Self::initialize`] has not completed yet. Typed endpoint
+    /// helpers behave the same on every dialect; this is for diagnostics and
+    /// for callers of [`Self::raw_json_request`], which sends params through in
+    /// the shape the connected runtime expects.
+    pub fn dialect(&self) -> Option<ApiDialect> {
+        self.dialect.get()
     }
 
     /// Returns the advertised runtime capabilities for this client.
@@ -362,6 +393,9 @@ impl ApiClient {
             self.require_overlay_update_capability().await?;
         }
         self.initialize().await?;
+        if self.dialect.is_derived_snapshots() {
+            return self.derive_snapshot(params).await;
+        }
         let open_projects = params.open_project.into_iter().collect();
         let request = UpdateSnapshotRequest {
             open_projects,
@@ -376,6 +410,43 @@ impl ApiClient {
             self.release_queue.clone(),
             response,
         ))
+    }
+
+    /// Applies `params` on a runtime whose snapshots derive from an explicit base.
+    ///
+    /// The first call creates a snapshot and every later call derives from the
+    /// one before it, so opened projects and reported file changes keep
+    /// accumulating exactly as they do on runtimes that track this server-side.
+    async fn derive_snapshot(&self, params: UpdateSnapshotParams) -> Result<ManagedSnapshot> {
+        if params.overlay_changes.is_some() {
+            return Err(CorsaError::Unsupported(
+                "updateSnapshot.overlayChanges has no equivalent on this runtime's snapshot API",
+            ));
+        }
+        let changes = DerivedSnapshotChanges {
+            open_projects: params.open_project.into_iter().collect(),
+            file_notifications: params.file_changes,
+            // A derived snapshot keeps serving the previous program for any
+            // project its file notifications dirtied unless asked to rebuild.
+            ensure_programs: true,
+        };
+        let advance = self.lineage.advance().await;
+        let response: UpdateSnapshotResponse = match advance.base() {
+            Some(base) => {
+                let request = DeriveSnapshotRequest {
+                    snapshot: base,
+                    changes: &changes,
+                };
+                self.request_after_initialize("updateSnapshot", &request)
+                    .await?
+            }
+            None => {
+                self.request_after_initialize("createSnapshot", &changes)
+                    .await?
+            }
+        };
+        let (lease, response) = advance.commit(self.release_queue.clone(), response);
+        Ok(ManagedSnapshot::from_lease(self.clone(), lease, response))
     }
 
     /// Resolves the default project for a file inside a snapshot.
@@ -440,6 +511,7 @@ impl ApiClient {
     /// This is idempotent. After closing, further requests return
     /// [`CorsaError::Closed`].
     pub async fn close(&self) -> Result<()> {
+        self.lineage.clear();
         self.release_queue
             .close(self.driver.shutdown_timeout())
             .await?;
@@ -457,6 +529,9 @@ impl ApiClient {
     /// experimenting with new upstream endpoints.
     pub async fn raw_json_request(&self, method: &str, params: Value) -> Result<Value> {
         self.initialize().await?;
+        if self.dialect.is_derived_snapshots() {
+            return self.request_derived(method, params).await;
+        }
         if self.profiler.is_some() {
             self.driver
                 .request_typed(method, &params, self.profiler.as_ref())
@@ -473,9 +548,12 @@ impl ApiClient {
     pub async fn raw_binary_request(
         &self,
         method: &str,
-        params: Value,
+        mut params: Value,
     ) -> Result<Option<EncodedPayload>> {
         self.initialize().await?;
+        if self.dialect.is_derived_snapshots() {
+            self.symbols.encode_params(&mut params)?;
+        }
         if self.profiler.is_some() {
             Ok(self
                 .driver
@@ -596,9 +674,89 @@ impl ApiClient {
         T: DeserializeOwned,
         P: Serialize + ?Sized,
     {
+        if self.dialect.is_derived_snapshots() {
+            let response = self
+                .request_derived(method, serde_json::to_value(params)?)
+                .await?;
+            return Ok(serde_json::from_value(response)?);
+        }
         self.driver
             .request_typed(method, params, self.profiler.as_ref())
             .await
+    }
+
+    /// Sends one request to a [`DerivedSnapshots`](ApiDialect::DerivedSnapshots)
+    /// runtime and returns the response in the client's stable shape.
+    ///
+    /// Symbol handles in `params` become wire references on the way out, and
+    /// every symbol the typed API exposes becomes a handle on the way back.
+    async fn request_derived(&self, method: &str, mut params: Value) -> Result<Value> {
+        if method == "release" {
+            self.refuse_release_of_pinned_snapshot(&params)?;
+        }
+        self.symbols.encode_params(&mut params)?;
+        let mut response: Value = self
+            .driver
+            .request_typed(method, &params, self.profiler.as_ref())
+            .await?;
+        if method == "batchRequests" {
+            self.adopt_batch_symbols(&params, &mut response);
+        } else {
+            self.adopt_symbols(method, &params, &mut response);
+        }
+        Ok(response)
+    }
+
+    /// Rejects a raw `release` that names the snapshot the next update builds on.
+    ///
+    /// A [`ManagedSnapshot`] shares that handle with the client, so the only
+    /// way a raw release can name it is after its `ManagedSnapshot` already
+    /// let go — a second release of the same handle. A runtime that tracks the
+    /// session itself answers that with "not found". Here the runtime would
+    /// honor it and take the base of every later update away, so the client
+    /// answers for it instead.
+    fn refuse_release_of_pinned_snapshot(&self, params: &Value) -> Result<()> {
+        let handle = match params.get("snapshot") {
+            Some(Value::String(handle)) => CompactString::from(handle.as_str()),
+            Some(Value::Number(handle)) => compact_format(format_args!("{handle}")),
+            _ => return Ok(()),
+        };
+        if !self.lineage.pins(&handle) {
+            return Ok(());
+        }
+        Err(CorsaError::Protocol(compact_format(format_args!(
+            "api: client error: snapshot {handle} not found"
+        ))))
+    }
+
+    fn adopt_symbols(&self, method: &str, params: &Value, response: &mut Value) {
+        let scope = RequestScope::from_params(params);
+        if method == "getWellKnownSymbols" {
+            SymbolIdentity::adopt_well_known_symbols(response, &scope);
+        }
+        self.symbols.adopt(response, &scope);
+    }
+
+    /// Adopts each sub-response of a batch under its own sub-request's scope.
+    fn adopt_batch_symbols(&self, params: &Value, response: &mut Value) {
+        let requests = params.get("requests").and_then(Value::as_array);
+        let Some(Value::Array(responses)) = response.get_mut("responses") else {
+            return;
+        };
+        for (index, item) in responses.iter_mut().enumerate() {
+            let (Some(request), Some(result)) = (
+                requests.and_then(|requests| requests.get(index)),
+                item.get_mut("result"),
+            ) else {
+                continue;
+            };
+            let method = request
+                .get("method")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let params = request.get("params").unwrap_or(&Value::Null);
+            self.adopt_symbols(method, params, result);
+        }
     }
 
     async fn request_optional_after_initialize<T, P>(
@@ -624,6 +782,15 @@ impl ApiClient {
     where
         P: Serialize + ?Sized,
     {
+        if self.dialect.is_derived_snapshots() {
+            let mut params = serde_json::to_value(params)?;
+            self.symbols.encode_params(&mut params)?;
+            return Ok(self
+                .driver
+                .request_binary_typed(method, &params, self.profiler.as_ref())
+                .await?
+                .map(EncodedPayload::new));
+        }
         Ok(self
             .driver
             .request_binary_typed(method, params, self.profiler.as_ref())
@@ -649,6 +816,9 @@ async fn connect_pipe_socket(path: PathBuf) -> Result<ApiClient> {
         initialized: Arc::new(SingleflightCell::default()),
         capabilities: Arc::new(SingleflightCell::default()),
         release_queue,
+        dialect: Arc::new(DialectCell::default()),
+        symbols: Arc::new(SymbolIdentity::default()),
+        lineage: Arc::new(SnapshotLineage::default()),
         runtime_capabilities: RuntimeCapabilities {
             kind: Some(CompactString::from("pipe")),
             executable: None,
@@ -703,7 +873,22 @@ fn is_unknown_api_method_message(message: &str) -> bool {
 }
 
 fn is_stale_handle_message(message: &str) -> bool {
-    message.contains("not found in snapshot registry") || message.contains("empty type handle")
+    const STALE_HANDLE_FRAGMENTS: &[&str] = &[
+        "not found in snapshot registry",
+        "empty type handle",
+        // TypeScript 7.1 keys type and signature registries by project, and
+        // resolves file-owned symbols through the program's source files.
+        "not found in project registry",
+        "no registry for project",
+        "not found in source file",
+        "is not part of the requested program",
+        "does not match the requested checker",
+        // Raised by this client for a symbol whose owner it never saw in full.
+        UNKNOWN_SYMBOL_OWNER,
+    ];
+    STALE_HANDLE_FRAGMENTS
+        .iter()
+        .any(|fragment| message.contains(fragment))
 }
 
 fn is_protocol_panic_message(message: &str) -> bool {

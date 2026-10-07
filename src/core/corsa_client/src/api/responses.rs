@@ -78,6 +78,10 @@ pub struct ProjectResponse {
     /// Opaque handle used by follow-up project-scoped requests.
     pub id: ProjectHandle,
     /// Absolute or workspace-relative `tsconfig` path that defines the project.
+    ///
+    /// Empty for a project that no config file defines, such as the inferred
+    /// project a loose file lands in.
+    #[serde(default)]
     pub config_file_name: String,
     /// Raw compiler options associated with this project.
     pub compiler_options: Value,
