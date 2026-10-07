@@ -1,5 +1,6 @@
 mod api_async;
 mod common;
+mod derived;
 mod jsonrpc;
 mod lsp;
 mod msgpack;

@@ -22,7 +22,7 @@ use std::{
 };
 
 use super::{
-    callbacks::{ApiFileSystem, invoke_callback},
+    callbacks::{CallbackHost, invoke_callback},
     msgpack_codec::{
         MSG_CALL, MSG_CALL_ERROR, MSG_CALL_RESPONSE, MSG_ERROR, MSG_REQUEST, MSG_RESPONSE,
         MsgpackTuple, read_tuple, write_tuple,
@@ -59,7 +59,7 @@ enum WorkerCommand {
 impl MsgpackWorker {
     pub(crate) fn spawn(
         mut child: Child,
-        filesystem: Option<Arc<dyn ApiFileSystem>>,
+        filesystem: Option<CallbackHost>,
         request_timeout: Option<Duration>,
         queue_capacity: usize,
         observer: Option<SharedObserver>,
@@ -93,7 +93,7 @@ impl MsgpackWorker {
                                         &mut reader,
                                         &mut writer,
                                         &method,
-                                        filesystem.as_deref(),
+                                        filesystem.as_ref(),
                                     )
                                 });
                             let _ = reply.send(result.map(|bytes| WorkerResponse { bytes }));
@@ -206,7 +206,7 @@ fn read_response(
     reader: &mut BufReader<std::process::ChildStdout>,
     writer: &mut BufWriter<std::process::ChildStdin>,
     method: &[u8],
-    filesystem: Option<&dyn ApiFileSystem>,
+    filesystem: Option<&CallbackHost>,
 ) -> Result<Vec<u8>> {
     loop {
         let message = read_tuple(reader)?;
@@ -233,7 +233,7 @@ fn read_response(
 /// Executes a filesystem callback received over the msgpack transport.
 fn handle_callback(
     writer: &mut BufWriter<std::process::ChildStdin>,
-    filesystem: Option<&dyn ApiFileSystem>,
+    filesystem: Option<&CallbackHost>,
     callback: MsgpackTuple,
 ) -> Result<()> {
     let method = std::str::from_utf8(&callback.method)

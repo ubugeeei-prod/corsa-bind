@@ -4,6 +4,8 @@ use phf::phf_map;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
+use super::dialect::DialectCell;
+
 const CALLBACK_PREFIX: &str = "--callbacks=";
 
 static CALLBACKS: phf::Map<&'static str, CallbackKind> = phf_map! {
@@ -160,16 +162,75 @@ pub fn callback_flag(fs: &dyn ApiFileSystem) -> Option<CompactString> {
     (!names.is_empty()).then(|| render_callback_flag(&names))
 }
 
+/// A filesystem implementation together with the connection it answers for.
+///
+/// Callback handlers are installed before the handshake that reveals the
+/// runtime's dialect, and the two dialects disagree on how an answer is
+/// encoded, so the handlers carry the connection's [`DialectCell`] and decide
+/// per call.
+#[derive(Clone)]
+pub(crate) struct CallbackHost {
+    filesystem: Arc<dyn ApiFileSystem>,
+    dialect: Arc<DialectCell>,
+}
+
+impl CallbackHost {
+    pub(crate) fn new(filesystem: Arc<dyn ApiFileSystem>, dialect: Arc<DialectCell>) -> Self {
+        Self {
+            filesystem,
+            dialect,
+        }
+    }
+
+    pub(crate) fn filesystem(&self) -> &dyn ApiFileSystem {
+        self.filesystem.as_ref()
+    }
+}
+
+/// What a filesystem callback decided, independent of how a dialect encodes it.
+enum CallbackAnswer {
+    /// Defer to the server's own filesystem.
+    UseServerFileSystem,
+    /// The path does not exist; only `readFile` can say so.
+    Missing,
+    Value(Value),
+}
+
+impl CallbackAnswer {
+    fn from_option(value: Option<Value>) -> Self {
+        value.map_or(Self::UseServerFileSystem, Self::Value)
+    }
+
+    /// TypeScript 7.0 encoding: `null` defers, and `readFile` wraps its text.
+    fn into_untagged(self, kind: CallbackKind) -> Value {
+        match (self, kind) {
+            (Self::UseServerFileSystem, _) => Value::Null,
+            (Self::Missing, _) => json!({ "content": Value::Null }),
+            (Self::Value(content), CallbackKind::ReadFile) => json!({ "content": content }),
+            (Self::Value(value), _) => value,
+        }
+    }
+
+    /// TypeScript 7.1 encoding: every answer names its kind.
+    fn into_tagged(self) -> Value {
+        match self {
+            Self::UseServerFileSystem => json!({ "kind": "useOS" }),
+            Self::Missing => json!({ "kind": "missing" }),
+            Self::Value(value) => json!({ "kind": "value", "value": value }),
+        }
+    }
+}
+
 /// Builds JSON-RPC handler functions for the enabled callbacks.
-pub fn jsonrpc_handlers(fs: Arc<dyn ApiFileSystem>) -> RpcHandlerMap {
-    callback_names(fs.as_ref())
+pub(crate) fn jsonrpc_handlers(host: CallbackHost) -> RpcHandlerMap {
+    callback_names(host.filesystem())
         .into_iter()
-        .map(|name| (CompactString::from(name), build_handler(fs.clone(), name)))
+        .map(|name| (CompactString::from(name), build_handler(host.clone(), name)))
         .collect()
 }
 
 pub(crate) fn invoke_callback(
-    fs: &dyn ApiFileSystem,
+    host: &CallbackHost,
     method: &str,
     payload: &Value,
 ) -> std::result::Result<Value, RpcResponseError> {
@@ -177,23 +238,21 @@ pub(crate) fn invoke_callback(
         return Err(unsupported_callback(method));
     };
     let path = callback_path(method, payload)?;
-    Ok(match kind {
+    let fs = host.filesystem();
+    let answer = match kind {
         CallbackKind::ReadFile => match fs.read_file(path) {
-            ReadFileResult::Fallback => Value::Null,
-            ReadFileResult::NotFound => json!({ "content": Value::Null }),
-            ReadFileResult::Content(content) => json!({ "content": content }),
+            ReadFileResult::Fallback => CallbackAnswer::UseServerFileSystem,
+            ReadFileResult::NotFound => CallbackAnswer::Missing,
+            ReadFileResult::Content(content) => CallbackAnswer::Value(Value::String(content.into())),
         },
-        CallbackKind::FileExists => fs
-            .file_exists(path)
-            .map(Value::Bool)
-            .unwrap_or(Value::Null),
-        CallbackKind::DirectoryExists => fs
-            .directory_exists(path)
-            .map(Value::Bool)
-            .unwrap_or(Value::Null),
-        CallbackKind::GetAccessibleEntries => fs
-            .get_accessible_entries(path)
-            .map(|entries| {
+        CallbackKind::FileExists => {
+            CallbackAnswer::from_option(fs.file_exists(path).map(Value::Bool))
+        }
+        CallbackKind::DirectoryExists => {
+            CallbackAnswer::from_option(fs.directory_exists(path).map(Value::Bool))
+        }
+        CallbackKind::GetAccessibleEntries => {
+            CallbackAnswer::from_option(fs.get_accessible_entries(path).map(|entries| {
                 json!({
                     "files": Value::Array(
                         entries.files.into_iter().map(|path| Value::String(path.into())).collect()
@@ -202,17 +261,21 @@ pub(crate) fn invoke_callback(
                         entries.directories.into_iter().map(|path| Value::String(path.into())).collect()
                     ),
                 })
-            })
-            .unwrap_or(Value::Null),
-        CallbackKind::Realpath => fs
-            .realpath(path)
-            .map(|path| Value::String(path.into()))
-            .unwrap_or(Value::Null),
+            }))
+        }
+        CallbackKind::Realpath => CallbackAnswer::from_option(
+            fs.realpath(path).map(|path| Value::String(path.into())),
+        ),
+    };
+    Ok(if host.dialect.is_derived_snapshots() {
+        answer.into_tagged()
+    } else {
+        answer.into_untagged(kind)
     })
 }
 
-fn build_handler(fs: Arc<dyn ApiFileSystem>, method: &'static str) -> RpcHandler {
-    Arc::new(move |payload| invoke_callback(fs.as_ref(), method, &payload))
+fn build_handler(host: CallbackHost, method: &'static str) -> RpcHandler {
+    Arc::new(move |payload| invoke_callback(&host, method, &payload))
 }
 
 fn render_callback_flag(names: &[&'static str]) -> CompactString {

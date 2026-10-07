@@ -15,4 +15,11 @@ export const testTasks = {
     command: "vp test run --config ./vite.config.ts",
     dependsOn: ["build_mock", "build_node_debug"],
   },
+  // Runs the wire-dialect contract against the TypeScript release installed
+  // from npm rather than the pinned upstream build, which can be a dialect
+  // ahead of what consumers run.
+  test_released_runtime: {
+    cache: false,
+    command: "node --strip-types ./scripts/test_released_runtime.ts",
+  },
 } satisfies RunTasks;

@@ -1,4 +1,4 @@
-use crate::{Result, common, jsonrpc};
+use crate::{Result, common, derived, jsonrpc};
 use base64::Engine as _;
 use corsa::jsonrpc::{RawMessage, RequestId, RpcResponseError};
 use serde_json::{Value, json};
@@ -25,6 +25,7 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = BufWriter::new(stdout.lock());
+    let mut derived = derived::from_env();
     loop {
         let Some(message) = jsonrpc::read_message(&mut reader)? else {
             return Ok(());
@@ -34,6 +35,25 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
         let id = message.id.clone();
         let params = message.params.unwrap_or(Value::Null);
         record_params(method.as_str(), &params);
+        if let Some(state) = derived.as_mut()
+            && let Some(outcome) = state.handle(method.as_str(), &params, &cwd)
+        {
+            if let Some(id) = id {
+                let message = match outcome {
+                    Ok(result) => RawMessage::response(id, result),
+                    Err(message) => RawMessage::error(
+                        id,
+                        RpcResponseError {
+                            code: -32603,
+                            message: message.into(),
+                            data: None,
+                        },
+                    ),
+                };
+                jsonrpc::write_message(&mut writer, &message)?;
+            }
+            continue;
+        }
         if let (Some(id), Some(error)) = (id.clone(), stale_handle_error(method.as_str(), &params))
         {
             jsonrpc::write_message(&mut writer, &RawMessage::error(id, error))?;
@@ -54,7 +74,13 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             })),
             "describeCapabilities" => Some(common::capabilities()),
             "batchRequests" => Some(batch_requests(params)),
-            "parseConfigFile" => Some(parse_config(&mut reader, &mut writer, &callbacks, params)?),
+            "parseConfigFile" => Some(parse_config(
+                &mut reader,
+                &mut writer,
+                &callbacks,
+                derived.is_some(),
+                params,
+            )?),
             "updateSnapshot" => Some(common::snapshot_from_update_params(
                 "/workspace/tsconfig.json",
                 &params,
@@ -400,6 +426,7 @@ fn parse_config<R: std::io::BufRead, W: std::io::Write>(
     reader: &mut R,
     writer: &mut W,
     callbacks: &[String],
+    tagged_callbacks: bool,
     params: Value,
 ) -> Result<Value> {
     let file = params
@@ -415,7 +442,7 @@ fn parse_config<R: std::io::BufRead, W: std::io::Write>(
             "readFile",
             Value::String(file.to_owned()),
         )?;
-        options["virtual"] = json!(response.get("content").is_some());
+        options["virtual"] = json!(common::callback_served_content(&response, tagged_callbacks));
     }
     Ok(json!({
         "options": options,
