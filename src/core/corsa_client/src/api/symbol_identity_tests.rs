@@ -105,6 +105,22 @@ fn a_mention_is_the_same_handle_as_the_symbol_itself() {
 }
 
 #[test]
+fn reference_missing_what_its_owner_kind_requires_is_handled_conservatively() {
+    let identity = SymbolIdentity::default();
+    let unowned = json!({ "reference": { "kind": 1, "id": 9 }, "name": "Promise" });
+    let fileless = json!({ "reference": { "kind": 0, "id": 6 }, "name": "answer" });
+
+    // A snapshot-owned reference falls back to the snapshot the request named,
+    // so it is still the handle a mention renders to.
+    let adopted = adopt(&identity, unowned, &scope(3));
+    assert_eq!(adopted["id"], json!(r#"{"id":9,"snapshot":3}"#));
+
+    // A file-owned reference without its file cannot be completed later, so it
+    // is not turned into a handle that would pretend otherwise.
+    assert_eq!(adopt(&identity, fileless.clone(), &scope(3)), fileless);
+}
+
+#[test]
 fn signature_parameters_become_handles_in_order() {
     let identity = SymbolIdentity::default();
 
