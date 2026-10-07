@@ -169,20 +169,20 @@ impl NodeHandle {
         let invalid = || CorsaError::InvalidHandle(self.0.clone());
         let pos = parts
             .next()
-            .ok_or_else(&invalid)?
+            .ok_or_else(invalid)?
             .parse::<u32>()
             .map_err(|_| invalid())?;
         let end = parts
             .next()
-            .ok_or_else(&invalid)?
+            .ok_or_else(invalid)?
             .parse::<u32>()
             .map_err(|_| invalid())?;
         let kind = parts
             .next()
-            .ok_or_else(&invalid)?
+            .ok_or_else(invalid)?
             .parse::<u16>()
             .map_err(|_| invalid())?;
-        let path = parts.next().ok_or_else(&invalid)?;
+        let path = parts.next().ok_or_else(invalid)?;
         if path.is_empty() || end < pos {
             return Err(invalid());
         }

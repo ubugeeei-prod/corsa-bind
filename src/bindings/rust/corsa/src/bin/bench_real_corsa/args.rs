@@ -169,10 +169,9 @@ fn default_datasets(root_dir: &std::path::Path) -> SmallVec<[PathBuf; 4]> {
         root_dir.join("ref/corsa-upstream"),
         root_dir.join("origin/corsa-upstream"),
     ] {
-        for path in [base.join("packages/typescript/tsconfig.json")] {
-            if path.exists() {
-                datasets.push(path);
-            }
+        let path = base.join("packages/typescript/tsconfig.json");
+        if path.exists() {
+            datasets.push(path);
         }
         if !datasets.is_empty() {
             break;
