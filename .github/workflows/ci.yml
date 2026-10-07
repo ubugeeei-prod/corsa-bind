@@ -445,7 +445,14 @@ jobs:
         run: vp run -w build_corsa
 
       - name: Real Corsa smoke tests
-        run: cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck
+        run: cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck --test real_corsa_dialect
+
+      # The pinned build tracks upstream main, so it speaks the newest wire
+      # dialect. The TypeScript release on npm is what consumers actually run
+      # and can be a dialect behind; without this step that adapter would only
+      # ever be exercised against the mock.
+      - name: Released TypeScript runtime dialect contract
+        run: vp run -w test_released_runtime
 
       # `vp run -w test` runs on a machine with no Corsa binary, so every
       # `integrationCase` in the TypeScript suites degrades to `it.skip` there.

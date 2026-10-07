@@ -10,6 +10,7 @@ use std::{
 const MSG_REQUEST: u8 = 1;
 const MSG_CALL_RESPONSE: u8 = 2;
 const MSG_RESPONSE: u8 = 4;
+const MSG_ERROR: u8 = 5;
 const MAX_BIN_BYTES: usize = 512 * 1024 * 1024;
 
 pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
@@ -17,6 +18,7 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = BufWriter::new(stdout.lock());
+    let mut derived = crate::derived::from_env();
     loop {
         let (kind, method, payload) = read_tuple(&mut reader)?;
         if kind != MSG_REQUEST {
@@ -26,6 +28,25 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
         record_method(method.as_str());
         let params: Value = serde_json::from_slice(&payload)?;
         record_params(method.as_str(), &params);
+        if let Some(state) = derived.as_mut()
+            && let Some(outcome) = state.handle(method.as_str(), &params, &cwd)
+        {
+            match outcome {
+                Ok(result) => write_tuple(
+                    &mut writer,
+                    MSG_RESPONSE,
+                    method.as_bytes(),
+                    &serde_json::to_vec(&result)?,
+                )?,
+                Err(message) => write_tuple(
+                    &mut writer,
+                    MSG_ERROR,
+                    method.as_bytes(),
+                    message.as_bytes(),
+                )?,
+            }
+            continue;
+        }
         let response = match method.as_str() {
             "initialize" => json!({
                 "useCaseSensitiveFileNames": true,
@@ -33,7 +54,13 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             }),
             "describeCapabilities" => crate::common::capabilities(),
             "batchRequests" => batch_requests(params),
-            "parseConfigFile" => parse_config(&mut reader, &mut writer, &callbacks, params)?,
+            "parseConfigFile" => parse_config(
+                &mut reader,
+                &mut writer,
+                &callbacks,
+                derived.is_some(),
+                params,
+            )?,
             "updateSnapshot" => {
                 crate::common::snapshot_from_update_params("/workspace/tsconfig.json", &params)
             }
@@ -207,6 +234,7 @@ fn parse_config<R: Read, W: Write>(
     reader: &mut R,
     writer: &mut W,
     callbacks: &[String],
+    tagged_callbacks: bool,
     params: Value,
 ) -> Result<Value> {
     let file = params
@@ -226,7 +254,9 @@ fn parse_config<R: Read, W: Write>(
         }
         let response: Value = serde_json::from_slice(&payload)?;
         return Ok(json!({
-            "options": { "virtual": response.get("content").is_some() },
+            "options": {
+                "virtual": crate::common::callback_served_content(&response, tagged_callbacks),
+            },
             "fileNames": ["/workspace/src/index.ts"],
             "raw": {
             "compilerOptions": { "strict": true },

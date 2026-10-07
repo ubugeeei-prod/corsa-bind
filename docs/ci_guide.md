@@ -89,6 +89,7 @@ The `real-Corsa-smoke` job answers:
 - is the pinned upstream checkout exactly where the lockfile says it should be?
 - can the pinned upstream Corsa binary actually build?
 - do real-server smoke and typecheck tests pass against that binary on every supported OS?
+- does the wire-dialect contract hold on both the pinned build and the TypeScript release on npm?
 
 The important commands are:
 
@@ -96,8 +97,16 @@ The important commands are:
 vp run -w sync_ref
 vp run -w verify_ref
 vp run -w build_corsa
-cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck
+cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck --test real_corsa_dialect
+vp run -w test_released_runtime
 ```
+
+The last command matters because the pin tracks upstream `main` and therefore
+speaks the newest [wire dialect](./corsa_upstream_dependency.md#wire-dialects),
+while the release consumers install can be a dialect behind.
+`test_released_runtime` points the same `real_corsa_dialect` contract at the
+`typescript` package in `node_modules`, so the adapter for that dialect is
+exercised against a real runtime too rather than only against the mock.
 
 ### Ubuntu-only baseline and benchmark guards
 
