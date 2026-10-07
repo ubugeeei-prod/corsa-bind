@@ -164,7 +164,7 @@ impl SymbolIdentity {
         if let Some(handle) = fields
             .get("reference")
             .and_then(full_reference)
-            .and_then(|reference| self.adopt_reference(reference))
+            .and_then(|reference| self.adopt_reference(reference, scope))
         {
             fields.remove("reference");
             fields.insert("id".into(), Value::String(handle));
@@ -194,19 +194,32 @@ impl SymbolIdentity {
     }
 
     /// Renders the handle for a full reference, remembering a file owner.
-    fn adopt_reference(&self, reference: &Map<String, Value>) -> Option<String> {
+    ///
+    /// A reference that does not carry what its owner kind requires is left
+    /// for the caller to see as upstream sent it.
+    fn adopt_reference(
+        &self,
+        reference: &Map<String, Value>,
+        scope: &RequestScope,
+    ) -> Option<String> {
         let id = reference.get("id").and_then(Value::as_u64)?;
-        match reference.get("file") {
-            Some(Value::Object(descriptor)) => {
+        match reference.get("kind").and_then(Value::as_u64)? {
+            OWNER_KIND_FILE => {
+                let descriptor = reference.get("file").and_then(Value::as_object)?;
                 let node_id = descriptor.get("nodeId").and_then(Value::as_str)?;
                 self.files.lock().remember(node_id, descriptor);
                 Some(file_handle(id, node_id))
             }
-            Some(_) => None,
-            None => Some(snapshot_handle(
+            // Falling back to the request keeps this the handle a mention of
+            // the same symbol renders to.
+            OWNER_KIND_SNAPSHOT => Some(snapshot_handle(
                 id,
-                reference.get("snapshot").and_then(Value::as_u64),
+                reference
+                    .get("snapshot")
+                    .and_then(Value::as_u64)
+                    .or(scope.snapshot),
             )),
+            _ => None,
         }
     }
 
