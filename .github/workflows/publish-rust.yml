@@ -42,25 +42,25 @@ jobs:
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@94697d49e77d0dd78b77deb85ad3de63a28b4b8a # v1.4.0
+        uses: useblacksmith/stickydisk@3f6be1451e3cad893b778bc93495c80452a5da26 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Mount corsa_ref target sticky disk
-        uses: useblacksmith/stickydisk@94697d49e77d0dd78b77deb85ad3de63a28b4b8a # v1.4.0
+        uses: useblacksmith/stickydisk@3f6be1451e3cad893b778bc93495c80452a5da26 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-corsa-ref-target-${{ hashFiles('Cargo.lock', 'corsa_ref.lock.toml') }}
           path: .cache/corsa-ref-target
 
       - name: Mount Go build sticky disk
-        uses: useblacksmith/stickydisk@94697d49e77d0dd78b77deb85ad3de63a28b4b8a # v1.4.0
+        uses: useblacksmith/stickydisk@3f6be1451e3cad893b778bc93495c80452a5da26 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-go-build-${{ hashFiles('corsa_ref.lock.toml') }}
           path: .cache/go-build
 
       - name: Mount pnpm store sticky disk
-        uses: useblacksmith/stickydisk@94697d49e77d0dd78b77deb85ad3de63a28b4b8a # v1.4.0
+        uses: useblacksmith/stickydisk@3f6be1451e3cad893b778bc93495c80452a5da26 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-release-gates-${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           path: ~/.local/share/pnpm/store
@@ -85,7 +85,7 @@ jobs:
           cache: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
+        uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
           node-version: "24"
           cache: ${{ runner.os != 'Linux' }}
@@ -137,13 +137,13 @@ jobs:
           persist-credentials: false
 
       - name: Mount Cargo target sticky disk
-        uses: useblacksmith/stickydisk@94697d49e77d0dd78b77deb85ad3de63a28b4b8a # v1.4.0
+        uses: useblacksmith/stickydisk@3f6be1451e3cad893b778bc93495c80452a5da26 # v1.4.0
         with:
           key: ${{ github.repository }}-publish-rust-publish-${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
           path: target
 
       - name: Setup Node.js for release scripts
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
 
@@ -159,7 +159,7 @@ jobs:
         run: node --strip-types ./scripts/generate_sbom.ts --target rust --out .cache/sbom/rust.spdx.json
 
       - name: Upload Rust SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rust-sbom
           path: .cache/sbom/rust.spdx.json
