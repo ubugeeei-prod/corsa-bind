@@ -19,6 +19,7 @@ pub mod fast;
 pub mod lint;
 mod observability;
 mod process;
+mod process_receipt;
 mod rpc;
 /// Shared pure helpers for type-text classification and unsafe-flow checks.
 pub mod utils;
@@ -27,4 +28,5 @@ pub use error::{CorsaError, Result};
 pub use observability::{CorsaEvent, CorsaObserver, SharedObserver, observe};
 /// Child-process guard and reusable command template for Corsa.
 pub use process::{AsyncChildGuard, CorsaCommand, terminate_child_process, wait_for_child_exit};
+pub use process_receipt::{ProcessObservation, ProcessObserver, ProcessReceipt};
 pub use rpc::RpcResponseError;
