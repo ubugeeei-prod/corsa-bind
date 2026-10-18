@@ -4,6 +4,7 @@ use super::{
     SymbolHandle, SymbolResponse, TypeHandle, TypeResponse, UpdateSnapshotParams,
 };
 use crate::{CorsaError, Result};
+use std::sync::Arc;
 
 /// Snapshot-backed project session for repeated checker queries.
 ///
@@ -12,7 +13,7 @@ use crate::{CorsaError, Result};
 /// callers can focus on document-level queries instead of transport plumbing.
 pub struct ProjectSession {
     client: ApiClient,
-    snapshot: ManagedSnapshot,
+    snapshot: Arc<ManagedSnapshot>,
     project: ProjectResponse,
     open_project: String,
     preferred_document: Option<DocumentIdentifier>,
@@ -47,7 +48,7 @@ impl ProjectSession {
 
         Ok(Self {
             client,
-            snapshot,
+            snapshot: Arc::new(snapshot),
             project,
             open_project,
             preferred_document,
@@ -78,7 +79,7 @@ impl ProjectSession {
             })
             .await?;
         let project = resolve_project(&snapshot, self.preferred_document.as_ref()).await?;
-        self.snapshot = snapshot;
+        self.snapshot = Arc::new(snapshot);
         self.project = project;
         self.open_project = open_project;
         Ok(())
@@ -117,6 +118,18 @@ impl ProjectSession {
     /// Returns the active snapshot handle.
     pub fn snapshot(&self) -> &ManagedSnapshot {
         &self.snapshot
+    }
+
+    /// Retains the current snapshot independently of this session.
+    ///
+    /// Refreshing or dropping the session leaves this snapshot alive until its
+    /// last lease is dropped. Pair the lease with the project metadata obtained
+    /// from the same session revision when issuing detached queries.
+    ///
+    /// Explicit snapshot release and closing the underlying client still
+    /// invalidate remote access; a lease does not override either operation.
+    pub fn snapshot_lease(&self) -> Arc<ManagedSnapshot> {
+        Arc::clone(&self.snapshot)
     }
 
     /// Returns the active project handle.
