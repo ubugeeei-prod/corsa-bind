@@ -190,3 +190,222 @@ fn project_session_supports_capabilities_diagnostics_and_editor_helpers() {
         session.close().await.unwrap();
     });
 }
+
+#[cfg(unix)]
+mod snapshot_leases {
+    use std::{
+        io::{BufReader, BufWriter},
+        os::unix::net::UnixListener,
+        sync::mpsc,
+        thread,
+        time::Duration,
+    };
+
+    use corsa::{
+        api::{ApiClient, ProjectSession},
+        jsonrpc::{RawMessage, RequestId, read_frame, write_frame},
+        runtime::block_on,
+    };
+    use serde_json::{Value, json};
+
+    const CONFIG: &str = "/workspace/tsconfig.json";
+    const FILE: &str = "/workspace/src/index.ts";
+    const OLD: &str = "n0000000000000001";
+    const NEW: &str = "n0000000000000002";
+    const BOUND: Duration = Duration::from_secs(10);
+
+    struct Server {
+        _directory: tempfile::TempDir,
+        client: ApiClient,
+        entered: mpsc::Receiver<()>,
+        worker: thread::JoinHandle<Vec<String>>,
+    }
+
+    impl Server {
+        fn start(hold_old_diagnostics: bool) -> Self {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("lease.sock");
+            let listener = UnixListener::bind(&path).unwrap();
+            let (entered, receiver) = mpsc::sync_channel(1);
+            let worker = thread::spawn(move || {
+                let (stream, _) = listener.accept().unwrap();
+                stream.set_read_timeout(Some(BOUND)).unwrap();
+                stream.set_write_timeout(Some(BOUND)).unwrap();
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut writer = BufWriter::new(stream);
+                let mut generation = 0;
+                let mut pending: Option<RequestId> = None;
+                let mut released = Vec::new();
+                loop {
+                    let body = match read_frame(&mut reader) {
+                        Ok(body) => body,
+                        Err(corsa::CorsaError::Closed(_)) => return released,
+                        Err(error) => panic!("lease server transport: {error}"),
+                    };
+                    let request: RawMessage = serde_json::from_slice(&body).unwrap();
+                    let id = request.id.unwrap();
+                    let params = request.params.unwrap_or(Value::Null);
+                    let result = match request.method.as_deref().unwrap() {
+                        "initialize" => json!({
+                            "useCaseSensitiveFileNames": true,
+                            "currentDirectory": "/workspace",
+                        }),
+                        "updateSnapshot" => {
+                            generation += 1;
+                            json!({
+                                "snapshot": if generation == 1 { OLD } else { NEW },
+                                "projects": [project()],
+                                "changes": {"changedProjects": {}, "removedProjects": []},
+                            })
+                        }
+                        "getDefaultProjectForFile" => project(),
+                        "getDiagnosticsForFile" => {
+                            assert_eq!(params["file"], FILE);
+                            assert_eq!(params["project"], "p./workspace/tsconfig.json");
+                            assert!(params["snapshot"] == OLD || params["snapshot"] == NEW);
+                            let old = params["snapshot"] == OLD;
+                            let handle = if old { OLD } else { NEW };
+                            assert!(!released.iter().any(|released| released == handle));
+                            if old && hold_old_diagnostics {
+                                assert!(pending.replace(id).is_none());
+                                entered.send(()).unwrap();
+                                continue;
+                            }
+                            json!({"file": FILE})
+                        }
+                        "release" => {
+                            let handle = params["handle"].as_str().unwrap().to_owned();
+                            assert!(handle != OLD || pending.is_none());
+                            assert!(!released.contains(&handle));
+                            released.push(handle);
+                            Value::Null
+                        }
+                        "test/finishOldDiagnostics" => {
+                            let old_id = pending.take().unwrap();
+                            respond(&mut writer, old_id, json!({"file": FILE}));
+                            Value::Null
+                        }
+                        method => panic!("unexpected lease test method: {method}"),
+                    };
+                    respond(&mut writer, id, result);
+                    if released.len() == if hold_old_diagnostics { 2 } else { 1 } {
+                        return released;
+                    }
+                }
+            });
+            let client = block_on(ApiClient::connect_pipe(path)).unwrap();
+            Self {
+                _directory: directory,
+                client,
+                entered: receiver,
+                worker,
+            }
+        }
+
+        fn open(&self) -> ProjectSession {
+            block_on(ProjectSession::open(
+                self.client.clone(),
+                CONFIG,
+                Some(FILE.into()),
+            ))
+            .unwrap()
+        }
+
+        fn finish(self) -> Vec<String> {
+            block_on(self.client.close()).unwrap();
+            self.worker.join().unwrap()
+        }
+    }
+
+    fn project() -> Value {
+        json!({
+            "id": "p./workspace/tsconfig.json",
+            "configFileName": CONFIG,
+            "compilerOptions": {"strict": true},
+            "rootFiles": [FILE],
+        })
+    }
+
+    fn respond(writer: &mut impl std::io::Write, id: RequestId, result: Value) {
+        let body = serde_json::to_vec(&RawMessage::response(id, result)).unwrap();
+        write_frame(writer, &body).unwrap();
+    }
+
+    #[test]
+    fn detached_snapshot_survives_session_drop_until_last_lease() {
+        let server = Server::start(false);
+        let session = server.open();
+        let project = session.project_handle();
+        let lease = session.snapshot_lease();
+        let duplicate = session.snapshot_lease();
+        assert!(std::sync::Arc::ptr_eq(&lease, &duplicate));
+        let weak = std::sync::Arc::downgrade(&lease);
+        drop(session);
+        drop(duplicate);
+        let diagnostics = block_on(server.client.get_diagnostics_for_file(
+            lease.handle.clone(),
+            project,
+            FILE,
+        ))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(diagnostics).unwrap(),
+            json!({"file": FILE})
+        );
+        assert_eq!(lease.handle.as_str(), OLD);
+        drop(lease);
+        assert!(weak.upgrade().is_none());
+        assert_eq!(server.finish(), vec![OLD]);
+    }
+
+    #[test]
+    fn refresh_and_foreground_query_finish_while_old_read_owns_its_lease() {
+        let server = Server::start(true);
+        let mut session = server.open();
+        let lease = session.snapshot_lease();
+        let weak = std::sync::Arc::downgrade(&lease);
+        let old_project = session.project_handle();
+        let client = server.client.clone();
+        let worker = thread::spawn(move || {
+            let diagnostics =
+                block_on(client.get_diagnostics_for_file(lease.handle.clone(), old_project, FILE))
+                    .unwrap();
+            assert_eq!(lease.handle.as_str(), OLD);
+            serde_json::to_value(diagnostics).unwrap()
+        });
+        server.entered.recv_timeout(BOUND).unwrap();
+        block_on(session.refresh(None)).unwrap();
+        assert_eq!(session.snapshot().handle.as_str(), NEW);
+        assert_eq!(weak.upgrade().unwrap().handle.as_str(), OLD);
+        let foreground = block_on(session.get_diagnostics_for_file(FILE)).unwrap();
+        assert_eq!(
+            serde_json::to_value(foreground).unwrap(),
+            json!({"file": FILE})
+        );
+        // Retiring the caller/session must not release an old worker's snapshot.
+        drop(session);
+        assert!(weak.upgrade().is_some());
+        block_on(
+            server
+                .client
+                .raw_json_request("test/finishOldDiagnostics", Value::Null),
+        )
+        .unwrap();
+        assert_eq!(worker.join().unwrap(), json!({"file": FILE}));
+        assert!(weak.upgrade().is_none());
+        let mut released = server.finish();
+        released.sort();
+        assert_eq!(released, vec![OLD, NEW]);
+    }
+
+    #[test]
+    fn explicit_release_is_not_extended_by_an_owned_lease() {
+        let server = Server::start(false);
+        let session = server.open();
+        let lease = session.snapshot_lease();
+        block_on(lease.release()).unwrap();
+        drop(session);
+        drop(lease);
+        assert_eq!(server.finish(), vec![OLD]);
+    }
+}
