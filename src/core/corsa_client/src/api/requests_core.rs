@@ -16,6 +16,27 @@ pub(crate) struct UpdateSnapshotRequest {
     pub overlay_changes: Option<OverlayChanges>,
 }
 
+/// Changes applied while creating or deriving a snapshot on the
+/// [`DerivedSnapshots`](super::ApiDialect::DerivedSnapshots) dialect.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DerivedSnapshotChanges {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_projects: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_notifications: Option<FileChanges>,
+    pub ensure_programs: bool,
+}
+
+/// `updateSnapshot` request on the
+/// [`DerivedSnapshots`](super::ApiDialect::DerivedSnapshots) dialect.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DeriveSnapshotRequest<'a> {
+    pub snapshot: &'a SnapshotHandle,
+    pub changes: &'a DerivedSnapshotChanges,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ParseConfigFileRequest {

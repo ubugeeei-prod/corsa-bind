@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use serde_json::Value;
 
 use super::{
@@ -72,17 +72,114 @@ impl ConfigResponse {
 }
 
 /// Project descriptor returned by endpoints that resolve a project handle.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectResponse {
     /// Opaque handle used by follow-up project-scoped requests.
     pub id: ProjectHandle,
     /// Absolute or workspace-relative `tsconfig` path that defines the project.
+    ///
+    /// Empty for a project that no config file defines, such as the inferred
+    /// project a loose file lands in.
+    #[serde(default)]
     pub config_file_name: String,
     /// Raw compiler options associated with this project.
     pub compiler_options: Value,
     /// Root files that seed the project graph.
     pub root_files: Vec<String>,
+}
+
+impl<'de> Deserialize<'de> for ProjectResponse {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ParsedCommandLineWire {
+            options: Value,
+            file_names: Vec<String>,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ProjectResponseWire {
+            id: ProjectHandle,
+            #[serde(default)]
+            config_file_name: Option<String>,
+            #[serde(default)]
+            compiler_options: Option<Value>,
+            #[serde(default)]
+            root_files: Option<Vec<String>>,
+            #[serde(default)]
+            parsed_command_line: Option<ParsedCommandLineWire>,
+        }
+
+        let wire = ProjectResponseWire::deserialize(deserializer)?;
+        let (parsed_options, parsed_files) = wire
+            .parsed_command_line
+            .map(|parsed| (Some(parsed.options), Some(parsed.file_names)))
+            .unwrap_or_default();
+        let compiler_options = wire.compiler_options.or(parsed_options).ok_or_else(|| {
+            D::Error::missing_field("compilerOptions or parsedCommandLine.options")
+        })?;
+        let root_files = wire
+            .root_files
+            .or(parsed_files)
+            .ok_or_else(|| D::Error::missing_field("rootFiles or parsedCommandLine.fileNames"))?;
+
+        Ok(Self {
+            id: wire.id,
+            config_file_name: wire.config_file_name.unwrap_or_default(),
+            compiler_options,
+            root_files,
+        })
+    }
+}
+
+#[cfg(test)]
+mod project_response_tests {
+    use super::ProjectResponse;
+    use serde_json::json;
+
+    #[test]
+    fn reads_typescript_7_0_flattened_project_metadata() {
+        let project: ProjectResponse = serde_json::from_value(json!({
+            "id": "app",
+            "configFileName": "/workspace/tsconfig.json",
+            "compilerOptions": { "strict": true },
+            "rootFiles": ["/workspace/app.ts"]
+        }))
+        .unwrap();
+
+        assert_eq!(project.compiler_options, json!({ "strict": true }));
+        assert_eq!(project.root_files, ["/workspace/app.ts"]);
+    }
+
+    #[test]
+    fn reads_typescript_7_1_nested_project_metadata() {
+        let project: ProjectResponse = serde_json::from_value(json!({
+            "id": "app",
+            "configFileName": "/workspace/tsconfig.json",
+            "parsedCommandLine": {
+                "options": { "strict": true },
+                "fileNames": ["/workspace/app.ts"]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(project.compiler_options, json!({ "strict": true }));
+        assert_eq!(project.root_files, ["/workspace/app.ts"]);
+        assert_eq!(
+            serde_json::to_value(project).unwrap(),
+            json!({
+                "id": "app",
+                "configFileName": "/workspace/tsconfig.json",
+                "compilerOptions": { "strict": true },
+                "rootFiles": ["/workspace/app.ts"]
+            })
+        );
+    }
 }
 
 /// Symbol metadata returned by Corsa.

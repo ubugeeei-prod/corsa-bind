@@ -3,8 +3,8 @@ version = 1
 [corsa_upstream]
 path = "ref/corsa-upstream"
 repository = "https://github.com/microsoft/TypeScript.git"
-commit = "e73c923cb58e9ea8cd75ba41c51b8d8886af3076"
-tree = "4a3b3b3f2c23d4d732d5ab0bcf9cf966643148ad"
-committer_date = "2026-09-03T21:38:15Z"
-author = "Matheus Mol"
-subject = "API: add getChildren and token getters to Node (#63893)"
+commit = "3e9236361fa97a9e6c685f4833ac457ae2d8c50a"
+tree = "2a322d5d8eefb3b2f295c5ed6398de7237f6249a"
+committer_date = "2026-10-19T20:38:54Z"
+author = "typescript-automation[bot]"
+subject = "Merge remote-tracking branch 'origin/main' into release-7.1"

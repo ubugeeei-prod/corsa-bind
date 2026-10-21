@@ -6,7 +6,7 @@
 //! the JSON-RPC and msgpack clients.
 
 use super::{
-    callbacks::{callback_flag, jsonrpc_handlers},
+    callbacks::{CallbackHost, callback_flag, jsonrpc_handlers},
     driver::ClientDriver,
 };
 use crate::{
@@ -23,7 +23,7 @@ use std::{
 pub(super) async fn spawn_jsonrpc_stdio(
     command: &CorsaCommand,
     run_external_code: bool,
-    filesystem: Option<Arc<dyn super::ApiFileSystem>>,
+    callbacks: Option<CallbackHost>,
     request_timeout: Option<std::time::Duration>,
     shutdown_timeout: std::time::Duration,
     outbound_capacity: usize,
@@ -32,14 +32,19 @@ pub(super) async fn spawn_jsonrpc_stdio(
     // JSON-RPC mode is used for callback-capable, async request/response
     // flows. The worker process is wrapped in `AsyncChildGuard` so shutdown
     // always reaps the child.
-    let args = stdio_args(command, run_external_code, filesystem.as_deref(), true);
+    let args = stdio_args(
+        command,
+        run_external_code,
+        callbacks.as_ref().map(CallbackHost::filesystem),
+        true,
+    );
     let mut child = command.spawn_async(args.iter().map(CompactString::as_str))?;
     let stdin = child.stdin.take().ok_or(CorsaError::Closed("api stdin"))?;
     let stdout = child
         .stdout
         .take()
         .ok_or(CorsaError::Closed("api stdout"))?;
-    let handlers = filesystem.map(jsonrpc_handlers).unwrap_or_default();
+    let handlers = callbacks.map(jsonrpc_handlers).unwrap_or_default();
     let rpc = JsonRpcConnection::try_spawn_with_options(
         BufReader::new(stdout),
         BufWriter::new(stdin),
@@ -59,18 +64,23 @@ pub(super) async fn spawn_jsonrpc_stdio(
 pub(super) fn spawn_msgpack_stdio(
     command: &CorsaCommand,
     run_external_code: bool,
-    filesystem: Option<Arc<dyn super::ApiFileSystem>>,
+    callbacks: Option<CallbackHost>,
     request_timeout: Option<std::time::Duration>,
     outbound_capacity: usize,
     observer: Option<corsa_core::SharedObserver>,
 ) -> Result<ClientDriver> {
     // Msgpack mode keeps a dedicated worker thread around the blocking stdio
     // pipes. This avoids async framing overhead on the hot path.
-    let args = stdio_args(command, run_external_code, filesystem.as_deref(), false);
+    let args = stdio_args(
+        command,
+        run_external_code,
+        callbacks.as_ref().map(CallbackHost::filesystem),
+        false,
+    );
     let child = command.spawn_blocking(args.iter().map(CompactString::as_str))?;
     let worker = super::msgpack_worker::MsgpackWorker::spawn(
         child,
-        filesystem,
+        callbacks,
         request_timeout,
         outbound_capacity,
         observer,
