@@ -35,16 +35,16 @@ If an existing local checkout still points at the retired
 ## Wire Dialects
 
 Upstream does not version its stdio API, and it reshapes it between TypeScript
-releases. The pin follows upstream `main`; consumers run whatever `typescript`
-they installed. Those are routinely different generations of the protocol, so
+releases. The pin follows the TypeScript 7.1 beta; consumers run whatever
+`typescript` they installed. Those can be different generations of the protocol, so
 the client detects which one it is talking to and adapts it, instead of making
 every consumer follow each move. This is the charter's rule 1 applied to the
 wire: `corsa-bind` pays the upgrade once.
 
-| Dialect             | Runtime                           | What defines it                                                                                                                                    |
-| ------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `session-snapshots` | TypeScript 7.0                    | one implicit snapshot lineage per connection; symbols are bare numeric ids                                                                         |
-| `derived-snapshots` | TypeScript 7.1 development builds | `createSnapshot` plus `updateSnapshot` from an explicit base; symbols are references owned by a source file or a snapshot; tagged callback results |
+| Dialect             | Runtime                                    | What defines it                                                                                                                                    |
+| ------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session-snapshots` | TypeScript 7.0                             | one implicit snapshot lineage per connection; symbols are bare numeric ids                                                                         |
+| `derived-snapshots` | TypeScript 7.1 beta and development builds | `createSnapshot` plus `updateSnapshot` from an explicit base; symbols are references owned by a source file or a snapshot; tagged callback results |
 
 The dialect is read off the `initialize` response, which is the first thing a
 runtime says: 7.0 reports `useCaseSensitiveFileNames`, 7.1 reports

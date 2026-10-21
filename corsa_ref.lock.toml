@@ -3,8 +3,8 @@ version = 1
 [corsa_upstream]
 path = "ref/corsa-upstream"
 repository = "https://github.com/microsoft/TypeScript.git"
-commit = "d61a7d235906e78be9b111de0ba060e28e67ecfa"
-tree = "07ca7fcb1496db76af26dcd919f66e8e222ad95d"
-committer_date = "2026-10-06T23:09:58Z"
-author = "Christopher Plieger"
-subject = "[api] Skip disk-layout import diagnostics for customized module resolutions (#64638)"
+commit = "3e9236361fa97a9e6c685f4833ac457ae2d8c50a"
+tree = "2a322d5d8eefb3b2f295c5ed6398de7237f6249a"
+committer_date = "2026-10-19T20:38:54Z"
+author = "typescript-automation[bot]"
+subject = "Merge remote-tracking branch 'origin/main' into release-7.1"

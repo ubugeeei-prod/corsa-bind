@@ -83,8 +83,8 @@ receives fixes.
 - JavaScript runtimes for published packages: Node.js `22+`, Deno `2.0+`, Bun `1.2+`
 - Node.js tooling for repository scripts and examples: `24+`
 - Go: the version declared by `ref/corsa-upstream/tsc/go.mod`
-- TypeScript runtimes: the current `typescript` release on npm (7.0) and the
-  build pinned in `corsa_ref.lock.toml` (upstream `main`, 7.1 development). They
+- TypeScript runtimes: the current stable `typescript` release on npm (7.0) and
+  the build pinned in `corsa_ref.lock.toml` (the 7.1 beta). They
   speak different [wire dialects](./corsa_upstream_dependency.md#wire-dialects),
   and the client adapts both to one API
 - Operating systems: Linux, macOS, and Windows for the supported local surface

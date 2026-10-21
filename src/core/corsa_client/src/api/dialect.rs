@@ -27,7 +27,7 @@ pub enum ApiDialect {
     /// changes directly and the server remembers which projects are open.
     /// Symbols are identified by a bare numeric id.
     SessionSnapshots,
-    /// TypeScript 7.1 development builds.
+    /// TypeScript 7.1 beta and development builds.
     ///
     /// Snapshots are independent values: `createSnapshot` starts one and
     /// `updateSnapshot` derives a new one from an explicit base. Symbols are

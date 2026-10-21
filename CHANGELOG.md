@@ -81,7 +81,7 @@ published versions.
 - the napi addon builds with the new `release-napi` cargo profile (`panic = "unwind"`): with the previous `panic = "abort"`, any Rust panic inside the addon aborted the host Node.js process instead of surfacing as a JS exception.
 - native rule metas declare a permissive options schema so Oxlint accepts configured rule options end to end.
 - the upstream pin moved to microsoft/TypeScript `0c8f63f745ec` (2026-08-25, past Content mappers round 2); the full real-Corsa validation matrix is green with no binding adaptations.
-- the upstream pin moved again, to microsoft/TypeScript `d61a7d235906` (2026-10-06): 175 commits that carry the snapshot API replacement, file-owned symbols, typed project ids and paths, the reworked callback filesystem, and the move to Go 1.27. The full real-Corsa validation matrix is green on it through the dialect adapter described above, and stays green on TypeScript 7.0.2.
+- the upstream pin moved again, to the TypeScript 7.1 beta at microsoft/TypeScript `3e9236361fa9` (2026-10-19): the snapshot API replacement, file-owned symbols, typed project ids and paths, the reworked callback filesystem, and the move to Go 1.27. The full real-Corsa validation matrix is green on it through the dialect adapter described above, and stays green on TypeScript 7.0.2.
 - per-query overheads trimmed across the stack: optional responses decode in one pass (no intermediate `serde_json::Value`), the per-type-query `statSync` is throttled, cross-file source reads are memoized, and signature parameter symbols resolve through one batched `getTypesOfSymbols` call.
 
 ### Removed

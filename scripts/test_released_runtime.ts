@@ -40,10 +40,10 @@ function releasedRuntime(): ReleasedRuntime {
  * Runs the wire-dialect contract tests against the released TypeScript runtime.
  *
  * Every other real-runtime check uses the build pinned in
- * `corsa_ref.lock.toml`, which tracks upstream `main` and therefore speaks the
- * newest dialect. The release on npm is what consumers run, and it can be a
- * dialect behind. Pointing the same contract at it is what keeps the adapter
- * for that dialect from rotting unobserved.
+ * `corsa_ref.lock.toml`, which tracks the TypeScript 7.1 beta and therefore
+ * speaks the newer dialect. The stable release on npm is what most consumers
+ * run, and it can be a dialect behind. Pointing the same contract at it is what
+ * keeps the adapter for that dialect from rotting unobserved.
  */
 function main(): void {
   const runtime = releasedRuntime();

@@ -447,10 +447,10 @@ jobs:
       - name: Real Corsa smoke tests
         run: cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck --test real_corsa_dialect
 
-      # The pinned build tracks upstream main, so it speaks the newest wire
-      # dialect. The TypeScript release on npm is what consumers actually run
-      # and can be a dialect behind; without this step that adapter would only
-      # ever be exercised against the mock.
+      # The pinned TypeScript 7.1 beta speaks the derived-snapshot dialect. The
+      # stable TypeScript release on npm is what most consumers currently run
+      # and speaks the earlier dialect; without this step that adapter would
+      # only ever be exercised against the mock.
       - name: Released TypeScript runtime dialect contract
         run: vp run -w test_released_runtime
 

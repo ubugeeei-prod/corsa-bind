@@ -101,9 +101,9 @@ cargo test -p corsa --no-default-features --test real_corsa_regression --test re
 vp run -w test_released_runtime
 ```
 
-The last command matters because the pin tracks upstream `main` and therefore
-speaks the newest [wire dialect](./corsa_upstream_dependency.md#wire-dialects),
-while the release consumers install can be a dialect behind.
+The last command matters because the pin tracks the TypeScript 7.1 beta and
+therefore speaks the newer [wire dialect](./corsa_upstream_dependency.md#wire-dialects),
+while the stable release most consumers install can be a dialect behind.
 `test_released_runtime` points the same `real_corsa_dialect` contract at the
 `typescript` package in `node_modules`, so the adapter for that dialect is
 exercised against a real runtime too rather than only against the mock.
