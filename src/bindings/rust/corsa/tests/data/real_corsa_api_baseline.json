@@ -1,10 +1,10 @@
 {
   "currentDirectory": ".",
-  "fileCount": 124,
+  "fileCount": 126,
   "firstFile": "ref/corsa-upstream/packages/typescript/src/api/compilerOptions.generated.ts",
   "lastFile": "ref/corsa-upstream/packages/typescript/src/vscode/protocol.generated.ts",
   "projectCount": 1,
-  "rootFiles": 124,
+  "rootFiles": 126,
   "configFileName": "ref/corsa-upstream/packages/typescript/tsconfig.json",
   "primaryFile": "ref/corsa-upstream/packages/typescript/src/api/compilerOptions.generated.ts",
   "stringTypeFlags": 32,
