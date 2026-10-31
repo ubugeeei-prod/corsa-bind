@@ -62,12 +62,12 @@ fn public_fork_keeps_old_leases_and_uses_one_handshake_in_both_transports() {
                 .unwrap();
             let lease = old.snapshot_lease();
             let project = old.project().clone();
-            let first_handle = serde_json::to_value(&lease.handle).unwrap();
+            let first_handle = json!(lease.handle.as_str().parse::<u64>().unwrap());
             let fork = old_client.fork_snapshot_lineage().unwrap();
             let mut current = ProjectSession::open(fork.clone(), CONFIG, None)
                 .await
                 .unwrap();
-            let fork_handle = serde_json::to_value(&current.snapshot().handle).unwrap();
+            let fork_handle = json!(current.snapshot().handle.as_str().parse::<u64>().unwrap());
             let clone = fork.clone();
             let updated = clone
                 .update_snapshot(UpdateSnapshotParams::default())
