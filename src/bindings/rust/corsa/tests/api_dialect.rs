@@ -157,6 +157,40 @@ fn updates_derive_from_the_previous_snapshot_and_report_every_project() {
 }
 
 #[test]
+fn draining_releases_keeps_the_derived_head_available_for_the_next_update() {
+    block_on(async {
+        for mode in MODES {
+            let runtime = Runtime::spawn(mode).await;
+            let client = &runtime.client;
+            let first = client.update_snapshot(open(APP)).await.unwrap();
+            drop(first);
+            let second = client.update_snapshot(changed(FILE)).await.unwrap();
+            drop(second);
+
+            client.drain_snapshot_releases().await.unwrap();
+            assert_eq!(released(&runtime), BTreeMap::from([(1, 1)]), "{mode:?}");
+
+            let third = client.update_snapshot(changed(FILE)).await.unwrap();
+            assert_eq!(runtime.sent("updateSnapshot")[1]["snapshot"], json!(2));
+            drop(third);
+            client.drain_snapshot_releases().await.unwrap();
+            assert_eq!(
+                released(&runtime),
+                BTreeMap::from([(1, 1), (2, 1)]),
+                "{mode:?}"
+            );
+
+            client.close().await.unwrap();
+            assert_eq!(
+                released(&runtime),
+                BTreeMap::from([(1, 1), (2, 1), (3, 1)]),
+                "{mode:?}"
+            );
+        }
+    });
+}
+
+#[test]
 fn releasing_the_latest_snapshot_leaves_it_in_place_as_the_next_base() {
     block_on(async {
         for mode in MODES {

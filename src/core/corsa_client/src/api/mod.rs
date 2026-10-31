@@ -43,6 +43,7 @@ mod requests_types;
 mod responses;
 mod semantics;
 mod snapshot;
+mod snapshot_release_drain;
 mod source_file;
 mod spawn_stdio;
 mod symbol_identity;

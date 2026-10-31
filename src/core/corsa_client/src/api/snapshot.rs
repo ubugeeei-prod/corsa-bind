@@ -19,6 +19,7 @@ use log::warn;
 use super::{
     ApiClient, DocumentIdentifier, ProjectResponse, SnapshotChanges, SnapshotHandle,
     changes::UpdateSnapshotResponse, driver::ClientDriver, profiling::SharedProfiler,
+    snapshot_release_drain::ReleaseProgress,
 };
 
 const DEFAULT_RELEASE_QUEUE_CAPACITY: usize = 256;
@@ -31,6 +32,7 @@ pub(crate) struct SnapshotReleaseQueue {
     sender: Mutex<Option<mpsc::SyncSender<SnapshotHandle>>>,
     done: Mutex<Option<mpsc::Receiver<WorkerResult>>>,
     worker: Mutex<Option<thread::JoinHandle<()>>>,
+    progress: Arc<ReleaseProgress>,
 }
 
 impl SnapshotReleaseQueue {
@@ -44,14 +46,22 @@ impl SnapshotReleaseQueue {
         let (done_tx, done_rx) = mpsc::sync_channel(1);
         let worker_driver = Arc::clone(&driver);
         let worker_profiler = profiler.clone();
+        let progress = Arc::new(ReleaseProgress::default());
+        let worker_progress = Arc::clone(&progress);
         let worker = thread::Builder::new()
             .name("corsa-snapshot-release".into())
             .spawn(move || {
                 let result = catch_unwind(AssertUnwindSafe(|| {
                     while let Ok(handle) = rx.recv() {
-                        release_handle(&worker_driver, worker_profiler.as_ref(), handle);
+                        let result =
+                            release_handle(&worker_driver, worker_profiler.as_ref(), handle);
+                        worker_progress.complete(result);
                     }
                 }));
+                if result.is_err() {
+                    worker_progress
+                        .fail(CorsaError::Join("snapshot release queue panicked".into()));
+                }
                 let _ = done_tx.send(result);
             })
             .map_err(CorsaError::Io)?;
@@ -61,15 +71,19 @@ impl SnapshotReleaseQueue {
             sender: Mutex::new(Some(tx)),
             done: Mutex::new(Some(done_rx)),
             worker: Mutex::new(Some(worker)),
+            progress,
         })
     }
 
     pub(crate) fn enqueue(&self, handle: SnapshotHandle) {
+        self.progress.submit();
         let Some(sender) = lock_unpoisoned(&self.sender).as_ref().cloned() else {
             warn!(
                 "failed to release corsa snapshot `{}`: release queue is closed",
                 handle.as_str()
             );
+            self.progress
+                .complete(Err(CorsaError::Closed("snapshot release queue")));
             return;
         };
         match sender.try_send(handle) {
@@ -79,15 +93,25 @@ impl SnapshotReleaseQueue {
                     "snapshot release queue is full; releasing `{}` on the current thread",
                     handle.as_str()
                 );
-                release_handle(&self.driver, self.profiler.as_ref(), handle);
+                self.progress.complete(release_handle(
+                    &self.driver,
+                    self.profiler.as_ref(),
+                    handle,
+                ));
             }
             Err(mpsc::TrySendError::Disconnected(handle)) => {
                 warn!(
                     "failed to release corsa snapshot `{}`: release queue is disconnected",
                     handle.as_str()
                 );
+                self.progress
+                    .complete(Err(CorsaError::Closed("snapshot release queue")));
             }
         }
+    }
+
+    pub(crate) async fn drain(&self, timeout: Duration) -> Result<()> {
+        self.progress.drain(timeout).await
     }
 
     pub(crate) async fn close(&self, timeout: Duration) -> Result<()> {
@@ -100,13 +124,15 @@ fn release_handle(
     driver: &ClientDriver,
     profiler: Option<&SharedProfiler>,
     handle: SnapshotHandle,
-) {
-    if let Err(error) = corsa_runtime::block_on(driver.release_handle(&handle, profiler)) {
+) -> Result<()> {
+    let result = corsa_runtime::block_on(driver.release_handle(&handle, profiler));
+    if let Err(error) = &result {
         warn!(
             "failed to release corsa snapshot `{}`: {error}",
             handle.as_str()
         );
     }
+    result
 }
 
 fn wait_for_worker(
@@ -136,7 +162,7 @@ fn wait_for_worker(
     }
 }
 
-fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(super) fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -442,3 +468,7 @@ impl ManagedSnapshot {
 #[cfg(test)]
 #[path = "snapshot_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "snapshot_release_tests.rs"]
+mod release_tests;
