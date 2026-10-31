@@ -6,6 +6,7 @@ use crate::{DiagnosticDirectivePolicy, EncodedPayload, SpanMapFidelity};
 
 const VIRTUAL_TEXT: &str = "export const count: number = 1;\n";
 const ORIGINAL_TEXT: &str = "<script>\nconst count = 1;\n</script>\n";
+const LEGACY_PROTOCOL_VERSION: u8 = 8;
 
 /// Builds payloads in the layout `tsc/internal/api/encoder/encoder.go` writes.
 #[derive(Default)]
@@ -50,7 +51,7 @@ impl SourceFileEncoder {
     }
 
     fn finish(self, extended: [u32; 19]) -> Vec<u8> {
-        self.finish_with_version(MAX_SOURCE_FILE_PROTOCOL_VERSION, extended)
+        self.finish_with_version(LEGACY_PROTOCOL_VERSION, extended)
     }
 
     fn finish_with_version(self, version: u8, extended: [u32; 19]) -> Vec<u8> {
@@ -255,7 +256,7 @@ fn mapped_source_file() -> Vec<u8> {
 fn plain_files_decode_without_content_mapper_state() {
     let decoded = EncodedSourceFile::decode(&plain_source_file()).expect("payload decodes");
 
-    assert_eq!(decoded.protocol_version, MAX_SOURCE_FILE_PROTOCOL_VERSION);
+    assert_eq!(decoded.protocol_version, LEGACY_PROTOCOL_VERSION);
     assert_eq!(decoded.file_name, "/workspace/src/index.ts");
     assert_eq!(decoded.text, VIRTUAL_TEXT);
     assert_eq!(decoded.original_text, VIRTUAL_TEXT);
@@ -419,16 +420,15 @@ fn unsupported_protocol_versions_are_reported_rather_than_guessed() {
     assert!(
         error
             .to_string()
-            .contains("unsupported encoded source file protocol version 9"),
+            .contains("unsupported encoded source file protocol version 10"),
         "unexpected error: {error}"
     );
 }
 
 #[test]
 fn every_supported_protocol_version_decodes() {
-    // Version 8 only changed how the node table records a `NodeList`'s
-    // trailing comma; the source-file layout this decoder reads is the same.
-    for version in MIN_SOURCE_FILE_PROTOCOL_VERSION..=MAX_SOURCE_FILE_PROTOCOL_VERSION {
+    // Versions 7/8 differ only in node-table data this reader skips.
+    for version in MIN_SOURCE_FILE_PROTOCOL_VERSION..=LEGACY_PROTOCOL_VERSION {
         let mut encoder = SourceFileEncoder::new(VIRTUAL_TEXT);
         let text = encoder.add_file_text();
         let file_name = encoder.add_string("/workspace/src/index.ts");

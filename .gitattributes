@@ -12,3 +12,8 @@ LICENSE text eol=lf
 *.jpeg binary
 *.gif binary
 *.ico binary
+
+# Exact recorded source-file payload and independent expected source bytes.
+src/core/corsa_client/src/api/source_file/fixtures/a183-protocol9.bin -text
+src/core/corsa_client/src/api/source_file/fixtures/a183-protocol9.expected.ts.txt -text
+src/core/corsa_client/src/api/source_file/fixtures/a183-protocol9.provenance.json -text
