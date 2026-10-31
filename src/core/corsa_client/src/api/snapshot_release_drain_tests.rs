@@ -1,24 +1,17 @@
 use std::{
     sync::Arc,
-    task::{Context, Wake, Waker},
+    task::{Context, Waker},
     time::Duration,
 };
 
 use super::{ReleaseProgress, lock_unpoisoned};
 use crate::CorsaError;
 
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
 #[test]
 fn cancelling_drains_disconnects_their_waiters_without_accumulating_registrations() {
     let progress = ReleaseProgress::default();
     progress.submit();
-    let waker = Waker::from(Arc::new(NoopWake));
-    let mut context = Context::from_waker(&waker);
+    let mut context = Context::from_waker(Waker::noop());
 
     for _ in 0..16 {
         let mut drain = Box::pin(progress.drain(Duration::from_secs(30)));

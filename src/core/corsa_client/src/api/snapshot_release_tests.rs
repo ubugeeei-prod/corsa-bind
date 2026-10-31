@@ -7,7 +7,7 @@ use std::{
     os::unix::net::UnixStream,
     pin::pin,
     sync::Arc,
-    task::{Context, Wake, Waker},
+    task::{Context, Waker},
     thread,
     time::Duration,
 };
@@ -71,15 +71,12 @@ fn queue(capacity: usize) -> (Arc<SnapshotReleaseQueue>, Arc<ClientDriver>, Peer
     (queue, driver, peer)
 }
 
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
 fn assert_pending(future: std::pin::Pin<&mut impl Future>) {
-    let waker = Waker::from(Arc::new(NoopWake));
-    assert!(future.poll(&mut Context::from_waker(&waker)).is_pending());
+    assert!(
+        future
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending()
+    );
 }
 
 fn finish(queue: &SnapshotReleaseQueue, driver: &ClientDriver, peer: &Peer) {
