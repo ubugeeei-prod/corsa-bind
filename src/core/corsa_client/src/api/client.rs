@@ -506,6 +506,24 @@ impl ApiClient {
             .transpose()
     }
 
+    /// Waits for background snapshot releases to receive their RPC responses.
+    ///
+    /// Drop or release the snapshots being retired before calling this method,
+    /// and stop new snapshot work while draining. Releases submitted during the
+    /// drain may also be included. A timeout or background release failure is
+    /// returned as an error; a failed release remains visible to later drains.
+    /// The deadline is the client's configured shutdown timeout.
+    ///
+    /// This leaves the release queue, API transport, and worker process open.
+    /// It does not release live snapshots or the current derived-snapshot
+    /// lineage. In particular, an editor sharing the worker can await old
+    /// releases here before starting its own LSP shutdown sequence.
+    pub async fn drain_snapshot_releases(&self) -> Result<()> {
+        self.release_queue
+            .drain(self.driver.shutdown_timeout())
+            .await
+    }
+
     /// Closes the client and shuts down the underlying worker process.
     ///
     /// This is idempotent. After closing, further requests return
