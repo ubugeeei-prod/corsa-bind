@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 lsp-types = "0.97"
-parking_lot = "0.12"
+parking_lot = "0.13"
 serde = { version = "1", features = ["derive"] }
 corsa_core = { version = "2.0.0-beta.4", path = "../corsa_core" }
 corsa_jsonrpc = { version = "2.0.0-beta.4", path = "../corsa_jsonrpc" }
