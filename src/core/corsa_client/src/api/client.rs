@@ -282,6 +282,36 @@ impl ApiClient {
         })
     }
 
+    /// Starts an independent derived-snapshot lineage on this connection.
+    ///
+    /// Unlike [`Clone`], the fork's first typed snapshot update sends
+    /// `createSnapshot`; later updates derive from the fork's own head. The
+    /// caller must first initialize this client and establish the desired
+    /// external state. No handshake, socket, worker or request is created here.
+    /// Legacy runtimes cannot offer this independent-lineage contract.
+    ///
+    /// The transport, release queue, handshake, capabilities, dialect, symbol
+    /// identity and profiler remain shared. Existing snapshots keep their
+    /// originating client and leases; dropping a superseded session releases
+    /// its snapshots only after their last owner is gone. A fork does not copy
+    /// its parent's open projects: open the desired project on the new lineage.
+    ///
+    /// As with a cloned client, [`close`](Self::close) is connection-wide and
+    /// closes the shared release queue and transport for every sibling. Drop a
+    /// superseded fork/session normally; never call `close` merely to retire
+    /// one lineage. Explicit snapshot releases still invalidate their handles.
+    pub fn fork_snapshot_lineage(&self) -> Result<Self> {
+        if self.dialect.get() != Some(ApiDialect::DerivedSnapshots) {
+            return Err(CorsaError::Unsupported(
+                "snapshot lineage forks require an initialized derived-snapshots runtime",
+            ));
+        }
+        Ok(Self {
+            lineage: Arc::new(SnapshotLineage::default()),
+            ..self.clone()
+        })
+    }
+
     #[cfg(unix)]
     /// Connects to an already-running JSON-RPC socket.
     ///
@@ -912,6 +942,9 @@ fn is_stale_handle_message(message: &str) -> bool {
 fn is_protocol_panic_message(message: &str) -> bool {
     message.contains("panic:")
 }
+
+#[cfg(all(test, unix))]
+mod fork_tests;
 
 #[cfg(test)]
 mod tests {
