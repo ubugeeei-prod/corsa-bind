@@ -22,22 +22,18 @@ use super::{
     SpanMapSegment, TextRange, encoded::EncodedPayload,
 };
 
+mod header;
+pub use header::SourceFileHeader;
+
 /// Oldest binary source-file protocol version this decoder understands.
 pub const MIN_SOURCE_FILE_PROTOCOL_VERSION: u8 = 7;
 
 /// Newest binary source-file protocol version this decoder understands.
 ///
-/// The source-file level layout is identical across the supported range;
-/// version 8 only changed how the node table records a `NodeList`'s trailing
-/// comma, which this decoder never reads.
-pub const MAX_SOURCE_FILE_PROTOCOL_VERSION: u8 = 8;
-
-const HEADER_SIZE: usize = 44;
-const HEADER_OFFSET_STRING_OFFSETS: usize = 24;
-const HEADER_OFFSET_STRING_DATA: usize = 28;
-const HEADER_OFFSET_EXTENDED_DATA: usize = 32;
-const HEADER_OFFSET_STRUCTURED_DATA: usize = 36;
-const HEADER_OFFSET_NODES: usize = 40;
+/// This is a source-file metadata capability, not an AST-decoder version.
+/// Versions 7/8 use a 44-byte header; version 9 adds ownership header fields.
+/// No node table or binder data is decoded here.
+pub const MAX_SOURCE_FILE_PROTOCOL_VERSION: u8 = 9;
 
 const NODE_SIZE: usize = 28;
 const NODE_OFFSET_DATA: usize = 20;
@@ -243,44 +239,15 @@ struct PayloadReader<'a> {
 
 impl<'a> PayloadReader<'a> {
     fn new(payload: &'a [u8]) -> Result<Self> {
-        if payload.len() < HEADER_SIZE {
-            return Err(protocol(format_args!(
-                "encoded source file is {} bytes, shorter than the {HEADER_SIZE} byte header",
-                payload.len()
-            )));
-        }
-        let protocol_version = payload[3];
-        if !(MIN_SOURCE_FILE_PROTOCOL_VERSION..=MAX_SOURCE_FILE_PROTOCOL_VERSION)
-            .contains(&protocol_version)
-        {
-            return Err(protocol(format_args!(
-                "unsupported encoded source file protocol version {protocol_version} (this build decodes versions {MIN_SOURCE_FILE_PROTOCOL_VERSION} through {MAX_SOURCE_FILE_PROTOCOL_VERSION})"
-            )));
-        }
-        let string_offsets = read_u32(payload, HEADER_OFFSET_STRING_OFFSETS)? as usize;
-        let string_data = read_u32(payload, HEADER_OFFSET_STRING_DATA)? as usize;
-        let extended_data = read_u32(payload, HEADER_OFFSET_EXTENDED_DATA)? as usize;
-        let structured_data = read_u32(payload, HEADER_OFFSET_STRUCTURED_DATA)? as usize;
-        let nodes = read_u32(payload, HEADER_OFFSET_NODES)? as usize;
-        if !(string_offsets <= string_data
-            && string_data <= extended_data
-            && extended_data <= structured_data
-            && structured_data <= nodes
-            && nodes <= payload.len())
-        {
-            return Err(protocol(format_args!(
-                "encoded source file sections are out of order or out of bounds: {string_offsets}, {string_data}, {extended_data}, {structured_data}, {nodes} in {} bytes",
-                payload.len()
-            )));
-        }
+        let header = header::read(payload)?;
         Ok(Self {
             payload,
-            protocol_version,
-            string_offsets,
-            string_data,
-            extended_data,
-            structured_data,
-            nodes,
+            protocol_version: header.metadata.protocol_version,
+            string_offsets: header.string_offsets,
+            string_data: header.string_data,
+            extended_data: header.extended_data,
+            structured_data: header.structured_data,
+            nodes: header.nodes,
         })
     }
 
@@ -289,6 +256,14 @@ impl<'a> PayloadReader<'a> {
     /// The encoder always writes the root node at index 1; index 0 is the nil
     /// sentinel every node record points at when it has no parent or sibling.
     fn source_file_extended_data(&self) -> Result<&'a [u8]> {
+        if self.protocol_version == 9 {
+            return header::source_data(
+                self.payload,
+                self.nodes,
+                self.extended_data,
+                self.structured_data,
+            );
+        }
         let root = self.nodes + NODE_SIZE;
         if root + NODE_SIZE > self.payload.len() {
             return Err(protocol(format_args!(
@@ -312,6 +287,16 @@ impl<'a> PayloadReader<'a> {
 
     /// Reads the string at `index` in the string offsets table.
     fn string(&self, index: u32) -> Result<String> {
+        if self.protocol_version == 9 {
+            let bytes = header::string_bytes(
+                self.payload,
+                self.string_offsets,
+                self.string_data,
+                self.extended_data,
+                index,
+            )?;
+            return Ok(String::from_utf8_lossy(bytes).into_owned());
+        }
         let entry = self.string_offsets + index as usize * 4;
         let start = self.string_data + read_u32(self.payload, entry)? as usize;
         let end = self.string_data + read_u32(self.payload, entry + 4)? as usize;
@@ -341,7 +326,15 @@ impl<'a> PayloadReader<'a> {
         if offset == NO_STRUCTURED_DATA {
             return Ok(None);
         }
-        let start = self.structured_data + offset as usize;
+        let start = if self.protocol_version == 9 {
+            self.structured_data
+                .checked_add(offset as usize)
+                .ok_or_else(|| {
+                    protocol(format_args!("version-9 structured-data offset overflow"))
+                })?
+        } else {
+            self.structured_data + offset as usize
+        };
         let bytes = self.payload.get(start..self.nodes).ok_or_else(|| {
             protocol(format_args!(
                 "structured data at {start} is outside the structured data section"
@@ -536,3 +529,6 @@ fn protocol(message: std::fmt::Arguments<'_>) -> CorsaError {
 #[cfg(test)]
 #[path = "source_file_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod v9_tests;

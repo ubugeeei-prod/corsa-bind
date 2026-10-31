@@ -108,7 +108,7 @@ pub use snapshot::ManagedSnapshot;
 /// Source-file fields decoded out of the binary `getSourceFile` payload.
 pub use source_file::{
     ContentMapping, EncodedSourceFile, MAX_SOURCE_FILE_PROTOCOL_VERSION,
-    MIN_SOURCE_FILE_PROTOCOL_VERSION,
+    MIN_SOURCE_FILE_PROTOCOL_VERSION, SourceFileHeader,
 };
 /// Higher-level checker probe models built from repeated project-session queries.
 pub use type_probe::{TypeProbe, TypeProbeOptions};

@@ -1,0 +1,28 @@
+{
+  "run": 41236399939,
+  "job": 124641000199,
+  "artifact": 13056251933,
+  "source": "c7fa78a11ef9f53b367f56e3d547f63a2231cc09",
+  "tree": "0492e67e72184440576994c77521ea6f3d53e80c",
+  "fixture": {
+    "bytes": 65112,
+    "sha256": "def383ce807e96e4d0057a974a1ede1b3028cdb1a8fcac1502346bf48df00359"
+  },
+  "expected": {
+    "bytes": 12305,
+    "sha256": "d6864c51da6b6be62077051920cf94a87710351e7fe77bdfe263d14b4a397071",
+    "fileName": "/home/runner/.cache/vize/canon/projects/e8b53fdbad2e59f3bedda4e3b287e8d37f5b00b35b85640b27edea48771d4d8c/src/Tiny.vue.ts",
+    "path": "/home/runner/.cache/vize/canon/projects/e8b53fdbad2e59f3bedda4e3b287e8d37f5b00b35b85640b27edea48771d4d8c/src/Tiny.vue.ts",
+    "source": "BatchTypeChecker VirtualFile buffer saved before ProjectSession::spawn/getSourceFile; not decoded from this fixture"
+  },
+  "native": {
+    "bytes": 24522912,
+    "path": "/home/runner/work/_temp/original27-current-provider/node_modules/@typescript/typescript-linux-x64/lib/tsc",
+    "sha256": "a183b1956edbe7e7d98f2249858eedf2d8a9790809cc4909db1276e202faaa70"
+  },
+  "referenceRevision": "3e9236361fa97a9e6c685f4833ac457ae2d8c50a",
+  "vcsModified": true,
+  "sourceOwnershipVerified": false,
+  "nativeAdmission": false,
+  "propsOriginUntested": true
+}
