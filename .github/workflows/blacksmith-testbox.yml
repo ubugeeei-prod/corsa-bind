@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Begin Blacksmith Testbox
-        uses: useblacksmith/begin-testbox@233448af4bfdc6fca509a7f0974411ac6d8a8043 # v2
+        uses: useblacksmith/begin-testbox@22ff2ea5697369864347140857d218e42815b33c # v2
         with:
           testbox_id: ${{ inputs.testbox_id }}
           api_url: ${{ inputs.api_url }}
@@ -82,4 +82,4 @@ jobs:
 
       - name: Run Blacksmith Testbox
         if: ${{ always() }}
-        uses: useblacksmith/run-testbox@5ca05834db1d3813554d1dd109e5f2087a8d7cbc # v2
+        uses: useblacksmith/run-testbox@9b976c32aa3bcbffb348889673585a5deee1b2f3 # v2
