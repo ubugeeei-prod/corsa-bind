@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@types/node": "26.6.5",
-    "@typescript-eslint/eslint-plugin": "8.72.0",
-    "@typescript-eslint/parser": "8.72.0",
-    "eslint": "10.13.0",
+    "@types/node": "26.6.6",
+    "@typescript-eslint/eslint-plugin": "8.72.1",
+    "@typescript-eslint/parser": "8.72.1",
+    "eslint": "10.14.0",
     "oxlint-tsgolint": "7.0.2005",
     "typescript": "7.0.2"
   }
