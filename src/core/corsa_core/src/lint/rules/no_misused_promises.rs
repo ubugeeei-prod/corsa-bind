@@ -1,5 +1,9 @@
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
-use crate::lint::helpers::{child_list, is_promise_like_node, strip_chain_expression};
+use crate::lint::TextRange;
+use crate::lint::helpers::{
+    child_list, is_promise_like_node, member_object, strip_chain_expression,
+};
+use crate::lint::promise_facts::{promise_fact, static_member_name};
 use crate::utils::is_promise_like_type_texts;
 
 /// Type-aware rule that disallows Promises in positions not designed to handle
@@ -105,44 +109,36 @@ impl RustLintRule for NoMisusedPromisesRule {
             "IfStatement" | "WhileStatement" | "DoWhileStatement"
                 if opts.checks_conditionals => {
                     if let Some(test) = node.child("test") {
-                        check_conditional(ctx, test, true);
+                        check_conditional(ctx, test, true, opts.flag_unions);
                     }
                 }
             "ForStatement"
                 if opts.checks_conditionals => {
                     if let Some(test) = node.child("test") {
-                        check_conditional(ctx, test, true);
+                        check_conditional(ctx, test, true, opts.flag_unions);
                     }
                 }
             "ConditionalExpression"
                 if opts.checks_conditionals => {
                     if let Some(test) = node.child("test") {
-                        check_conditional(ctx, test, true);
+                        check_conditional(ctx, test, true, opts.flag_unions);
                     }
                 }
             "UnaryExpression"
                 if opts.checks_conditionals && node.field_str("operator") == Some("!") => {
                     if let Some(argument) = node.child("argument") {
-                        check_conditional(ctx, argument, true);
+                        check_conditional(ctx, argument, true, opts.flag_unions);
                     }
                 }
-            "LogicalExpression" => {
-                // PARITY GAP (blocked on a host fact): Go registers the
-                // BinaryExpression listener which calls `checkConditional(node,
-                // false)` on EVERY top-level logical expression, e.g. the standalone
-                // statement `Promise.resolve() || false;` reports `conditional` on
-                // the left operand. The test-position entry points above already
-                // recurse through nested logical sub-expressions within a single
-                // `check` call, so handling a logical node here unconditionally would
-                // DOUBLE-REPORT for `if (Promise.resolve() || false)` — Go avoids that
-                // with its per-Run `checkedNodes` dedup map, which has no analogue in
-                // the per-node fresh-context corsa model. To honor the standalone
-                // case without double-reporting we need a host fact (e.g.
-                // `__inTestPosition`) on the LogicalExpression marking whether it is
-                // reached as a descendant of a test-position node so this listener can
-                // skip those. Until that fact exists, this listener is a no-op and the
-                // standalone-logical conditional case is not reported.
-                let _ = opts.checks_conditionals;
+            "LogicalExpression" if opts.checks_conditionals => {
+                // Upstream checks every logical expression with
+                // `isTestExpr = false` and dedups nodes it already reached from
+                // a test position or an enclosing logical operand. Without a
+                // shared dedup set, skip logicals another check reaches first;
+                // that needs the host's `__ancestorChain` with `childKey`.
+                if logical_reached_elsewhere(node) == Some(false) {
+                    check_conditional(ctx, node, false, opts.flag_unions);
+                }
             }
             "MemberExpression"
                 // Array predicate methods: `arr.filter(async ...)` etc.
@@ -151,10 +147,14 @@ impl RustLintRule for NoMisusedPromisesRule {
                 }
 
             // ---- checksVoidReturn ----
-            "CallExpression" | "NewExpression"
-                if opts.checks_void_return.arguments => {
+            "CallExpression" | "NewExpression" => {
+                if opts.checks_conditionals {
+                    check_array_predicate_call(ctx, node);
+                }
+                if opts.checks_void_return.arguments {
                     check_arguments(ctx, node);
                 }
+            }
             "JSXAttribute"
                 if opts.checks_void_return.attributes => {
                     check_jsx_attribute(ctx, node);
@@ -230,9 +230,18 @@ impl ChecksVoidReturn {
     };
 }
 
+/// `checksConditionals.flagUnions`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FlagUnions {
+    None,
+    All,
+    Strict,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Options {
     checks_conditionals: bool,
+    flag_unions: FlagUnions,
     checks_spreads: bool,
     checks_void_return: ChecksVoidReturn,
 }
@@ -250,6 +259,7 @@ impl Options {
 
         let mut opts = Self {
             checks_conditionals: true,
+            flag_unions: FlagUnions::None,
             checks_spreads: true,
             checks_void_return: ChecksVoidReturn::ALL,
         };
@@ -258,8 +268,18 @@ impl Options {
             return opts;
         };
 
-        if let Some(value) = obj.get("checksConditionals").and_then(|v| v.as_bool()) {
-            opts.checks_conditionals = value;
+        match obj.get("checksConditionals") {
+            Some(value) if value.is_boolean() => {
+                opts.checks_conditionals = value.as_bool() == Some(true);
+            }
+            Some(value) if value.is_object() => {
+                opts.flag_unions = match value.get("flagUnions").and_then(|v| v.as_str()) {
+                    Some("all") => FlagUnions::All,
+                    Some("strict") => FlagUnions::Strict,
+                    _ => FlagUnions::None,
+                };
+            }
+            _ => {}
         }
         if let Some(value) = obj.get("checksSpreads").and_then(|v| v.as_bool()) {
             opts.checks_spreads = value;
@@ -300,6 +320,9 @@ impl Options {
 /// alternates. The host renders a node's type texts; a value is always-thenable
 /// when every top-level union part is promise-like.
 fn is_always_thenable(node: &LintNode) -> bool {
+    if let Some(always) = promise_fact(node, "alwaysThenable") {
+        return always;
+    }
     // `is_promise_like_node` already accounts for a `then` property and for
     // promise-like type texts (including union members). For the conditional
     // check we additionally require that no alternate is non-thenable: if a
@@ -317,6 +340,9 @@ fn is_always_thenable(node: &LintNode) -> bool {
 /// return marks it thenable.
 fn returns_thenable(node: &LintNode) -> bool {
     let current = strip_chain_expression(node);
+    if let Some(returns) = promise_fact(current, "returnsThenable") {
+        return returns;
+    }
 
     // async function literal
     if is_function_like(current) {
@@ -374,7 +400,12 @@ fn is_function_like(node: &LintNode) -> bool {
 // checksConditionals
 // ---------------------------------------------------------------------------
 
-fn check_conditional(ctx: &mut RuleContext<'_>, node: &LintNode, is_test_expr: bool) {
+fn check_conditional(
+    ctx: &mut RuleContext<'_>,
+    node: &LintNode,
+    is_test_expr: bool,
+    flag_unions: FlagUnions,
+) {
     let node = strip_chain_expression(node);
 
     // ignore assignment expressions
@@ -387,19 +418,30 @@ fn check_conditional(ctx: &mut RuleContext<'_>, node: &LintNode, is_test_expr: b
         // ignore the left operand for `??` outside a test-expression context
         if operator != Some("??") || is_test_expr {
             if let Some(left) = node.child("left") {
-                check_conditional(ctx, left, is_test_expr);
+                check_conditional(ctx, left, is_test_expr, flag_unions);
             }
         }
         // ignore the right operand when not in a test-expression context
         if is_test_expr {
             if let Some(right) = node.child("right") {
-                check_conditional(ctx, right, is_test_expr);
+                check_conditional(ctx, right, is_test_expr, flag_unions);
             }
         }
         return;
     }
 
     if is_always_thenable(node) {
+        ctx.report("conditional", node.range);
+        return;
+    }
+    // `checksConditionals.flagUnions`: `all` reports `Promise | ...`, and
+    // `strict` reports `Promise<T> | T` but not `Promise<T> | NotT`.
+    let union = match flag_unions {
+        FlagUnions::None => false,
+        FlagUnions::All => promise_fact(node, "thenable") == Some(true),
+        FlagUnions::Strict => promise_fact(node, "matchingPromiseUnion") == Some(true),
+    };
+    if union {
         ctx.report("conditional", node.range);
     }
 }
@@ -431,7 +473,9 @@ fn check_spread(ctx: &mut RuleContext<'_>, node: &LintNode) {
     // spread) and `KindSpreadAssignment` (object spread) and applies no context
     // filter: it reports whenever the spread expression is thenable. We mirror
     // that here — any spread of a thenable is flagged regardless of position.
-    if is_promise_like_node(argument) {
+    let thenable =
+        promise_fact(argument, "thenable").unwrap_or_else(|| is_promise_like_node(argument));
+    if thenable {
         ctx.report("spread", argument.range);
     }
 }
@@ -442,7 +486,38 @@ fn check_spread(ctx: &mut RuleContext<'_>, node: &LintNode) {
 
 fn check_arguments(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let arguments = child_list(node, "arguments");
-    if arguments.is_empty() {
+    if arguments.is_empty() || is_promise_finally_call(node) {
+        return;
+    }
+    // Checker facts: the argument positions `voidFunctionArguments` keeps.
+    // Each argument's contextual type (the instantiated parameter) can add a
+    // void-returning or a thenable-returning expectation of its own.
+    if let Some(void_indices) = node
+        .fields
+        .get("__voidArgumentIndices")
+        .and_then(|value| value.as_array())
+    {
+        let listed = |key: &str, index: usize| {
+            node.fields
+                .get(key)
+                .and_then(|value| value.as_array())
+                .is_some_and(|indices| {
+                    indices
+                        .iter()
+                        .any(|value| value.as_u64() == Some(index as u64))
+                })
+        };
+        for (index, argument) in arguments.iter().enumerate() {
+            let void = void_indices
+                .iter()
+                .any(|value| value.as_u64() == Some(index as u64))
+                || argument.field_bool("__contextualVoidFunction") == Some(true);
+            let thenable = listed("__thenableArgumentIndices", index)
+                || argument.field_bool("__contextualThenableFunction") == Some(true);
+            if void && !thenable && returns_thenable(argument) {
+                ctx.report("voidReturnArgument", argument.range);
+            }
+        }
         return;
     }
     // The host renders, for each argument index, the expected parameter type's
@@ -503,6 +578,23 @@ fn check_class_like_or_interface(ctx: &mut RuleContext<'_>, node: &LintNode) {
         .or_else(|| node.child_list("body"))
         .unwrap_or(&[]);
     for member in members {
+        // Checker facts: one report per heritage type that expects `void`.
+        if let Some(names) = member
+            .fields
+            .get("__voidReturnHeritageTypeNames")
+            .and_then(|value| value.as_array())
+        {
+            for name in names.iter().filter_map(|name| name.as_str()) {
+                ctx.report_with_message(
+                    "voidReturnInheritedMethod",
+                    format!(
+                        "Promise-returning method provided where a void return was expected by extended/implemented type '{name}'."
+                    ),
+                    member.range,
+                );
+            }
+            continue;
+        }
         if member.field_bool("__voidReturnInheritedMethod") == Some(true) {
             ctx.report("voidReturnInheritedMethod", member.range);
         }
@@ -518,6 +610,20 @@ fn check_property(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(value) = node.child("value") else {
         return;
     };
+    if let Some(void) = value.field_bool("__contextualVoidFunction") {
+        // Accessors are not property assignments upstream, and a computed
+        // method name has no property to look up.
+        if node.field_str("kind").is_some_and(|kind| kind != "init")
+            || (node.field_bool("method") == Some(true)
+                && node.field_bool("computed") == Some(true))
+        {
+            return;
+        }
+        if void && returns_thenable(value) {
+            ctx.report("voidReturnProperty", function_report_range(node, value));
+        }
+        return;
+    }
     let contextual = collect_string_array(node, "__contextualReturnTypeTexts");
     if is_void_returning_function_type(&contextual) && returns_thenable(value) {
         // Report the return-type annotation when present, else the function.
@@ -548,6 +654,12 @@ fn check_return_statement(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(argument) = node.child("argument") else {
         return;
     };
+    if let Some(void) = argument.field_bool("__contextualVoidFunction") {
+        if void && returns_thenable(argument) {
+            ctx.report("voidReturnReturnValue", argument.range);
+        }
+        return;
+    }
     let contextual = collect_string_array(node, "__contextualReturnTypeTexts");
     if is_void_returning_function_type(&contextual) && returns_thenable(argument) {
         ctx.report("voidReturnReturnValue", argument.range);
@@ -562,12 +674,18 @@ fn check_variable_declarator(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(init) = node.child("init") else {
         return;
     };
-    if node
-        .child("id")
-        .and_then(|id| id.child("typeAnnotation"))
-        .is_none()
-    {
+    let Some(annotation) = node.child("id").and_then(|id| id.child("typeAnnotation")) else {
         // Go requires an explicit type annotation on the variable.
+        return;
+    };
+    if let Some(void) = node
+        .child("id")
+        .and_then(|id| promise_fact(id, "voidFunction"))
+    {
+        let annotation = annotation.child("typeAnnotation").unwrap_or(annotation);
+        if is_possibly_function_type(annotation) && void && returns_thenable(init) {
+            ctx.report("voidReturnVariable", init.range);
+        }
         return;
     }
     // `__variableReturnTypeTexts`: the rendered signature return texts of the
@@ -585,11 +703,168 @@ fn check_assignment(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(right) = node.child("right") else {
         return;
     };
+    if let Some(void) = node
+        .child("left")
+        .and_then(|left| promise_fact(left, "voidFunction"))
+    {
+        if void && returns_thenable(right) {
+            ctx.report("voidReturnVariable", right.range);
+        }
+        return;
+    }
     // `__variableReturnTypeTexts`: rendered signature return texts of the LHS type.
     let contextual = collect_string_array(node, "__variableReturnTypeTexts");
     if is_void_returning_function_type(&contextual) && returns_thenable(right) {
         ctx.report("voidReturnVariable", right.range);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Checker-fact helpers
+// ---------------------------------------------------------------------------
+
+const ARRAY_PREDICATE_FUNCTIONS: &[&str] = &[
+    "every",
+    "filter",
+    "find",
+    "findIndex",
+    "findLast",
+    "findLastIndex",
+    "some",
+];
+
+/// `checkArrayPredicates` over checker facts: an array or tuple method that
+/// takes a predicate, given a thenable-returning callback.
+fn check_array_predicate_call(ctx: &mut RuleContext<'_>, node: &LintNode) {
+    if node.kind != "CallExpression" {
+        return;
+    }
+    let Some(callee) = node.child("callee").map(strip_chain_expression) else {
+        return;
+    };
+    if !static_member_name(callee)
+        .is_some_and(|name| ARRAY_PREDICATE_FUNCTIONS.contains(&name.as_str()))
+    {
+        return;
+    }
+    let array = member_object(callee).and_then(|object| promise_fact(object, "arrayOrTuple"));
+    if array != Some(true) {
+        return;
+    }
+    let Some(callback) = child_list(node, "arguments").first() else {
+        return;
+    };
+    if returns_thenable(callback) {
+        ctx.report("predicate", callback.range);
+    }
+}
+
+/// `isPromiseFinallyMethod`: `promise.finally(...)` on a built-in Promise.
+fn is_promise_finally_call(node: &LintNode) -> bool {
+    if node.kind != "CallExpression" {
+        return false;
+    }
+    let Some(callee) = node.child("callee") else {
+        return false;
+    };
+    static_member_name(callee).as_deref() == Some("finally")
+        && member_object(callee).is_some_and(|object| promise_fact(object, "promise") == Some(true))
+}
+
+/// Whether a logical expression is first reached by another check (a test
+/// position or an enclosing logical operand). `None` without the host's
+/// `__ancestorChain` child keys.
+fn logical_reached_elsewhere(node: &LintNode) -> Option<bool> {
+    let chain = node.fields.get("__ancestorChain")?.as_array()?;
+    let mut first = true;
+    for entry in chain {
+        let kind = entry.get("kind").and_then(|value| value.as_str())?;
+        let key = entry.get("childKey").and_then(|value| value.as_str())?;
+        let operator = entry.get("operator").and_then(|value| value.as_str());
+        match kind {
+            "IfStatement"
+            | "WhileStatement"
+            | "DoWhileStatement"
+            | "ForStatement"
+            | "ConditionalExpression"
+                if key == "test" =>
+            {
+                return Some(true);
+            }
+            "UnaryExpression" if operator == Some("!") && key == "argument" => {
+                return Some(true);
+            }
+            "LogicalExpression" => {
+                if first && key == "left" && operator != Some("??") {
+                    return Some(true);
+                }
+            }
+            _ => return Some(false),
+        }
+        first = false;
+    }
+    Some(false)
+}
+
+/// `isPossiblyFunctionType`: annotation kinds that may name a function type.
+fn is_possibly_function_type(annotation: &LintNode) -> bool {
+    match annotation.kind.as_str() {
+        "TSTypeLiteral" => child_list(annotation, "members").iter().any(|member| {
+            matches!(
+                member.kind.as_str(),
+                "TSCallSignatureDeclaration" | "TSConstructSignatureDeclaration"
+            )
+        }),
+        "TSConditionalType"
+        | "TSConstructorType"
+        | "TSFunctionType"
+        | "TSImportType"
+        | "TSIndexedAccessType"
+        | "TSInferType"
+        | "TSIntersectionType"
+        | "TSQualifiedName"
+        | "TSThisType"
+        | "TSTypeOperator"
+        | "TSTypeQuery"
+        | "TSTypeReference"
+        | "TSUnionType" => true,
+        _ => false,
+    }
+}
+
+/// Upstream reports a function value at its return type annotation, or at
+/// its head: the `=>` token of an arrow, or from the property start.
+fn function_report_range(property: &LintNode, value: &LintNode) -> TextRange {
+    if !is_function_like(value) {
+        return value.range;
+    }
+    if let Some(return_type) = value.child("returnType") {
+        return return_type
+            .child("typeAnnotation")
+            .unwrap_or(return_type)
+            .range;
+    }
+    if value.kind == "ArrowFunctionExpression" {
+        if let Some(arrow) = arrow_token_start(value) {
+            return TextRange::new(arrow, arrow.saturating_add(2));
+        }
+        return value.range;
+    }
+    let end = value
+        .child_list("params")
+        .and_then(|params| params.first())
+        .map_or(value.range.start, |param| param.range.start);
+    TextRange::new(property.range.start, end.max(property.range.start))
+}
+
+/// Offset of the `=>` token: the last one before the body.
+fn arrow_token_start(arrow: &LintNode) -> Option<u32> {
+    let text = arrow.text.as_deref()?;
+    let body = arrow.child("body")?;
+    let body_offset = body.range.start.checked_sub(arrow.range.start)? as usize;
+    let head = text.get(..body_offset)?;
+    let index = head.rfind("=>")?;
+    Some(arrow.range.start + index as u32)
 }
 
 // ---------------------------------------------------------------------------
