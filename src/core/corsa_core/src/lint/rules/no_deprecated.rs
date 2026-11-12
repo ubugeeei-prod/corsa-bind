@@ -1,4 +1,4 @@
-use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
+use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule, TextRange};
 
 /// Type-aware rule that disallows use of `@deprecated` declarations.
 ///
@@ -13,11 +13,11 @@ pub struct NoDeprecatedRule;
 const MESSAGES: &[RuleMessage] = &[
     RuleMessage {
         id: "deprecated",
-        description: "This declaration is deprecated.",
+        description: "`{{name}}` is deprecated.",
     },
     RuleMessage {
         id: "deprecatedWithReason",
-        description: "This declaration is deprecated.",
+        description: "`{{name}}` is deprecated. {{reason}}",
     },
 ];
 
@@ -27,11 +27,13 @@ const MESSAGES: &[RuleMessage] = &[
 //   - MemberExpression          (computed element access => KindElementAccessExpression)
 //   - PrivateIdentifier         (KindPrivateIdentifier)
 //   - Super                     (KindSuperKeyword)
+//   - Property                  (object literal keys, `checkObjectLiteralProperty`)
 const LISTENERS: &[&str] = &[
     "Identifier",
     "MemberExpression",
     "PrivateIdentifier",
     "Super",
+    "Property",
 ];
 
 impl RustLintRule for NoDeprecatedRule {
@@ -73,20 +75,31 @@ impl RustLintRule for NoDeprecatedRule {
 
         // Choose the message ID exactly as the Go rule does: `deprecatedWithReason`
         // when a non-empty JSDoc reason is present, otherwise `deprecated`.
-        let has_reason = node
+        let reason = node
             .field_str("__deprecationReason")
             .map(str::trim)
-            .is_some_and(|reason| !reason.is_empty());
-
-        let message_id = if has_reason {
-            "deprecatedWithReason"
-        } else {
-            "deprecated"
+            .filter(|reason| !reason.is_empty());
+        let name = reported_name(node).unwrap_or_default();
+        let (message_id, message) = match reason {
+            Some(reason) => (
+                "deprecatedWithReason",
+                format!("`{name}` is deprecated. {reason}"),
+            ),
+            None => ("deprecated", format!("`{name}` is deprecated.")),
         };
 
-        // The Go rule reports on the offending identifier node itself.
-        ctx.report(message_id, node.range);
+        // Identifiers report themselves; element accesses report their
+        // property and object literal properties their key.
+        let range = report_range(node).unwrap_or(node.range);
+        ctx.report_with_message(message_id, message, range);
     }
+}
+
+fn report_range(node: &LintNode) -> Option<TextRange> {
+    let value = node.fields.get("__deprecationReportRange")?;
+    let start = u32::try_from(value.get("start")?.as_u64()?).ok()?;
+    let end = u32::try_from(value.get("end")?.as_u64()?).ok()?;
+    Some(TextRange::new(start, end))
 }
 
 /// Returns the parent node kind reported by the host (`__parentKind`).
@@ -188,6 +201,9 @@ fn is_allowed(node: &LintNode) -> bool {
 /// Returns the name to compare against the `allow` option, mirroring
 /// `getReportedNodeName`.
 fn reported_name(node: &LintNode) -> Option<String> {
+    if let Some(name) = node.field_str("__deprecatedName") {
+        return Some(name.to_owned());
+    }
     if node.kind == "Super" {
         return Some("super".to_owned());
     }

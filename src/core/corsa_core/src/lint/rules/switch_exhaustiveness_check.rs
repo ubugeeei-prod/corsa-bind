@@ -80,15 +80,17 @@ impl RustLintRule for SwitchExhaustivenessCheckRule {
         // The decision (report iff there is at least one uncovered literal
         // branch, unless `considerDefaultExhaustiveForUnions` + a default case
         // suppress it) stays entirely in Rust. The branch *texts* are raw
-        // checker renderings supplied host-side and joined with `" | "` by the
-        // bridge through the `{{missingBranches}}` placeholder, matching the Go
+        // checker renderings supplied host-side and joined with `" | "` into
+        // the `{{missingBranches}}` placeholder, matching the Go
         // `strings.Join(missingBranches, " | ")`.
         if !(metadata.missing_branch_texts.is_empty()
             || consider_default_exhaustive_for_unions && metadata.has_default_case)
         {
-            ctx.report_with_suggestions(
+            let missing_branches = metadata.missing_branch_texts.join(" | ");
+            ctx.report_with_data_and_suggestions(
                 "switchIsNotExhaustive",
                 discriminant.range,
+                &[("missingBranches", &missing_branches)],
                 vec![add_missing_cases_suggestion(node, &metadata, false)],
             );
         }
@@ -109,9 +111,12 @@ impl RustLintRule for SwitchExhaustivenessCheckRule {
             && metadata.contains_non_literal_type
             && !metadata.has_default_case
         {
-            ctx.report_with_suggestions(
+            // Upstream `checkSwitchNoUnionDefaultCase` reports
+            // `missingBranches: 'default'`.
+            ctx.report_with_data_and_suggestions(
                 "switchIsNotExhaustive",
                 discriminant.range,
+                &[("missingBranches", "default")],
                 vec![add_missing_cases_suggestion(node, &metadata, true)],
             );
         }

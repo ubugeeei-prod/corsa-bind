@@ -5,6 +5,7 @@ use crate::lint::helpers::{
     child_list, is_identifier_named, member_object, member_property_name, rule_allow_list_names,
     rule_option_bool, strip_chain_expression,
 };
+use crate::lint::promise_facts::{promise_fact, static_member_name};
 use crate::utils::split_top_level_type_text;
 
 /// Type-aware rule that requires promises to be awaited or explicitly handled.
@@ -206,7 +207,7 @@ fn is_unhandled_promise(node: &LintNode, options: &Options) -> Option<UnhandledP
         let callee = node.child("callee").map(strip_chain_expression);
         if let Some(callee) = callee
             && callee.kind == "MemberExpression"
-            && let Some(method_name) = member_property_name(callee)
+            && let Some(method_name) = static_member_name(callee)
         {
             let arguments = child_list(node, "arguments");
             match method_name.as_str() {
@@ -296,6 +297,9 @@ fn has_spread_through(arguments: &[LintNode], index: usize) -> bool {
 /// cannot be called.
 fn is_valid_rejection_handler(handler: &LintNode) -> bool {
     let handler = strip_chain_expression(handler);
+    if let Some(callable) = promise_fact(handler, "callable") {
+        return callable;
+    }
     if handler.kind.contains("Function") {
         return true;
     }
@@ -317,6 +321,11 @@ fn is_callable_type_text(text: &str) -> bool {
 fn is_promise_like(node: &LintNode, options: &Options) -> bool {
     if type_matches_names(node, &options.allow_for_known_safe_promises) {
         return false;
+    }
+    // Checker facts: a built-in Promise in the apparent union parts.
+    if let Some(promise) = promise_fact(node, "promise") {
+        return promise
+            || (options.check_thenables && node.property_names.iter().any(|name| name == "then"));
     }
     if node
         .type_texts
@@ -360,6 +369,12 @@ fn is_obviously_promise_producing(node: &LintNode) -> bool {
 }
 
 fn is_promise_array(node: &LintNode, options: &Options) -> bool {
+    // An allow list is matched by element name, which the facts do not carry.
+    if options.allow_for_known_safe_promises.is_empty() {
+        if let Some(array) = promise_fact(node, "promiseArray") {
+            return array;
+        }
+    }
     node.type_texts.iter().any(|text| {
         any_union_part(text, |part| {
             promise_array_element(part)

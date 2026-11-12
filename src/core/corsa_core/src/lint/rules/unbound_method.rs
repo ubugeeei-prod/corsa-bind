@@ -143,6 +143,19 @@ fn check_member_expression(ctx: &mut RuleContext<'_>, node: &LintNode, ignore_st
     if is_safe_use(node) {
         return;
     }
+    if let Some(object) = node.child("object")
+        && let Some(members) = MemberFacts::of(object, "__memberMethods")
+    {
+        let property = node.child("property");
+        if is_natively_bound_by_facts(object, property, &members) {
+            return;
+        }
+        let Some(name) = accessed_name(node) else {
+            return;
+        };
+        members.report_any_dangerous(ctx, node, &name, ignore_static);
+        return;
+    }
     if is_natively_bound(
         member_object(node),
         member_property_name(node).as_deref(),
@@ -155,6 +168,10 @@ fn check_member_expression(ctx: &mut RuleContext<'_>, node: &LintNode, ignore_st
 }
 
 fn check_object_binding_pattern(ctx: &mut RuleContext<'_>, node: &LintNode, ignore_static: bool) {
+    if let Some(pattern_members) = MemberFacts::of(node, "__memberMethods") {
+        check_pattern_with_facts(ctx, node, &pattern_members, ignore_static);
+        return;
+    }
     // The host omits the fact bundle (or sets `__insideTypeDeclaration`) for
     // patterns inside type declarations; mirror the early-return there.
     if node.field_bool("__insideTypeDeclaration").unwrap_or(false) {
@@ -191,6 +208,265 @@ fn check_object_literal_assignment(
         let shape = MethodShape::from_fact(property, "__unboundMethodInfo");
         report_method(ctx, property, shape, ignore_static);
     }
+}
+
+// Global types whose members typescript-eslint treats as natively bound.
+const SUPPORTED_GLOBAL_TYPES: &[&str] = &[
+    "NumberConstructor",
+    "ObjectConstructor",
+    "StringConstructor",
+    "SymbolConstructor",
+    "ArrayConstructor",
+    "Array",
+    "ProxyConstructor",
+    "Console",
+    "DateConstructor",
+    "Atomics",
+    "Math",
+    "JSON",
+];
+// Instance methods the spec binds to their instance.
+const SPEC_BOUND_INSTANCE_METHODS: &[(&str, &str)] = &[("Collator", "compare")];
+
+/// The host's checker facts for a receiver: its symbol and, per member name,
+/// how each union/intersection constituent declares the property.
+struct MemberFacts<'a> {
+    raw: &'a serde_json::Value,
+}
+
+impl<'a> MemberFacts<'a> {
+    fn of(node: &'a LintNode, key: &str) -> Option<Self> {
+        node.fields.get(key).map(|raw| Self { raw })
+    }
+
+    fn receiver_symbol(&self) -> Option<&str> {
+        self.raw
+            .get("receiverSymbol")
+            .and_then(serde_json::Value::as_str)
+    }
+
+    fn receiver_lib(&self) -> bool {
+        self.raw
+            .get("receiverLib")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    }
+
+    /// `isBuiltinSymbolLike(receiver, names)`: the receiver's own symbol or a
+    /// base type is one of `names` (from the default library).
+    fn receiver_is_builtin(&self, names: &[&str]) -> bool {
+        let own = self.receiver_lib()
+            && self
+                .receiver_symbol()
+                .is_some_and(|symbol| names.contains(&symbol));
+        own || ["receiverBases", "receiverClassBases"].iter().any(|key| {
+            self.raw
+                .get(*key)
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|bases| {
+                    bases
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .any(|base| names.contains(&base.split('<').next().unwrap_or(base).trim()))
+                })
+        })
+    }
+
+    fn member(&self, name: &str) -> Option<&'a serde_json::Value> {
+        self.raw.get("members")?.get(name)
+    }
+
+    fn property_lib(&self, name: &str) -> bool {
+        self.member(name)
+            .and_then(|member| member.get("propertyLib"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    }
+
+    fn parts(&self, name: &str) -> Vec<Option<MethodShape>> {
+        self.member(name)
+            .and_then(|member| member.get("parts"))
+            .and_then(serde_json::Value::as_array)
+            .map(|parts| parts.iter().map(MethodShape::from_value).collect())
+            .unwrap_or_default()
+    }
+
+    /// `checkUnionConstituentsAndReport`.
+    fn report_any_dangerous(
+        &self,
+        ctx: &mut RuleContext<'_>,
+        report_node: &LintNode,
+        name: &str,
+        ignore_static: bool,
+    ) -> bool {
+        self.parts(name)
+            .into_iter()
+            .any(|shape| report_method(ctx, report_node, shape, ignore_static))
+    }
+
+    /// `checkIfMethodAndReport(node, type.getProperty(name))`: the property of
+    /// the whole type, which only has a declaration when the type is not a
+    /// union of several constituents.
+    fn report_whole_type(
+        &self,
+        ctx: &mut RuleContext<'_>,
+        report_node: &LintNode,
+        name: &str,
+        ignore_static: bool,
+    ) -> bool {
+        let parts = self.parts(name);
+        match parts.as_slice() {
+            [single] => report_method(ctx, report_node, *single, ignore_static),
+            _ => false,
+        }
+    }
+}
+
+impl MethodShape {
+    fn from_value(value: &serde_json::Value) -> Option<Self> {
+        let value = value.as_object()?;
+        let flag = |key: &str| {
+            value
+                .get(key)
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+        };
+        Some(Self {
+            is_method: flag("isMethod"),
+            first_param_is_this: flag("firstParamIsThis"),
+            this_arg_is_void: flag("thisArgIsVoid"),
+            is_static: flag("isStatic"),
+        })
+    }
+}
+
+/// typescript-eslint's `getAccessedPropertyNames` for statically known names.
+fn accessed_name(node: &LintNode) -> Option<String> {
+    let property = node.child("property")?;
+    if node.field_bool("computed").unwrap_or(false) {
+        return property.field_stringish("value");
+    }
+    (property.kind == "Identifier")
+        .then(|| property.field_stringish("name"))
+        .flatten()
+}
+
+/// `isNativelyBound(object, property)` over checker facts.
+fn is_natively_bound_by_facts(
+    object: &LintNode,
+    property: Option<&LintNode>,
+    members: &MemberFacts<'_>,
+) -> bool {
+    let property_name = property
+        .filter(|property| property.kind == "Identifier")
+        .and_then(|property| property.field_stringish("name"));
+    let object_name = (object.kind == "Identifier")
+        .then(|| object.field_stringish("name"))
+        .flatten();
+    natively_bound(
+        object_name.as_deref(),
+        object.field_bool("__declaredInFile"),
+        property_name.as_deref(),
+        members,
+    )
+}
+
+fn natively_bound(
+    object_name: Option<&str>,
+    object_declared_in_file: Option<bool>,
+    property_name: Option<&str>,
+    members: &MemberFacts<'_>,
+) -> bool {
+    let Some(property_name) = property_name else {
+        return false;
+    };
+    // `Math.floor`: a global (not file-local) object's natively bound member.
+    if let Some(object_name) = object_name
+        && object_declared_in_file == Some(false)
+        && is_natively_bound_member(object_name, property_name)
+    {
+        return true;
+    }
+    let receiver = members.receiver_symbol();
+    if members.receiver_lib()
+        && receiver.is_some_and(|receiver| {
+            SPEC_BOUND_INSTANCE_METHODS.contains(&(receiver, property_name))
+        })
+    {
+        return true;
+    }
+    members.receiver_is_builtin(SUPPORTED_GLOBAL_TYPES) && members.property_lib(property_name)
+}
+
+/// typescript-eslint's `ObjectPattern` listener over checker facts.
+fn check_pattern_with_facts(
+    ctx: &mut RuleContext<'_>,
+    node: &LintNode,
+    pattern_members: &MemberFacts<'_>,
+    ignore_static: bool,
+) {
+    if is_inside_type_declaration(node) {
+        return;
+    }
+    let init_members = MemberFacts::of(node, "__initMemberMethods");
+    let parent_is_assignment_pattern = node.field_str("__parentKind") == Some("AssignmentPattern");
+    for property in node.child_list("properties").unwrap_or(&[]) {
+        if property.kind != "Property" || property.field_bool("computed") == Some(true) {
+            continue;
+        }
+        let Some(key) = property.child("key").filter(|key| key.kind == "Identifier") else {
+            continue;
+        };
+        let Some(name) = key.field_stringish("name") else {
+            continue;
+        };
+        if let Some(init_members) = &init_members {
+            let bound = natively_bound(
+                node.field_str("__initName"),
+                node.field_bool("__initDeclaredInFile"),
+                Some(&name),
+                init_members,
+            );
+            if !bound {
+                if init_members.report_whole_type(ctx, key, &name, ignore_static) {
+                    continue;
+                }
+            } else if !parent_is_assignment_pattern {
+                continue;
+            }
+        }
+        pattern_members.report_any_dangerous(ctx, key, &name, ignore_static);
+    }
+}
+
+/// `isNodeInsideTypeDeclaration`, over the host's ancestor facts.
+fn is_inside_type_declaration(node: &LintNode) -> bool {
+    if node.field_bool("__insideTypeDeclaration").unwrap_or(false) {
+        return true;
+    }
+    node.fields
+        .get("__ancestorFacts")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|ancestors| {
+            ancestors.iter().any(|ancestor| {
+                let kind = ancestor
+                    .get("kind")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                let declare = ancestor
+                    .get("declare")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                matches!(
+                    kind,
+                    "TSAbstractMethodDefinition"
+                        | "TSDeclareFunction"
+                        | "TSFunctionType"
+                        | "TSInterfaceDeclaration"
+                        | "TSTypeAliasDeclaration"
+                ) || (declare && matches!(kind, "ClassDeclaration" | "VariableDeclaration"))
+            })
+        })
 }
 
 /// Returns `true` when the `${object}.${property}` access is a known
@@ -230,7 +506,57 @@ fn is_natively_bound(
 /// `expr.Left == node` / `parent.Expression() == node` identity comparisons are
 /// available). The Rust side consumes that single raw boolean.
 fn is_safe_use(node: &LintNode) -> bool {
-    node.field_bool("__safeUse").unwrap_or(false)
+    let Some(chain) = node
+        .fields
+        .get("__ancestorChain")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return node.field_bool("__safeUse").unwrap_or(false);
+    };
+    let object_is_super = node
+        .child("object")
+        .is_some_and(|object| object.kind == "Super");
+    is_safe_use_at(chain, 0, object_is_super)
+}
+
+/// typescript-eslint's `isSafeUse`, walking the host's ancestor chain
+/// (innermost first; each entry records which slot the child sits in).
+fn is_safe_use_at(chain: &[serde_json::Value], index: usize, object_is_super: bool) -> bool {
+    let Some(parent) = chain.get(index) else {
+        return false;
+    };
+    let text = |key: &str| parent.get(key).and_then(serde_json::Value::as_str);
+    let child_key = text("childKey");
+    let operator = text("operator");
+    match text("kind").unwrap_or_default() {
+        "IfStatement" | "ForStatement" | "MemberExpression" | "SwitchStatement"
+        | "UpdateExpression" | "WhileStatement" => true,
+        "CallExpression" => child_key == Some("callee"),
+        "ConditionalExpression" => child_key == Some("test"),
+        "TaggedTemplateExpression" => child_key == Some("tag"),
+        "UnaryExpression" => matches!(operator, Some("!" | "delete" | "typeof" | "void")),
+        "BinaryExpression" => matches!(operator, Some("!=" | "!==" | "==" | "===" | "instanceof")),
+        "AssignmentExpression" => {
+            operator == Some("=")
+                && (child_key == Some("left")
+                    || (index == 0
+                        && object_is_super
+                        && parent
+                            .get("leftIsThisMember")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false)))
+        }
+        "ChainExpression"
+        | "TSNonNullExpression"
+        | "TSAsExpression"
+        | "TSTypeAssertion"
+        | "ParenthesizedExpression" => is_safe_use_at(chain, index + 1, false),
+        "LogicalExpression" => {
+            (operator == Some("&&") && child_key == Some("left"))
+                || is_safe_use_at(chain, index + 1, false)
+        }
+        _ => false,
+    }
 }
 
 /// The generated natively-bound members allowlist, ported verbatim from
@@ -494,5 +820,117 @@ mod tests {
         });
         let node: LintNode = serde_json::from_value(value).unwrap();
         assert!(run(&node).is_empty());
+    }
+
+    fn method_facts(info: serde_json::Value) -> serde_json::Value {
+        json!({
+            "receiverSymbol": "Foo",
+            "receiverLib": false,
+            "members": { "unbound": { "parts": [info], "propertyLib": false } }
+        })
+    }
+
+    fn checked_member(chain: serde_json::Value, info: serde_json::Value) -> LintNode {
+        let mut value = member("instance", "unbound");
+        value["fields"]["__ancestorChain"] = chain;
+        value["children"]["object"]["fields"]["__memberMethods"] = method_facts(info);
+        value["children"]["object"]["fields"]["__declaredInFile"] = json!(true);
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn method() -> serde_json::Value {
+        json!({ "isMethod": true, "firstParamIsThis": false, "thisArgIsVoid": false })
+    }
+
+    #[test]
+    fn checker_facts_report_unsafe_references() {
+        let assigned = checked_member(
+            json!([{ "kind": "VariableDeclarator", "childKey": "init" }]),
+            method(),
+        );
+        assert_eq!(run(&assigned)[0].0, "unboundWithoutThisAnnotation");
+
+        let arrow_property = checked_member(
+            json!([{ "kind": "VariableDeclarator", "childKey": "init" }]),
+            json!({ "isMethod": false }),
+        );
+        assert!(run(&arrow_property).is_empty());
+    }
+
+    #[test]
+    fn ancestor_chain_decides_safe_uses() {
+        for chain in [
+            json!([{ "kind": "CallExpression", "childKey": "callee" }]),
+            json!([{ "kind": "IfStatement", "childKey": "test" }]),
+            json!([{ "kind": "UnaryExpression", "operator": "typeof", "childKey": "argument" }]),
+            json!([{ "kind": "BinaryExpression", "operator": "!==", "childKey": "left" }]),
+            json!([{ "kind": "AssignmentExpression", "operator": "=", "childKey": "left" }]),
+            json!([
+                { "kind": "LogicalExpression", "operator": "||", "childKey": "left" },
+                { "kind": "IfStatement", "childKey": "test" }
+            ]),
+            json!([
+                { "kind": "ChainExpression", "childKey": "expression" },
+                { "kind": "ConditionalExpression", "childKey": "test" }
+            ]),
+        ] {
+            assert!(run(&checked_member(chain, method())).is_empty());
+        }
+        for chain in [
+            json!([{ "kind": "CallExpression", "childKey": "arguments" }]),
+            json!([{ "kind": "AssignmentExpression", "operator": "=", "childKey": "right" }]),
+            json!([{ "kind": "ConditionalExpression", "childKey": "consequent" }]),
+        ] {
+            assert_eq!(run(&checked_member(chain, method())).len(), 1);
+        }
+    }
+
+    #[test]
+    fn checker_facts_recognize_natively_bound_members() {
+        let mut value = member("Math", "floor");
+        value["fields"]["__ancestorChain"] =
+            json!([{ "kind": "CallExpression", "childKey": "arguments" }]);
+        value["children"]["object"]["fields"]["__declaredInFile"] = json!(false);
+        value["children"]["object"]["fields"]["__memberMethods"] = json!({
+            "receiverSymbol": "Math",
+            "receiverLib": true,
+            "members": { "floor": { "parts": [method()], "propertyLib": true } }
+        });
+        let node: LintNode = serde_json::from_value(value.clone()).unwrap();
+        assert!(run(&node).is_empty());
+
+        // A file-local `Math` with a user method is not the global.
+        value["children"]["object"]["fields"]["__declaredInFile"] = json!(true);
+        value["children"]["object"]["fields"]["__memberMethods"]["receiverLib"] = json!(false);
+        let node: LintNode = serde_json::from_value(value).unwrap();
+        assert_eq!(run(&node).len(), 1);
+    }
+
+    #[test]
+    fn destructuring_reports_the_key() {
+        let node: LintNode = serde_json::from_value(json!({
+            "kind": "ObjectPattern",
+            "range": { "start": 6, "end": 17 },
+            "fields": {
+                "__parentKind": "VariableDeclarator",
+                "__memberMethods": method_facts(method()),
+                "__initMemberMethods": method_facts(method()),
+                "__ancestorFacts": [{ "kind": "VariableDeclaration" }]
+            },
+            "childLists": { "properties": [{
+                "kind": "Property",
+                "range": { "start": 8, "end": 15 },
+                "fields": { "computed": false },
+                "children": { "key": {
+                    "kind": "Identifier",
+                    "range": { "start": 8, "end": 15 },
+                    "fields": { "name": "unbound" }
+                } }
+            }] }
+        }))
+        .unwrap();
+        let diagnostics = run(&node);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].1, super::super::super::TextRange::new(8, 15));
     }
 }

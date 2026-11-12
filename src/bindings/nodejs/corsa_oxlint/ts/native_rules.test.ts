@@ -104,7 +104,7 @@ describe("corsa oxlint native rules", () => {
         invalid: [
           {
             code: "void (undefined as void);",
-            errors: [{ messageId: "meaninglessVoidOperator" }],
+            errors: [{ messageId: "meaninglessVoidOnNonCall" }],
           },
         ],
       },

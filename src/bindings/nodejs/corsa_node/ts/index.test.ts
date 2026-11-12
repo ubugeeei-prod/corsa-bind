@@ -147,6 +147,7 @@ describe("CorsaApiClient", () => {
       "no-unsafe-argument",
       "no-unsafe-assignment",
       "no-unsafe-call",
+      "no-unsafe-enum-assignment",
       "no-unsafe-enum-comparison",
       "no-unsafe-member-access",
       "no-unsafe-return",

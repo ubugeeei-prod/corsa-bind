@@ -1,14 +1,23 @@
-use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
+use super::super::type_shape::{StaticValue, TypeShape};
+use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule, TextRange};
 use crate::utils::split_type_text;
 
+use super::super::helpers::rule_option_bool;
+
+mod checked;
+mod compare;
+
+use checked::{Settings, Truthiness};
+
 /// Type-aware rule that flags conditions that are always truthy, always falsy,
-/// `never`, always nullish, or comparisons between literal values.
+/// `never`, always nullish, unnecessary optional chains, and comparisons whose
+/// result is fixed.
 ///
-/// This is a faithful port of the upstream tsgolint `no-unnecessary-condition`
-/// rule. The upstream rule leans heavily on the TypeScript checker (raw type
-/// flags, indexed-access resolution, optional-chain origin analysis). The parts
-/// that map cleanly onto rendered type texts are ported here with the same
-/// message IDs and the same truthy/falsy/never/nullish decision logic.
+/// Port of typescript-eslint `no-unnecessary-condition`. When the host stamps
+/// a `__typeShape` fact (constrained type flags, literal values, union parts)
+/// the verdicts follow the upstream `TypeFlags` logic exactly; otherwise the
+/// rule falls back to rendered type texts for the truthiness and literal
+/// comparison checks.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoUnnecessaryConditionRule;
 
@@ -35,7 +44,7 @@ const MESSAGES: &[RuleMessage] = &[
     },
     RuleMessage {
         id: "neverNullish",
-        description: "Unnecessary optional chain on a non-nullish value.",
+        description: "Unnecessary conditional, expected left-hand side of `??` operator to be possibly null or undefined.",
     },
     RuleMessage {
         id: "neverOptionalChain",
@@ -47,19 +56,19 @@ const MESSAGES: &[RuleMessage] = &[
     },
     RuleMessage {
         id: "comparisonBetweenLiteralTypes",
-        description: "Unnecessary comparison between literal values.",
+        description: "Unnecessary conditional, comparison is always {{trueOrFalse}}, since `{{left}} {{operator}} {{right}}` is {{trueOrFalse}}.",
     },
     RuleMessage {
         id: "noOverlapBooleanExpression",
-        description: "This condition will always return the same value since the types have no overlap.",
+        description: "Unnecessary conditional, the types have no overlap.",
     },
     RuleMessage {
         id: "alwaysNullish",
-        description: "Unnecessary conditional, value is always nullish.",
+        description: "Unnecessary conditional, left-hand side of `??` operator is always `null` or `undefined`.",
     },
     RuleMessage {
         id: "typeGuardAlreadyIsType",
-        description: "Type predicate is unnecessary as the parameter type already satisfies the predicate.",
+        description: "Unnecessary conditional, expression already has the type being checked by the {{typeGuardOrAssertionFunction}}.",
     },
 ];
 
@@ -73,6 +82,19 @@ const LISTENERS: &[&str] = &[
     "AssignmentExpression",
     "BinaryExpression",
     "SwitchStatement",
+    "MemberExpression",
+    "CallExpression",
+];
+
+/// `ARRAY_PREDICATE_FUNCTIONS` from `isArrayMethodCallWithPredicate`.
+const ARRAY_PREDICATE_FUNCTIONS: &[&str] = &[
+    "every",
+    "filter",
+    "find",
+    "findIndex",
+    "findLast",
+    "findLastIndex",
+    "some",
 ];
 
 impl RustLintRule for NoUnnecessaryConditionRule {
@@ -93,43 +115,39 @@ impl RustLintRule for NoUnnecessaryConditionRule {
     }
 
     fn check(&self, ctx: &mut RuleContext<'_>, node: &LintNode) {
+        let settings = Settings::of(node);
         match node.kind.as_str() {
-            "IfStatement" => {
-                check_node(ctx, node.child("test"), false);
+            "IfStatement" | "ConditionalExpression" => {
+                check_node(ctx, node.child("test"), false, true, settings);
             }
-            "WhileStatement" | "DoWhileStatement" => {
-                check_loop(ctx, node, node.child("test"));
-            }
-            "ForStatement" => {
-                check_loop(ctx, node, node.child("test"));
-            }
-            "ConditionalExpression" => {
-                check_node(ctx, node.child("test"), false);
+            "WhileStatement" | "DoWhileStatement" | "ForStatement" => {
+                check_loop(ctx, node, node.child("test"), settings);
             }
             "LogicalExpression" => match node.field_str("operator") {
-                Some("&&") | Some("||") => {
-                    check_node(ctx, node.child("left"), false);
+                Some("??") => check_node_for_nullish(ctx, node.child("left"), settings),
+                Some(operator) => {
+                    // The left operand is only used for truthiness when this is
+                    // `&&`, or when the whole expression is.
+                    let truthiness = operator == "&&" || is_only_used_for_truthiness(node);
+                    check_node(ctx, node.child("left"), false, truthiness, settings);
                 }
-                Some("??") => {
-                    check_node_for_nullish(ctx, node.child("left"));
-                }
-                _ => {}
+                None => {}
             },
             "AssignmentExpression" => match node.field_str("operator") {
                 Some("&&=") | Some("||=") => {
-                    check_node(ctx, node.child("left"), false);
+                    check_node(ctx, node.child("left"), false, false, settings);
                 }
-                Some("??=") => {
-                    check_node_for_nullish(ctx, node.child("left"));
-                }
+                Some("??=") => check_node_for_nullish(ctx, node.child("left"), settings),
                 _ => {}
             },
             "BinaryExpression" => {
-                if matches!(
-                    node.field_str("operator"),
-                    Some("<" | ">" | "<=" | ">=" | "==" | "===" | "!=" | "!==")
-                ) {
-                    check_comparison(ctx, node, node.child("left"), node.child("right"));
+                if let Some(operator) = node.field_str("operator").filter(|operator| {
+                    matches!(
+                        *operator,
+                        "<" | ">" | "<=" | ">=" | "==" | "===" | "!=" | "!=="
+                    )
+                }) {
+                    check_comparison(ctx, node, node.child("left"), node.child("right"), operator);
                 }
             }
             "SwitchStatement" => {
@@ -139,138 +157,506 @@ impl RustLintRule for NoUnnecessaryConditionRule {
                 };
                 for case in node.child_list("cases").unwrap_or(&[]) {
                     if let Some(test) = case.child("test") {
-                        check_comparison(ctx, test, Some(discriminant), Some(test));
+                        check_comparison(ctx, test, Some(discriminant), Some(test), "===");
                     }
                 }
+            }
+            "MemberExpression" => {
+                check_optional_chain(ctx, node, node.child("object"), settings);
+            }
+            "CallExpression" => {
+                if rule_option_bool(node, "checkTypePredicates") == Some(true) {
+                    check_type_predicate(ctx, node, settings);
+                }
+                check_optional_chain(ctx, node, node.child("callee"), settings);
+                check_array_predicate(ctx, node, settings);
             }
             _ => {}
         }
     }
 }
 
+/// Upstream `isOnlyUsedForTruthiness`, evaluated over the host's
+/// `__ancestorChain` (closest ancestor first). Without the chain the rule
+/// assumes the value is used, which reports less.
+fn is_only_used_for_truthiness(node: &LintNode) -> bool {
+    let Some(chain) = node
+        .fields
+        .get("__ancestorChain")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+    let flag = |entry: &serde_json::Value, key: &str| {
+        entry.get(key).and_then(serde_json::Value::as_bool) == Some(true)
+    };
+    for entry in chain {
+        let kind = entry
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        let operator = entry.get("operator").and_then(serde_json::Value::as_str);
+        match kind {
+            "ConditionalExpression"
+            | "DoWhileStatement"
+            | "ForStatement"
+            | "IfStatement"
+            | "WhileStatement" => return flag(entry, "childIsTest"),
+            "LogicalExpression" => {
+                if operator == Some("&&") && flag(entry, "childIsLeft") {
+                    return true;
+                }
+            }
+            "UnaryExpression" => return operator == Some("!"),
+            _ => return false,
+        }
+    }
+    false
+}
+
 /// Mirrors the upstream loop-condition handling, honouring
 /// `allowConstantLoopConditions` (default `"never"`).
-fn check_loop(ctx: &mut RuleContext<'_>, owner: &LintNode, test: Option<&LintNode>) {
+fn check_loop(
+    ctx: &mut RuleContext<'_>,
+    owner: &LintNode,
+    test: Option<&LintNode>,
+    settings: Settings,
+) {
     let Some(test) = test else { return };
     let mode = allow_constant_loop_conditions(owner);
     if mode == "only-allowed-literals" && is_allowed_constant_literal(test) {
         return;
     }
     if mode == "always" {
-        if is_true_keyword(test) {
-            return;
-        }
-        if is_true_literal_type(&test.type_texts) {
+        let true_literal = match TypeShape::of(test) {
+            Some(shape) => shape.static_value() == Some(StaticValue::Boolean(true)),
+            None => is_true_keyword(test) || is_true_literal_type(&test.type_texts),
+        };
+        if true_literal {
             return;
         }
     }
-    check_node(ctx, Some(test), false);
+    check_node(ctx, Some(test), false, true, settings);
 }
 
-/// Faithful port of upstream `checkNode`: unwraps `!`, descends into the right
-/// side of `&&`/`||`, then evaluates the truthiness of the expression's type.
+/// Port of upstream `checkNode`. `used_for_truthiness` is
+/// `isOnlyUsedForTruthiness(expression)`, which decides whether the right
+/// operand of a nested `&&`/`||` is checked.
 fn check_node(
     ctx: &mut RuleContext<'_>,
     expression: Option<&LintNode>,
     is_unary_not_argument: bool,
+    used_for_truthiness: bool,
+    settings: Settings,
 ) {
     let Some(expression) = expression else { return };
+    check_node_reporting(
+        ctx,
+        expression,
+        is_unary_not_argument,
+        used_for_truthiness,
+        settings,
+        expression.range,
+    );
+}
 
-    // `!expr` flips the meaning; descend into the operand.
+fn check_node_reporting(
+    ctx: &mut RuleContext<'_>,
+    expression: &LintNode,
+    is_unary_not_argument: bool,
+    used_for_truthiness: bool,
+    settings: Settings,
+    report: TextRange,
+) {
+    // `!expr` flips the meaning; descend into the operand but keep reporting
+    // the outer node.
     if expression.kind == "UnaryExpression" && expression.field_str("operator") == Some("!") {
-        check_node(ctx, expression.child("argument"), !is_unary_not_argument);
+        if let Some(argument) = expression.child("argument") {
+            check_node_reporting(
+                ctx,
+                argument,
+                !is_unary_not_argument,
+                true,
+                settings,
+                report,
+            );
+        }
         return;
     }
 
-    // `a && b` / `a || b` only evaluate the right operand's truthiness.
-    if expression.kind == "LogicalExpression" {
-        match expression.field_str("operator") {
-            Some("&&") | Some("||") => {
-                check_node(ctx, expression.child("right"), false);
-                return;
-            }
-            // `??` is handled elsewhere, not as a conditional.
-            _ => {}
-        }
+    // Array index signatures do not model out-of-bounds reads.
+    if !settings.no_unchecked_indexed_access
+        && checked::is_array_index_expression(expression, settings)
+    {
+        return;
     }
 
+    // `a && b` / `a || b`: the left side is checked by its own listener; the
+    // right side only matters when the whole expression is a truthiness test.
+    if expression.kind == "LogicalExpression" && expression.field_str("operator") != Some("??") {
+        if used_for_truthiness {
+            if let Some(right) = expression.child("right") {
+                check_node_reporting(ctx, right, false, true, settings, right.range);
+            }
+        }
+        return;
+    }
+
+    let verdict = match checked::truthiness(expression) {
+        Some(verdict) => verdict,
+        None => text_truthiness(expression),
+    };
+    let message = match verdict {
+        Some(Truthiness::Never) => "never",
+        Some(Truthiness::Falsy) if is_unary_not_argument => "alwaysTruthy",
+        Some(Truthiness::Falsy) => "alwaysFalsy",
+        Some(Truthiness::Truthy) if is_unary_not_argument => "alwaysFalsy",
+        Some(Truthiness::Truthy) => "alwaysTruthy",
+        None => return,
+    };
+    ctx.report(message, report);
+}
+
+/// Rendered-type-text fallback for hosts without `__typeShape`.
+fn text_truthiness(expression: &LintNode) -> Option<Truthiness> {
     let type_texts = &expression.type_texts;
     if type_texts.is_empty() || is_conditional_always_necessary(type_texts) {
-        return;
+        return None;
     }
-
+    if is_never_type(type_texts) {
+        return Some(Truthiness::Never);
+    }
     // The host may render the same type more than once (the narrowed literal
     // plus its widened base). Each text describes the SAME type, so the first
-    // rendering that yields a definite verdict wins; merging them as if they
-    // were union parts would dissolve narrowed literals back into their base.
+    // rendering that yields a definite verdict wins.
     let (is_truthy, is_falsy) = type_texts
         .iter()
         .map(|text| check_type_condition(std::slice::from_ref(text)))
         .find(|(truthy, falsy)| *truthy || *falsy)
         .unwrap_or((false, false));
-
-    if is_never_type(type_texts) {
-        ctx.report("never", expression.range);
-        return;
-    }
-
     if is_falsy {
-        if is_unary_not_argument {
-            ctx.report("alwaysTruthy", expression.range);
-        } else {
-            ctx.report("alwaysFalsy", expression.range);
-        }
-        return;
-    }
-    if is_truthy {
-        if is_unary_not_argument {
-            ctx.report("alwaysFalsy", expression.range);
-        } else {
-            ctx.report("alwaysTruthy", expression.range);
-        }
+        Some(Truthiness::Falsy)
+    } else if is_truthy {
+        Some(Truthiness::Truthy)
+    } else {
+        None
     }
 }
 
-/// Faithful port of upstream `checkNodeForNullish` (the `??` / `??=` path).
-fn check_node_for_nullish(ctx: &mut RuleContext<'_>, node: Option<&LintNode>) {
+/// Port of upstream `checkNodeForNullish` (the `??` / `??=` path).
+fn check_node_for_nullish(ctx: &mut RuleContext<'_>, node: Option<&LintNode>, settings: Settings) {
     let Some(node) = node else { return };
+    let message = match checked::nullish(node, settings) {
+        Some(message) => message,
+        None => text_nullish(node),
+    };
+    if let Some(message) = message {
+        ctx.report(message, node.range);
+    }
+}
+
+fn text_nullish(node: &LintNode) -> Option<&'static str> {
     let type_texts = &node.type_texts;
     if type_texts.is_empty() || is_conditional_always_necessary(type_texts) {
-        return;
+        return None;
     }
-
     if is_never_type(type_texts) {
-        ctx.report("never", node.range);
-        return;
+        return Some("never");
     }
     if is_always_nullish_type(type_texts) {
-        ctx.report("alwaysNullish", node.range);
-        return;
+        return Some("alwaysNullish");
     }
-
     if !is_nullish_type(type_texts) {
-        ctx.report("neverNullish", node.range);
+        return Some("neverNullish");
     }
+    None
 }
 
-/// Faithful port of upstream `checkIfBoolExpressionIsNecessaryConditional` for
-/// the literal-vs-literal comparison case. The no-overlap branch needs the raw
-/// checker type flags and is intentionally not approximated here.
+/// Port of upstream `checkIfBoolExpressionIsNecessaryConditional`.
 fn check_comparison(
     ctx: &mut RuleContext<'_>,
     report: &LintNode,
     left: Option<&LintNode>,
     right: Option<&LintNode>,
+    operator: &str,
 ) {
     let (Some(left), Some(right)) = (left, right) else {
         return;
     };
+    if let (Some(left_shape), Some(right_shape)) = (TypeShape::of(left), TypeShape::of(right)) {
+        if let (Some(left_value), Some(right_value)) =
+            (left_shape.static_value(), right_shape.static_value())
+        {
+            let Some(result) = compare::evaluate(&left_value, operator, &right_value) else {
+                return;
+            };
+            let outcome = if result { "true" } else { "false" };
+            let message = [
+                "Unnecessary conditional, comparison is always ",
+                outcome,
+                ", since `",
+                &static_text(left, left_shape, &left_value),
+                " ",
+                operator,
+                " ",
+                &static_text(right, right_shape, &right_value),
+                "` is ",
+                outcome,
+                ".",
+            ]
+            .concat();
+            ctx.report_with_message("comparisonBetweenLiteralTypes", message, report.range);
+            return;
+        }
+        if report.field_bool("__strictNullChecks") != Some(false)
+            && checked::has_no_overlap(left, right, operator) == Some(true)
+        {
+            ctx.report("noOverlapBooleanExpression", report.range);
+        }
+        return;
+    }
     if left.type_texts.is_empty() || right.type_texts.is_empty() {
         return;
     }
     if is_static_value(&left.type_texts) && is_static_value(&right.type_texts) {
-        ctx.report("comparisonBetweenLiteralTypes", report.range);
+        // Hosts without checker type shapes: read the literal values from the
+        // type texts so the message's placeholders are still filled in.
+        let left_text = &type_parts(&left.type_texts)[0];
+        let right_text = &type_parts(&right.type_texts)[0];
+        let outcome = parse_static_atom(left_text)
+            .zip(parse_static_atom(right_text))
+            .and_then(|(left_value, right_value)| {
+                compare::evaluate(&left_value, operator, &right_value)
+            });
+        let Some(outcome) = outcome else {
+            return;
+        };
+        ctx.report_with_data(
+            "comparisonBetweenLiteralTypes",
+            report.range,
+            &[
+                ("trueOrFalse", if outcome { "true" } else { "false" }),
+                ("left", left_text),
+                ("operator", operator),
+                ("right", right_text),
+            ],
+        );
     }
+}
+
+/// The literal value a static type-text atom (see [`is_static_atom`]) names.
+fn parse_static_atom(part: &str) -> Option<StaticValue> {
+    match part {
+        "true" => return Some(StaticValue::Boolean(true)),
+        "false" => return Some(StaticValue::Boolean(false)),
+        "null" => return Some(StaticValue::Null),
+        "undefined" => return Some(StaticValue::Undefined),
+        _ => {}
+    }
+    if is_string_literal_atom(part) {
+        if part.starts_with('"') {
+            if let Ok(serde_json::Value::String(text)) = serde_json::from_str(part) {
+                return Some(StaticValue::String(text));
+            }
+        }
+        return Some(StaticValue::String(part[1..part.len() - 1].to_owned()));
+    }
+    if is_bigint_literal_atom(part) {
+        let digits = part[..part.len() - 1].parse::<i128>().ok()?;
+        return Some(StaticValue::BigInt(digits.to_string()));
+    }
+    part.parse::<f64>().ok().map(StaticValue::Number)
+}
+
+/// `checker.typeToString` of a literal type: the host's rendering when it
+/// describes the same (unconstrained) type, else the value itself.
+fn static_text(
+    node: &LintNode,
+    shape: TypeShape<'_>,
+    value: &super::super::type_shape::StaticValue,
+) -> String {
+    match node.type_texts.first() {
+        Some(text) if shape.raw_flags() == shape.flags() && !text.contains('|') => text.clone(),
+        _ => compare::render(value),
+    }
+}
+
+/// The `checkTypePredicates` branch of upstream `checkCallExpression`, over
+/// the host's `predicate` entry in the call's `__typeShape`:
+/// `asserts x` checks `x` like a condition, and `x is T` / `asserts x is T`
+/// reports an argument whose type already satisfies the predicate.
+fn check_type_predicate(ctx: &mut RuleContext<'_>, node: &LintNode, settings: Settings) {
+    let Some(fact) = node
+        .fields
+        .get("__typeShape")
+        .and_then(|shape| shape.get("predicate"))
+    else {
+        return;
+    };
+    let Some(index) = fact
+        .get("argument")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|index| usize::try_from(index).ok())
+    else {
+        return;
+    };
+    let Some(argument) = node
+        .child_list("arguments")
+        .and_then(|arguments| arguments.get(index))
+    else {
+        return;
+    };
+    let flag = |key: &str| fact.get(key).and_then(serde_json::Value::as_bool) == Some(true);
+    if let Some(shape) = fact.get("shape") {
+        // `findTruthinessAssertedArgument`: the asserted argument is a
+        // condition whose value is used (its parent is the call).
+        let mut asserted = argument.clone();
+        asserted
+            .fields
+            .insert("__typeShape".to_owned(), shape.clone());
+        check_node(ctx, Some(&asserted), false, false, settings);
+        return;
+    }
+    let argument_flags = fact
+        .get("argumentFlags")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let any_or_unknown =
+        u64::from(super::super::type_shape::flags::ANY | super::super::type_shape::flags::UNKNOWN);
+    if argument_flags & any_or_unknown == 0
+        && flag("assignable")
+        && (flag("reverseAssignable") || flag("predicateIsUnion"))
+    {
+        let kind = if flag("asserts") {
+            "assertion function"
+        } else {
+            "type guard"
+        };
+        let message = [
+            "Unnecessary conditional, expression already has the type being checked by the ",
+            kind,
+            ".",
+        ]
+        .concat();
+        ctx.report_with_message("typeGuardAlreadyIsType", message, argument.range);
+    }
+}
+
+/// Port of upstream `checkOptionalChain` for `MemberExpression[optional]` and
+/// `CallExpression[optional]`.
+fn check_optional_chain(
+    ctx: &mut RuleContext<'_>,
+    node: &LintNode,
+    before: Option<&LintNode>,
+    settings: Settings,
+) {
+    if node.field_bool("optional") != Some(true) {
+        return;
+    }
+    let Some(before) = before else { return };
+    if !settings.no_unchecked_indexed_access
+        && checked::option_chain_contains_option_array_index(node, settings)
+    {
+        return;
+    }
+    // Without a shape there is no checker verdict; stay silent.
+    if checked::is_optionable_expression(before, settings) != Some(false) {
+        return;
+    }
+    let Some(range) = question_dot_range(node, before) else {
+        return;
+    };
+    ctx.report("neverOptionalChain", range);
+}
+
+/// The `?.` token after `before`, located in the node's source text.
+fn question_dot_range(node: &LintNode, before: &LintNode) -> Option<TextRange> {
+    let text = node.text.as_deref()?;
+    let offset = before.range.end.checked_sub(node.range.start)? as usize;
+    let tail = text.get(offset..)?;
+    let mut index = 0;
+    let bytes = tail.as_bytes();
+    // Skip whitespace, comments and closing parentheses between the operand
+    // and the `?.` token.
+    while index < bytes.len() {
+        match bytes.get(index..index + 2) {
+            Some(b"?.") => {
+                let start = before.range.end + index as u32;
+                return Some(TextRange::new(start, start + 2));
+            }
+            Some(b"//") => {
+                index += tail.get(index..)?.find('\n')?;
+            }
+            Some(b"/*") => {
+                index += tail.get(index..)?.find("*/")? + 2;
+            }
+            _ => index += 1,
+        }
+    }
+    None
+}
+
+/// Port of the array-predicate branch of upstream `checkCallExpression`:
+/// `arr.filter(x => /* condition */)`.
+fn check_array_predicate(ctx: &mut RuleContext<'_>, node: &LintNode, settings: Settings) {
+    let Some(callee) = node.child("callee") else {
+        return;
+    };
+    if callee.kind != "MemberExpression" {
+        return;
+    }
+    let Some(name) = static_member_name(callee) else {
+        return;
+    };
+    if !ARRAY_PREDICATE_FUNCTIONS.contains(&name.as_str()) {
+        return;
+    }
+    if !callee
+        .child("object")
+        .is_some_and(checked::is_array_or_tuple)
+    {
+        return;
+    }
+    let Some(callback) = node.child_list("arguments").and_then(<[LintNode]>::first) else {
+        return;
+    };
+    if matches!(
+        callback.kind.as_str(),
+        "ArrowFunctionExpression" | "FunctionExpression"
+    ) {
+        if let Some(body) = callback.child("body") {
+            if body.kind != "BlockStatement" {
+                check_node(ctx, Some(body), false, false, settings);
+                return;
+            }
+            let statements = body.child_list("body").unwrap_or(&[]);
+            if let [statement] = statements {
+                if statement.kind == "ReturnStatement" {
+                    if let Some(argument) = statement.child("argument") {
+                        check_node(ctx, Some(argument), false, false, settings);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    let Some((truthy, falsy)) = checked::callback_returns(callback) else {
+        return;
+    };
+    if !falsy {
+        ctx.report("alwaysTruthyFunc", callback.range);
+    } else if !truthy {
+        ctx.report("alwaysFalsyFunc", callback.range);
+    }
+}
+
+/// `getStaticMemberAccessValue` for identifiers and string literals.
+fn static_member_name(member: &LintNode) -> Option<String> {
+    let property = member.child("property")?;
+    if member.field_bool("computed") == Some(true) {
+        return property.field_str("value").map(str::to_owned);
+    }
+    property.field_str("name").map(str::to_owned)
 }
 
 // ---------------------------------------------------------------------------
@@ -679,6 +1065,15 @@ mod tests {
         let diagnostics = run(&node);
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message_id, "comparisonBetweenLiteralTypes");
+        // Without checker shapes the type texts still fill the placeholders.
+        assert_eq!(
+            diagnostics[0].message,
+            "Unnecessary conditional, comparison is always false, since `1 === 2` is false."
+        );
+        assert_eq!(
+            diagnostics[0].data.get("trueOrFalse").map(String::as_str),
+            Some("false")
+        );
     }
 
     #[test]

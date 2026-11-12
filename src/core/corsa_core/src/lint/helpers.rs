@@ -174,6 +174,44 @@ pub(super) fn child_list<'a>(node: &'a LintNode, key: &str) -> &'a [LintNode] {
     node.child_list(key).unwrap_or(&[])
 }
 
+/// Host `__ancestorFacts` entries, outermost first, when the host sent them.
+pub(super) fn ancestor_facts(node: &LintNode) -> Option<&[Value]> {
+    node.fields
+        .get("__ancestorFacts")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+}
+
+/// The `depth`-th ancestor fact (1 is the parent).
+pub(super) fn ancestor_fact(ancestors: &[Value], depth: usize) -> Option<&Value> {
+    ancestors
+        .len()
+        .checked_sub(depth)
+        .and_then(|index| ancestors.get(index))
+}
+
+/// The kind recorded on an ancestor fact.
+pub(super) fn ancestor_kind(ancestor: &Value) -> Option<&str> {
+    ancestor.get("kind").and_then(Value::as_str)
+}
+
+/// Upstream `isFunctionOrFunctionType` (`@typescript-eslint/utils`).
+pub(super) fn is_function_or_function_type(kind: &str) -> bool {
+    matches!(
+        kind,
+        "ArrowFunctionExpression"
+            | "FunctionDeclaration"
+            | "FunctionExpression"
+            | "TSCallSignatureDeclaration"
+            | "TSConstructorType"
+            | "TSConstructSignatureDeclaration"
+            | "TSDeclareFunction"
+            | "TSEmptyBodyFunctionExpression"
+            | "TSFunctionType"
+            | "TSMethodSignature"
+    )
+}
+
 pub(super) fn rule_option_bool(node: &LintNode, key: &str) -> Option<bool> {
     node.fields
         .get("__ruleOptions")?

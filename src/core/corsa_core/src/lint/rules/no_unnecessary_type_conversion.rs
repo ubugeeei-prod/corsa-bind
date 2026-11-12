@@ -1,3 +1,4 @@
+use super::super::type_shape::{TypeShape, flags};
 use super::super::{
     LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule, TextRange,
 };
@@ -20,7 +21,7 @@ pub struct NoUnnecessaryTypeConversionRule;
 const MESSAGES: &[RuleMessage] = &[
     RuleMessage {
         id: "unnecessaryTypeConversion",
-        description: "This type conversion does not change the type or value of the expression.",
+        description: "{{violation}} does not change the type or value of the {{type}}.",
     },
     RuleMessage {
         id: "suggestRemove",
@@ -122,22 +123,48 @@ fn is_all_number_literal_integers(type_texts: &[String]) -> bool {
     })
 }
 
-fn is_empty_string_literal(node: &LintNode) -> bool {
-    node.kind == "Literal" && node.field_str("value") == Some("")
+/// Upstream `doesUnderlyingTypeMatchFlag` over the `__typeShape` fact.
+/// `constrained` selects `getConstrainedTypeAtLocation` (calls) over
+/// `getTypeAtLocation` (operators), whose type is the shape's `raw` view.
+fn shape_matches(node: &LintNode, mask: u32, constrained: bool) -> Option<bool> {
+    let shape = TypeShape::of(node)?;
+    let shape = if constrained {
+        Some(shape)
+    } else {
+        shape.raw()
+    };
+    Some(shape.is_some_and(|shape| shape.every_union_part_has(mask)))
 }
 
-/// The single positional argument of a call, rejecting spread and extra-args
-/// shapes (Go bails when `len(Arguments) != 1` or the single arg is a spread).
-fn single_call_argument(node: &LintNode) -> Option<&LintNode> {
-    let args = child_list(node, "arguments");
-    if args.len() != 1 {
-        return None;
-    }
-    let arg = &args[0];
-    if arg.kind == "SpreadElement" {
-        return None;
-    }
-    Some(arg)
+fn underlying_matches(node: &LintNode, mask: u32, wanted: TypeTextKind, constrained: bool) -> bool {
+    shape_matches(node, mask, constrained)
+        .unwrap_or_else(|| underlying_type_matches(&node.type_texts, wanted))
+}
+
+fn report(
+    ctx: &mut RuleContext<'_>,
+    range: TextRange,
+    violation: &str,
+    type_name: &str,
+    suggestions: Vec<LintSuggestion>,
+) {
+    let message = [
+        violation,
+        " does not change the type or value of the ",
+        type_name,
+        ".",
+    ]
+    .concat();
+    ctx.report_with_message_and_suggestions(
+        "unnecessaryTypeConversion",
+        message,
+        range,
+        suggestions,
+    );
+}
+
+fn is_empty_string_literal(node: &LintNode) -> bool {
+    node.kind == "Literal" && node.field_str("value") == Some("")
 }
 
 // ---------------------------------------------------------------------------
@@ -254,27 +281,28 @@ fn report_binary_plus(ctx: &mut RuleContext<'_>, node: &LintNode) {
         return;
     };
 
-    if is_empty_string_literal(right) {
-        if underlying_type_matches(&left.type_texts, TypeTextKind::String) {
-            // Conversion range covers `left.end .. node.end` (the ` + ''` tail).
-            let range = TextRange::new(left.range.end, node.range.end);
-            ctx.report_with_suggestions(
-                "unnecessaryTypeConversion",
-                range,
-                build_suggestions(node, "string", left),
-            );
-        }
-        return;
-    }
-
-    if is_empty_string_literal(left)
-        && underlying_type_matches(&right.type_texts, TypeTextKind::String)
+    if is_empty_string_literal(right)
+        && underlying_matches(left, flags::STRING_LIKE, TypeTextKind::String, false)
+    {
+        // Conversion range covers `left.end .. node.end` (the ` + ''` tail).
+        let range = TextRange::new(left.range.end, node.range.end);
+        report(
+            ctx,
+            range,
+            "Concatenating a string with ''",
+            "string",
+            build_suggestions(node, "string", left),
+        );
+    } else if is_empty_string_literal(left)
+        && underlying_matches(right, flags::STRING_LIKE, TypeTextKind::String, false)
     {
         // Conversion range covers `node.start .. right.start` (the `'' + ` head).
         let range = TextRange::new(node.range.start, right.range.start);
-        ctx.report_with_suggestions(
-            "unnecessaryTypeConversion",
+        report(
+            ctx,
             range,
+            "Concatenating '' with a string",
+            "string",
             build_suggestions(node, "string", right),
         );
     }
@@ -294,16 +322,18 @@ fn report_plus_equals(ctx: &mut RuleContext<'_>, node: &LintNode) {
     if !is_empty_string_literal(right) {
         return;
     }
-    // Go requires the assignment target to be an identifier.
-    if left.kind != "Identifier" {
-        return;
-    }
-    if !underlying_type_matches(&left.type_texts, TypeTextKind::String) {
+    if !underlying_matches(left, flags::STRING_LIKE, TypeTextKind::String, false) {
         return;
     }
 
     let suggestions = build_plus_equals_suggestions(node, left);
-    ctx.report_with_suggestions("unnecessaryTypeConversion", node.range, suggestions);
+    report(
+        ctx,
+        node.range,
+        "Concatenating a string with ''",
+        "string",
+        suggestions,
+    );
 }
 
 fn build_plus_equals_suggestions(node: &LintNode, left: &LintNode) -> Vec<LintSuggestion> {
@@ -361,15 +391,15 @@ fn report_builtin_conversion_call(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(name) = identifier_name(callee) else {
         return;
     };
-    let Some(arg) = single_call_argument(node) else {
+    let Some(arg) = first_call_argument(node) else {
         return;
     };
 
-    let (wanted, primitive) = match name.as_str() {
-        "BigInt" => (TypeTextKind::Bigint, "bigint"),
-        "Boolean" => (TypeTextKind::Boolean, "boolean"),
-        "Number" => (TypeTextKind::Number, "number"),
-        "String" => (TypeTextKind::String, "string"),
+    let (mask, wanted, primitive) = match name.as_str() {
+        "BigInt" => (flags::BIGINT_LIKE, TypeTextKind::Bigint, "bigint"),
+        "Boolean" => (flags::BOOLEAN_LIKE, TypeTextKind::Boolean, "boolean"),
+        "Number" => (flags::NUMBER_LIKE, TypeTextKind::Number, "number"),
+        "String" => (flags::STRING_LIKE, TypeTextKind::String, "string"),
         _ => return,
     };
 
@@ -380,16 +410,26 @@ fn report_builtin_conversion_call(ctx: &mut RuleContext<'_>, node: &LintNode) {
         return;
     }
 
-    if !underlying_type_matches(&arg.type_texts, wanted) {
+    if !underlying_matches(arg, mask, wanted, true) {
         return;
     }
 
     // Conversion range is the callee identifier itself (Go uses callee text range).
-    ctx.report_with_suggestions(
-        "unnecessaryTypeConversion",
+    let violation = ["Passing a ", primitive, " to ", name.as_str(), "()"].concat();
+    report(
+        ctx,
         callee.range,
+        &violation,
+        primitive,
         build_suggestions(node, primitive, arg),
     );
+}
+
+/// `node.arguments[0]`, skipping a spread.
+fn first_call_argument(node: &LintNode) -> Option<&LintNode> {
+    child_list(node, "arguments")
+        .first()
+        .filter(|arg| arg.kind != "SpreadElement")
 }
 
 // ---------------------------------------------------------------------------
@@ -400,11 +440,9 @@ fn report_string_to_string_call(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(callee) = node.child("callee") else {
         return;
     };
-    // Must be a member call with zero arguments.
-    if !child_list(node, "arguments").is_empty() {
-        return;
-    }
-    if member_property_name(callee).as_deref() != Some("toString") {
+    if member_property_name(callee).as_deref() != Some("toString")
+        || callee.field_bool("computed") == Some(true)
+    {
         return;
     }
     let Some(object) = member_object(callee) else {
@@ -412,11 +450,13 @@ fn report_string_to_string_call(ctx: &mut RuleContext<'_>, node: &LintNode) {
     };
 
     // Enum types / enum members keep their distinct value semantics; skip them.
-    if object.field_bool("__objectTypeIsEnumLike") == Some(true) {
+    if object.field_bool("__objectTypeIsEnumLike") == Some(true)
+        || TypeShape::of(object).is_some_and(TypeShape::has_enum_member_constituent)
+    {
         return;
     }
 
-    if !underlying_type_matches(&object.type_texts, TypeTextKind::String) {
+    if !underlying_matches(object, flags::STRING_LIKE, TypeTextKind::String, true) {
         return;
     }
 
@@ -425,9 +465,11 @@ fn report_string_to_string_call(ctx: &mut RuleContext<'_>, node: &LintNode) {
         return;
     };
     let range = TextRange::new(property.range.start, node.range.end);
-    ctx.report_with_suggestions(
-        "unnecessaryTypeConversion",
+    report(
+        ctx,
         range,
+        "Calling a string's .toString() method",
+        "string",
         build_suggestions(node, "string", object),
     );
 }
@@ -443,77 +485,91 @@ fn report_unary_plus(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(operand) = node.child("argument") else {
         return;
     };
-    if !underlying_type_matches(&operand.type_texts, TypeTextKind::Number) {
+    if !underlying_matches(operand, flags::NUMBER_LIKE, TypeTextKind::Number, false) {
         return;
     }
 
     // Conversion range is the `+` token: node start to operand start.
     let range = TextRange::new(node.range.start, operand.range.start);
-    ctx.report_with_suggestions(
-        "unnecessaryTypeConversion",
+    report(
+        ctx,
         range,
+        "Using the unary + operator on a number",
+        "number",
         build_suggestions(node, "number", operand),
     );
 }
 
 // ---------------------------------------------------------------------------
-// UnaryExpression: `!!x` (this node is the inner `!`, parent is the outer `!`)
+// UnaryExpression: `!!x` and `~~x`
 // ---------------------------------------------------------------------------
 
+/// The `(outer, inner)` pair of a doubled unary operator. Upstream listens on
+/// the inner node (`UnaryExpression[operator] > UnaryExpression[operator]`).
+/// A host may mark that inner node with `__doubleNegation` + `__outerRange`;
+/// otherwise the pair is read from the outer node and its argument.
+fn doubled<'a>(node: &'a LintNode, operator: &str) -> Option<(TextRange, &'a LintNode)> {
+    if node.field_str("operator") != Some(operator) {
+        return None;
+    }
+    if node.field_bool("__doubleNegation") == Some(true) {
+        return Some((outer_range(node)?, node));
+    }
+    let inner = node.child("argument")?;
+    if inner.kind != "UnaryExpression"
+        || inner.field_str("operator") != Some(operator)
+        || inner.field_bool("__doubleNegation") == Some(true)
+    {
+        return None;
+    }
+    Some((node.range, inner))
+}
+
 fn report_double_bang(ctx: &mut RuleContext<'_>, node: &LintNode) {
-    if node.field_str("operator") != Some("!") {
-        return;
-    }
-    // The parent must be another `!` whose operand is this node. The host marks the
-    // inner node of a `!!` pair with `__doubleNegation = true` and provides the
-    // outer node range via `__outerRange`.
-    if node.field_bool("__doubleNegation") != Some(true) {
-        return;
-    }
-    let Some(operand) = node.child("argument") else {
+    let Some((outer_range, inner)) = doubled(node, "!") else {
         return;
     };
-    if !underlying_type_matches(&operand.type_texts, TypeTextKind::Boolean) {
+    let Some(operand) = inner.child("argument") else {
+        return;
+    };
+    if !underlying_matches(operand, flags::BOOLEAN_LIKE, TypeTextKind::Boolean, false) {
         return;
     }
 
-    let Some(outer_range) = outer_range(node) else {
-        return;
-    };
     // Range covers both `!` tokens: outer start to inner start + 1.
-    let range = TextRange::new(outer_range.start, node.range.start + 1);
-    ctx.report_with_suggestions(
-        "unnecessaryTypeConversion",
+    let range = TextRange::new(outer_range.start, inner.range.start + 1);
+    report(
+        ctx,
         range,
+        "Using !! on a boolean",
+        "boolean",
         build_double_suggestions(outer_range, "boolean", operand),
     );
 }
 
-// ---------------------------------------------------------------------------
-// UnaryExpression: `~~x` (this node is the inner `~`, parent is the outer `~`)
-// ---------------------------------------------------------------------------
-
 fn report_double_tilde(ctx: &mut RuleContext<'_>, node: &LintNode) {
-    if node.field_str("operator") != Some("~") {
-        return;
-    }
-    if node.field_bool("__doubleNegation") != Some(true) {
-        return;
-    }
-    let Some(operand) = node.child("argument") else {
+    let Some((outer_range, inner)) = doubled(node, "~") else {
         return;
     };
-    if !is_all_number_literal_integers(&operand.type_texts) {
+    let Some(operand) = inner.child("argument") else {
+        return;
+    };
+    let integers = match TypeShape::of(operand) {
+        Some(shape) => shape
+            .raw()
+            .is_some_and(TypeShape::every_union_part_is_integer_literal),
+        None => is_all_number_literal_integers(&operand.type_texts),
+    };
+    if !integers {
         return;
     }
 
-    let Some(outer_range) = outer_range(node) else {
-        return;
-    };
-    let range = TextRange::new(outer_range.start, node.range.start + 1);
-    ctx.report_with_suggestions(
-        "unnecessaryTypeConversion",
+    let range = TextRange::new(outer_range.start, inner.range.start + 1);
+    report(
+        ctx,
         range,
+        "Using ~~ on an integer",
+        "number",
         build_double_suggestions(outer_range, "number", operand),
     );
 }
@@ -745,8 +801,8 @@ mod tests {
     }
 
     #[test]
-    fn ignores_string_call_with_extra_arg() {
-        // String('asdf', console.log('extra')); two args -> no report
+    fn reports_string_call_with_extra_arg() {
+        // String('asdf', console.log('extra')): upstream reads `arguments[0]`.
         let node = from(json!({
             "kind": "CallExpression",
             "range": { "start": 0, "end": 36 },
@@ -766,7 +822,7 @@ mod tests {
                 ]
             }
         }));
-        assert!(run(&node).is_empty());
+        assert_eq!(run(&node).len(), 1);
     }
 
     #[test]

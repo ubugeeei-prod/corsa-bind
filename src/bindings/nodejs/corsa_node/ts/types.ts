@@ -282,6 +282,8 @@ export interface NativeLintDiagnostic {
   ruleName: string;
   messageId: string;
   message: string;
+  /** Values for the `{{name}}` placeholders of the `messageId` template. */
+  data?: Readonly<Record<string, string>>;
   range: NativeLintRange;
   suggestions?: readonly NativeLintSuggestion[];
 }

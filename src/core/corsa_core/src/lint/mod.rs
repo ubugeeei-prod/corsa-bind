@@ -1,12 +1,23 @@
 //! Rust-authored lint rule primitives and built-in type-aware rules.
 
+mod checker_types;
+#[cfg(test)]
+mod checker_types_tests;
+mod constrained_shape;
 mod context;
 mod helpers;
 mod host_facts;
+mod promise_facts;
+#[cfg(test)]
+mod promise_facts_tests;
 mod registry;
 mod rules;
 #[cfg(test)]
 mod tests;
+mod type_shape;
+#[cfg(test)]
+mod type_shape_tests;
+mod type_tree;
 mod types;
 
 pub use context::{RuleContext, RustLintRule};
@@ -23,17 +34,17 @@ pub use rules::{
     NoUnnecessaryConditionRule, NoUnnecessaryQualifierRule, NoUnnecessaryTemplateExpressionRule,
     NoUnnecessaryTypeArgumentsRule, NoUnnecessaryTypeAssertionRule,
     NoUnnecessaryTypeConversionRule, NoUnnecessaryTypeParametersRule, NoUnsafeArgumentRule,
-    NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeEnumComparisonRule, NoUnsafeMemberAccessRule,
-    NoUnsafeReturnRule, NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule,
-    NoUselessDefaultAssignmentRule, NonNullableTypeAssertionStyleRule, OnlyThrowErrorRule,
-    PreferFindRule, PreferIncludesRule, PreferNullishCoalescingRule, PreferOptionalChainRule,
-    PreferPromiseRejectErrorsRule, PreferReadonlyParameterTypesRule, PreferReadonlyRule,
-    PreferReduceTypeParameterRule, PreferRegexpExecRule, PreferReturnThisTypeRule,
-    PreferStringStartsEndsWithRule, PromiseFunctionAsyncRule, RelatedGetterSetterPairsRule,
-    RequireArraySortCompareRule, RequireAwaitRule, RestrictPlusOperandsRule,
-    RestrictTemplateExpressionsRule, ReturnAwaitRule, StrictBooleanExpressionsRule,
-    StrictVoidReturnRule, SwitchExhaustivenessCheckRule, UnboundMethodRule,
-    UseUnknownInCatchCallbackVariableRule,
+    NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeEnumAssignmentRule,
+    NoUnsafeEnumComparisonRule, NoUnsafeMemberAccessRule, NoUnsafeReturnRule,
+    NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, NoUselessDefaultAssignmentRule,
+    NonNullableTypeAssertionStyleRule, OnlyThrowErrorRule, PreferFindRule, PreferIncludesRule,
+    PreferNullishCoalescingRule, PreferOptionalChainRule, PreferPromiseRejectErrorsRule,
+    PreferReadonlyParameterTypesRule, PreferReadonlyRule, PreferReduceTypeParameterRule,
+    PreferRegexpExecRule, PreferReturnThisTypeRule, PreferStringStartsEndsWithRule,
+    PromiseFunctionAsyncRule, RelatedGetterSetterPairsRule, RequireArraySortCompareRule,
+    RequireAwaitRule, RestrictPlusOperandsRule, RestrictTemplateExpressionsRule, ReturnAwaitRule,
+    StrictBooleanExpressionsRule, StrictVoidReturnRule, SwitchExhaustivenessCheckRule,
+    UnboundMethodRule, UseUnknownInCatchCallbackVariableRule,
 };
 pub use types::{
     LintDiagnostic, LintFix, LintNode, LintSuggestion, NodeMetadataDepth, RuleBridgeRequirements,
