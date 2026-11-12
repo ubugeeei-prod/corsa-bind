@@ -247,7 +247,7 @@ fn report_computed_property(ctx: &mut RuleContext<'_>, node: &LintNode) {
             }]
         })
         .unwrap_or_default();
-    ctx.report_with_suggestions("useDot", property.range, suggestions);
+    ctx.report_with_data_and_suggestions("useDot", property.range, &[("key", &key)], suggestions);
 }
 
 /// Mirrors `buildUseDotMessage`, whose `key` is the *formatted* literal: quoted
@@ -353,9 +353,10 @@ fn report_dot_keyword_access(ctx: &mut RuleContext<'_>, node: &LintNode) {
             fixes,
         }]
     });
-    ctx.report_with_suggestions(
+    ctx.report_with_data_and_suggestions(
         "useBrackets",
         property.range,
+        &[("key", &name)],
         suggestions.unwrap_or_default(),
     );
 }

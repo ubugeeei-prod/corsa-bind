@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::{
     LintDiagnostic, LintNode, LintSuggestion, NodeMetadataDepth, RuleBridgeRequirements,
     RuleMessage, RuleMeta, TextRange,
@@ -169,13 +171,7 @@ impl<'a> RuleContext<'a> {
         range: TextRange,
         suggestions: Vec<LintSuggestion>,
     ) {
-        self.diagnostics.push(LintDiagnostic {
-            rule_name: self.rule.name().to_owned(),
-            message_id: message_id.to_owned(),
-            message: self.message(message_id),
-            range,
-            suggestions,
-        });
+        self.report_with_data_and_suggestions(message_id, range, &[], suggestions);
     }
 
     /// Reports a diagnostic whose text fills in the message's `{{name}}`
@@ -186,16 +182,31 @@ impl<'a> RuleContext<'a> {
         range: TextRange,
         data: &[(&str, &str)],
     ) {
-        let mut message = self.message(message_id);
-        for (name, value) in data {
-            message = message.replace(&format!("{{{{{name}}}}}"), value);
-        }
-        self.report_formatted(message_id, message, range, Vec::new());
+        self.report_with_data_and_suggestions(message_id, range, data, Vec::new());
+    }
+
+    /// Like [`Self::report_with_data`], with suggested fixes.
+    pub fn report_with_data_and_suggestions(
+        &mut self,
+        message_id: &'static str,
+        range: TextRange,
+        data: &[(&str, &str)],
+        suggestions: Vec<LintSuggestion>,
+    ) {
+        let template = self.message(message_id);
+        let data: BTreeMap<String, String> = data
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+            .collect();
+        let message = render_template(&template, &data);
+        self.push(message_id, message, data, range, suggestions);
     }
 
     /// Reports a diagnostic whose message the rule rendered itself (for
     /// example with the offending type's name filled in). `message_id` still
-    /// names the catalog entry; its description is the generic fallback.
+    /// names the catalog entry; when that entry has `{{name}}` placeholders,
+    /// their values are recovered from `message` so hosts that render the
+    /// entry themselves produce the same text.
     pub fn report_formatted(
         &mut self,
         message_id: &'static str,
@@ -203,13 +214,8 @@ impl<'a> RuleContext<'a> {
         range: TextRange,
         suggestions: Vec<LintSuggestion>,
     ) {
-        self.diagnostics.push(LintDiagnostic {
-            rule_name: self.rule.name().to_owned(),
-            message_id: message_id.to_owned(),
-            message,
-            range,
-            suggestions,
-        });
+        let data = extract_template_data(&self.message(message_id), &message).unwrap_or_default();
+        self.push(message_id, message, data, range, suggestions);
     }
 
     /// Reports a diagnostic with a message the rule rendered itself.
@@ -233,6 +239,24 @@ impl<'a> RuleContext<'a> {
         self.report_formatted(message_id, message, range, suggestions);
     }
 
+    fn push(
+        &mut self,
+        message_id: &'static str,
+        message: String,
+        data: BTreeMap<String, String>,
+        range: TextRange,
+        suggestions: Vec<LintSuggestion>,
+    ) {
+        self.diagnostics.push(LintDiagnostic {
+            rule_name: self.rule.name().to_owned(),
+            message_id: message_id.to_owned(),
+            message,
+            data,
+            range,
+            suggestions,
+        });
+    }
+
     pub(crate) fn finish(self) -> Vec<LintDiagnostic> {
         self.diagnostics
     }
@@ -245,5 +269,131 @@ impl<'a> RuleContext<'a> {
             .map(|message| message.description)
             .unwrap_or(message_id)
             .to_owned()
+    }
+}
+
+/// Fills `{{name}}` placeholders in `template` from `data`, leaving unknown
+/// placeholders untouched (as ESLint's message interpolation does).
+fn render_template(template: &str, data: &BTreeMap<String, String>) -> String {
+    let mut message = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(open) = rest.find("{{") {
+        message.push_str(&rest[..open]);
+        let after = &rest[open + 2..];
+        match after.find("}}") {
+            Some(close) => {
+                let name = after[..close].trim();
+                match data.get(name) {
+                    Some(value) => message.push_str(value),
+                    None => message.push_str(&rest[open..open + 2 + close + 2]),
+                }
+                rest = &after[close + 2..];
+            }
+            None => {
+                message.push_str(&rest[open..]);
+                rest = "";
+            }
+        }
+    }
+    message.push_str(rest);
+    message
+}
+
+/// Recovers the placeholder values that turn `template` into `message`, or
+/// `None` when the template has no placeholders or `message` does not follow
+/// it. Literal segments are matched left to right; each placeholder takes the
+/// shortest text up to the next literal segment (the last one takes the rest),
+/// and a placeholder repeated in the template must take the same value.
+fn extract_template_data(template: &str, message: &str) -> Option<BTreeMap<String, String>> {
+    let mut literals = Vec::new();
+    let mut names = Vec::new();
+    let mut rest = template;
+    while let Some(open) = rest.find("{{") {
+        let close = rest[open + 2..].find("}}")?;
+        literals.push(&rest[..open]);
+        names.push(rest[open + 2..open + 2 + close].trim());
+        rest = &rest[open + 2 + close + 2..];
+    }
+    if names.is_empty() {
+        return None;
+    }
+    literals.push(rest);
+
+    let mut data = BTreeMap::new();
+    let mut remaining = message.strip_prefix(literals[0])?;
+    for (index, name) in names.iter().enumerate() {
+        let next = literals[index + 1];
+        let is_last = index + 1 == names.len();
+        let value = if is_last {
+            let value = remaining.strip_suffix(next)?;
+            remaining = "";
+            value
+        } else if next.is_empty() {
+            return None;
+        } else {
+            let end = remaining.find(next)?;
+            let value = &remaining[..end];
+            remaining = &remaining[end + next.len()..];
+            value
+        };
+        match data.get(*name) {
+            Some(existing) if existing != value => return None,
+            Some(_) => {}
+            None => {
+                data.insert((*name).to_owned(), value.to_owned());
+            }
+        }
+    }
+    Some(data)
+}
+
+#[cfg(test)]
+mod template_tests {
+    use std::collections::BTreeMap;
+
+    use super::{extract_template_data, render_template};
+
+    fn map(entries: &[(&str, &str)]) -> BTreeMap<String, String> {
+        entries
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn renders_known_and_keeps_unknown_placeholders() {
+        let data = map(&[("type", "`any`")]);
+        assert_eq!(
+            render_template("Unsafe {{type}} and {{ other }}.", &data),
+            "Unsafe `any` and {{ other }}."
+        );
+    }
+
+    #[test]
+    fn extracts_placeholder_values_from_rendered_messages() {
+        let template = "Unnecessary conditional, comparison is always {{trueOrFalse}}, since `{{left}} {{operator}} {{right}}` is {{trueOrFalse}}.";
+        let message =
+            "Unnecessary conditional, comparison is always true, since `1 === 1` is true.";
+        assert_eq!(
+            extract_template_data(template, message),
+            Some(map(&[
+                ("left", "1"),
+                ("operator", "==="),
+                ("right", "1"),
+                ("trueOrFalse", "true")
+            ]))
+        );
+        assert_eq!(
+            extract_template_data(
+                "{{violation}} does not change the type or value of the {{type}}.",
+                "String(x) does not change the type or value of the string."
+            ),
+            Some(map(&[("type", "string"), ("violation", "String(x)")]))
+        );
+        assert_eq!(
+            extract_template_data("No placeholders.", "No placeholders."),
+            None
+        );
+        assert_eq!(extract_template_data("Prefix {{a}}.", "Other text"), None);
     }
 }

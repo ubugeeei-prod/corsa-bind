@@ -143,6 +143,12 @@ pub struct LintDiagnostic {
     pub message_id: String,
     /// Rendered user-facing diagnostic message.
     pub message: String,
+    /// Values for the `{{name}}` placeholders of the message catalog entry,
+    /// so hosts that render `message_id` themselves (ESLint/Oxlint
+    /// `context.report({ messageId, data })`) produce the same text as
+    /// [`Self::message`]. Empty when the catalog entry has no placeholders.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub data: BTreeMap<String, String>,
     /// Source byte range reported by the rule.
     pub range: TextRange,
     /// Optional suggestions for automated repair.

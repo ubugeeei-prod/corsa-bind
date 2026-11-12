@@ -103,9 +103,11 @@ fn shapes_available(node: &LintNode) -> bool {
     };
     match callee_name(callee).as_deref() {
         Some("Function") => TypeTree::of(callee).is_some(),
-        Some(_) => first_child_list_item(node, "arguments")
+        // An unresolvable callee name says nothing about the host: decide on
+        // the handler's facts like any other call, so hosts that send no
+        // type trees keep the text-based check.
+        _ => first_child_list_item(node, "arguments")
             .is_none_or(|handler| TypeTree::of(handler).is_some()),
-        None => true,
     }
 }
 
@@ -264,6 +266,29 @@ mod tests {
 
         let text = json!({ "id": "s", "flags": 1 << 5, "text": "string" });
         assert!(run(&call(identifier("setTimeout", true), handler(text))).is_empty());
+    }
+
+    #[test]
+    fn keeps_text_check_for_hosts_without_type_trees() {
+        let member = json!({
+            "kind": "MemberExpression",
+            "range": { "start": 0, "end": 10 },
+            "children": { "property": identifier("setTimeout", false) }
+        });
+        let code = json!({
+            "kind": "Identifier",
+            "range": { "start": 11, "end": 15 },
+            "fields": { "name": "code" },
+            "typeTexts": ["string"]
+        });
+        let diagnostics = run(&call(member.clone(), code));
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].message_id, "unexpected");
+
+        // With a type tree, the upstream port applies: a non-global object's
+        // `setTimeout` is not the implied-eval API.
+        let text = json!({ "id": "s", "flags": 1 << 5, "text": "string" });
+        assert!(run(&call(member, handler(text))).is_empty());
     }
 
     #[test]

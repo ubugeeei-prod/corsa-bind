@@ -40,7 +40,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "await-thenable: awaiting a number",
           "diagnostics": [
-            "await-thenable/unexpected@0..12: Unexpected await of a non-thenable value.",
+            "await-thenable/unexpected@0..12: Unexpected \`await\` of a non-Promise (non-"Thenable") value.",
           ],
         },
         {
@@ -190,7 +190,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "dot-notation: computed access can be dot access",
           "diagnostics": [
-            "dot-notation/useDot@7..14: [{{key}}] is better written in dot notation. | suggestions useDot@6..15=>.value: ["value"] is better written in dot notation.",
+            "dot-notation/useDot@7..14: ["value"] is better written in dot notation. | suggestions useDot@6..15=>.value: ["value"] is better written in dot notation.",
           ],
         },
         {
@@ -208,7 +208,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-deprecated: deprecated identifier use",
           "diagnostics": [
-            "no-deprecated/deprecated@0..8: This declaration is deprecated.",
+            "no-deprecated/deprecated@0..8: \`oldValue\` is deprecated.",
           ],
         },
         {
@@ -232,7 +232,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-redundant-type-constituents: string literal overridden by string primitive",
           "diagnostics": [
-            "no-redundant-type-constituents/literalOverridden@9..12: \"a\" is overridden by string in this union type.",
+            "no-redundant-type-constituents/literalOverridden@9..12: "a" is overridden by string in this union type.",
           ],
         },
         {
@@ -274,7 +274,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-unnecessary-type-conversion: String called on a string value",
           "diagnostics": [
-            "no-unnecessary-type-conversion/unnecessaryTypeConversion@0..6: This type conversion does not change the type or value of the expression. | suggestions suggestRemove@0..13=>value: Remove the type conversion. | suggestSatisfies@0..13=>value satisfies string: Instead, assert that the value satisfies the primitive type.",
+            "no-unnecessary-type-conversion/unnecessaryTypeConversion@0..6: Passing a string to String() does not change the type or value of the string. | suggestions suggestRemove@0..13=>value: Remove the type conversion. | suggestSatisfies@0..13=>value satisfies string: Instead, assert that the value satisfies the primitive type.",
           ],
         },
         {
@@ -364,7 +364,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "require-await: async function has no await",
           "diagnostics": [
-            "require-await/missingAwait@0..30: Function has no 'await' expression.",
+            "require-await/missingAwait@0..30: Async function has no 'await' expression.",
           ],
         },
         {
@@ -388,7 +388,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "switch-exhaustiveness-check: union switch misses a branch",
           "diagnostics": [
-            "switch-exhaustiveness-check/switchIsNotExhaustive@8..13: Switch is not exhaustive. Cases not matched: {{missingBranches}} | suggestions addMissingCases@28..28=>
+            "switch-exhaustiveness-check/switchIsNotExhaustive@8..13: Switch is not exhaustive. Cases not matched: 'b' | suggestions addMissingCases@28..28=>
       case 'b': { throw new Error('Not implemented yet: \\'b\\' case') }: Add branches for missing cases.",
           ],
         },
@@ -880,9 +880,7 @@ const diagnosticCases = [
             __typeDetail: {
               id: "color",
               flags: 32768 | 2048,
-              parts: [
-                { id: "color", flags: 32768 | 2048, enumId: "color", enumText: "Color" },
-              ],
+              parts: [{ id: "color", flags: 32768 | 2048, enumId: "color", enumText: "Color" }],
             },
           },
         }),

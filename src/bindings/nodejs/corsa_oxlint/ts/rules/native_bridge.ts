@@ -201,10 +201,14 @@ export function reportNativeDiagnostics(
     context.report({
       node: reportNodeForRange(node, diagnostic.range),
       messageId: diagnostic.messageId,
+      ...(diagnostic.data ? { data: diagnostic.data } : {}),
       ...(diagnostic.suggestions?.length
         ? {
             suggest: diagnostic.suggestions.map((suggestion) => ({
               messageId: suggestion.messageId,
+              // Suggestion templates share the report's placeholders
+              // (for example dot-notation's `{{key}}`).
+              ...(diagnostic.data ? { data: diagnostic.data } : {}),
               fix: (fixer: any) =>
                 suggestion.fixes.map((fix) =>
                   fixer.replaceTextRange(oxlintRange(fix.range), fix.replacementText),

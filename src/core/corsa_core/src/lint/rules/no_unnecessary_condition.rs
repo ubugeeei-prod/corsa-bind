@@ -1,4 +1,4 @@
-use super::super::type_shape::TypeShape;
+use super::super::type_shape::{StaticValue, TypeShape};
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule, TextRange};
 use crate::utils::split_type_text;
 
@@ -229,9 +229,7 @@ fn check_loop(
     }
     if mode == "always" {
         let true_literal = match TypeShape::of(test) {
-            Some(shape) => {
-                shape.static_value() == Some(super::super::type_shape::StaticValue::Boolean(true))
-            }
+            Some(shape) => shape.static_value() == Some(StaticValue::Boolean(true)),
             None => is_true_keyword(test) || is_true_literal_type(&test.type_texts),
         };
         if true_literal {
@@ -421,8 +419,53 @@ fn check_comparison(
         return;
     }
     if is_static_value(&left.type_texts) && is_static_value(&right.type_texts) {
-        ctx.report("comparisonBetweenLiteralTypes", report.range);
+        // Hosts without checker type shapes: read the literal values from the
+        // type texts so the message's placeholders are still filled in.
+        let left_text = &type_parts(&left.type_texts)[0];
+        let right_text = &type_parts(&right.type_texts)[0];
+        let outcome = parse_static_atom(left_text)
+            .zip(parse_static_atom(right_text))
+            .and_then(|(left_value, right_value)| {
+                compare::evaluate(&left_value, operator, &right_value)
+            });
+        let Some(outcome) = outcome else {
+            return;
+        };
+        ctx.report_with_data(
+            "comparisonBetweenLiteralTypes",
+            report.range,
+            &[
+                ("trueOrFalse", if outcome { "true" } else { "false" }),
+                ("left", left_text),
+                ("operator", operator),
+                ("right", right_text),
+            ],
+        );
     }
+}
+
+/// The literal value a static type-text atom (see [`is_static_atom`]) names.
+fn parse_static_atom(part: &str) -> Option<StaticValue> {
+    match part {
+        "true" => return Some(StaticValue::Boolean(true)),
+        "false" => return Some(StaticValue::Boolean(false)),
+        "null" => return Some(StaticValue::Null),
+        "undefined" => return Some(StaticValue::Undefined),
+        _ => {}
+    }
+    if is_string_literal_atom(part) {
+        if part.starts_with('"') {
+            if let Ok(serde_json::Value::String(text)) = serde_json::from_str(part) {
+                return Some(StaticValue::String(text));
+            }
+        }
+        return Some(StaticValue::String(part[1..part.len() - 1].to_owned()));
+    }
+    if is_bigint_literal_atom(part) {
+        let digits = part[..part.len() - 1].parse::<i128>().ok()?;
+        return Some(StaticValue::BigInt(digits.to_string()));
+    }
+    part.parse::<f64>().ok().map(StaticValue::Number)
 }
 
 /// `checker.typeToString` of a literal type: the host's rendering when it
@@ -1022,6 +1065,15 @@ mod tests {
         let diagnostics = run(&node);
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message_id, "comparisonBetweenLiteralTypes");
+        // Without checker shapes the type texts still fill the placeholders.
+        assert_eq!(
+            diagnostics[0].message,
+            "Unnecessary conditional, comparison is always false, since `1 === 2` is false."
+        );
+        assert_eq!(
+            diagnostics[0].data.get("trueOrFalse").map(String::as_str),
+            Some("false")
+        );
     }
 
     #[test]
