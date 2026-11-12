@@ -178,6 +178,23 @@ impl<'a> RuleContext<'a> {
         });
     }
 
+    /// Reports a diagnostic whose text fills the message's placeholders,
+    /// such as typescript-eslint's `{{name}}`.
+    pub fn report_with_message(
+        &mut self,
+        message_id: &'static str,
+        message: String,
+        range: TextRange,
+    ) {
+        self.diagnostics.push(LintDiagnostic {
+            rule_name: self.rule.name().to_owned(),
+            message_id: message_id.to_owned(),
+            message,
+            range,
+            suggestions: Vec::new(),
+        });
+    }
+
     pub(crate) fn finish(self) -> Vec<LintDiagnostic> {
         self.diagnostics
     }

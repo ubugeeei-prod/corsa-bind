@@ -1,7 +1,8 @@
-use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
+use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule, TextRange};
 use crate::lint::helpers::{
     is_obviously_promise_like, is_promise_like_node, strip_chain_expression,
 };
+use crate::lint::promise_facts::{is_any, promise_fact};
 
 /// Type-aware port of the typescript-eslint `require-await` rule.
 ///
@@ -13,7 +14,7 @@ pub struct RequireAwaitRule;
 
 const MESSAGES: &[RuleMessage] = &[RuleMessage {
     id: "missingAwait",
-    description: "Function has no 'await' expression.",
+    description: "{{name}} has no 'await' expression.",
 }];
 
 // Mirrors the Go listener set:
@@ -82,8 +83,70 @@ impl RustLintRule for RequireAwaitRule {
             return;
         }
 
-        ctx.report("missingAwait", node.range);
+        // typescript-eslint names the function and reports its head.
+        let message = format!(
+            "{} has no 'await' expression.",
+            function_name_with_kind(node, is_generator)
+        );
+        ctx.report_with_message("missingAwait", message, head_range(node));
     }
+}
+
+/// `upperCaseFirst(getFunctionNameWithKind(node))`, from the host's
+/// `__functionKind` / `__functionName` / `__functionStatic` facts.
+fn function_name_with_kind(node: &LintNode, generator: bool) -> String {
+    let mut words = Vec::new();
+    if node.field_bool("__functionStatic") == Some(true) {
+        words.push("static".to_owned());
+    }
+    words.push("async".to_owned());
+    if generator {
+        words.push("generator".to_owned());
+    }
+    match node.field_str("__functionKind") {
+        Some(kind) => words.push(kind.to_owned()),
+        None => {
+            if node.kind == "ArrowFunctionExpression" {
+                words.push("arrow".to_owned());
+            }
+            words.push("function".to_owned());
+        }
+    }
+    if let Some(name) = node.field_str("__functionName") {
+        words.push(format!("'{name}'"));
+    }
+    let text = words.join(" ");
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => text,
+    }
+}
+
+/// `getFunctionHeadLoc`: the `=>` of an arrow, a member from its key, and
+/// otherwise the function up to its parameters.
+fn head_range(node: &LintNode) -> TextRange {
+    if node.kind == "ArrowFunctionExpression" {
+        if let (Some(text), Some(body)) = (node.text.as_deref(), node.child("body")) {
+            let offset = body.range.start.saturating_sub(node.range.start) as usize;
+            if let Some(index) = text.get(..offset).and_then(|head| head.rfind("=>")) {
+                let start = node.range.start + index as u32;
+                return TextRange::new(start, start + 2);
+            }
+        }
+        return node.range;
+    }
+    let start = node
+        .fields
+        .get("__functionHeadStart")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|start| u32::try_from(start).ok())
+        .unwrap_or(node.range.start);
+    let end = node
+        .child_list("params")
+        .and_then(|params| params.first())
+        .map_or(node.range.end, |param| param.range.start);
+    TextRange::new(start, end.max(start))
 }
 
 /// Returns whether the function's body is an empty block statement.
@@ -147,6 +210,15 @@ fn scope_is_async_yield(node: &LintNode) -> bool {
             return;
         }
         let is_delegate = candidate.field_bool("delegate").unwrap_or(false);
+        let checker = if is_delegate {
+            promise_fact(argument, "asyncIterable")
+        } else {
+            promise_fact(argument, "thenable")
+        };
+        if let Some(async_yield) = checker {
+            found = async_yield || is_any(argument) == Some(true);
+            return;
+        }
         if is_delegate {
             // `yield* x`: delegate is async if `x` exposes Symbol.asyncIterator.
             if candidate.field_bool("__yieldDelegatesAsyncIterable") == Some(true) {
@@ -163,6 +235,11 @@ fn scope_is_async_yield(node: &LintNode) -> bool {
 /// Returns whether an expression is thenable, using both the structural
 /// `Promise.resolve()` / `new Promise()` recognizers and the type-text facts.
 fn is_thenable_expression(node: &LintNode) -> bool {
+    if let Some(thenable) = promise_fact(node, "thenable") {
+        // An `any` value (often an unresolved type) may well be a promise:
+        // stay silent rather than ask to drop `async`.
+        return thenable || is_any(node) == Some(true);
+    }
     is_obviously_promise_like(node) || is_promise_like_node(node)
 }
 

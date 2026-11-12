@@ -3,6 +3,9 @@
 mod context;
 mod helpers;
 mod host_facts;
+mod promise_facts;
+#[cfg(test)]
+mod promise_facts_tests;
 mod registry;
 mod rules;
 #[cfg(test)]

@@ -5,6 +5,7 @@ use crate::lint::helpers::{
     identifier_name, is_any_like_node, is_error_like_node, is_unknown_like_node,
     rule_allow_list_names, rule_option_bool, strip_chain_expression, type_texts_match_names,
 };
+use crate::lint::promise_facts::{is_any, is_undefined, is_unknown, promise_fact};
 
 /// Type-aware rule that requires thrown values to be Error-like.
 ///
@@ -71,7 +72,29 @@ impl RustLintRule for OnlyThrowErrorRule {
         };
         let options = Options::from_node(node);
 
+        if options.allow_rethrowing && is_rethrown_error(node, argument) {
+            return;
+        }
+
         if type_texts_match_names(&argument.type_texts, &options.allow) {
+            return;
+        }
+
+        // Checker facts mirror `checkThrowArgument` exactly.
+        if let Some(undefined) = is_undefined(argument) {
+            if undefined {
+                ctx.report("undef", argument.range);
+                return;
+            }
+            if options.allow_throwing_any && is_any(argument) == Some(true) {
+                return;
+            }
+            if options.allow_throwing_unknown && is_unknown(argument) == Some(true) {
+                return;
+            }
+            if promise_fact(argument, "error") != Some(true) {
+                ctx.report("object", argument.range);
+            }
             return;
         }
 
@@ -86,10 +109,6 @@ impl RustLintRule for OnlyThrowErrorRule {
         }
 
         if options.allow_throwing_unknown && is_unknown_like_node(argument) {
-            return;
-        }
-
-        if options.allow_rethrowing && is_rethrown_error(node, argument) {
             return;
         }
 
@@ -149,6 +168,15 @@ fn is_rethrown_error(node: &LintNode, argument: &LintNode) -> bool {
             .and_then(Value::as_str);
         if first_param != Some(thrown_name.as_str()) {
             continue;
+        }
+        // Upstream requires the parameter itself to be the binding, so a
+        // rest or defaulted first parameter is no rethrow.
+        if ancestor
+            .get("firstParamIsIdentifier")
+            .and_then(Value::as_bool)
+            == Some(false)
+        {
+            return false;
         }
         if ancestor.get("parentKind").and_then(Value::as_str) != Some("CallExpression") {
             continue;
