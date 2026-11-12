@@ -4,7 +4,7 @@ use super::super::{
     LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule, TextRange,
 };
 use crate::lint::helpers::rule_option_bool;
-use crate::utils::{TypeTextKind, classify_type_text, split_top_level_type_text};
+use crate::lint::type_shape::{flags, node_type_flags};
 
 /// Type-aware rule that disallows `void`-typed expressions in confusing value
 /// positions. Faithful port of the tsgolint `no-confusing-void-expression` rule.
@@ -141,6 +141,13 @@ impl<'a> Ancestor<'a> {
             .unwrap_or(false)
     }
 
+    /// Whether the descended-from child is the last item of the list it sits
+    /// in (for example the last expression of a sequence). `None` when the host
+    /// did not record list positions.
+    fn child_is_last(&self) -> Option<bool> {
+        self.raw.get("childIsLast").and_then(Value::as_bool)
+    }
+
     /// Whether the descended-from child is the consequent or alternate of a
     /// conditional (ternary) expression.
     fn child_is_branch(&self) -> bool {
@@ -196,6 +203,12 @@ fn find_invalid_ancestor(chain: &[Ancestor<'_>], opts: Options) -> Option<usize>
                 index += 1;
                 continue;
             }
+            // e.g. `console?.log('foo')`: typescript-eslint checks the chain's
+            // own parent instead.
+            "ChainExpression" => {
+                index += 1;
+                continue;
+            }
             "LogicalExpression" | "BinaryExpression" => {
                 if let Some(operator) = parent.operator() {
                     if is_logical_operator(operator) && parent.child_is_right() {
@@ -208,9 +221,9 @@ fn find_invalid_ancestor(chain: &[Ancestor<'_>], opts: Options) -> Option<usize>
                 // Other binary operators (incl. comma handled below) fall through.
             }
             "SequenceExpression"
-                // ts-eslint's comma handling: `a, console.log(b)` where the void
-                // expression is the LEFT operand is valid.
-                if parent.child_is_left() => {
+                // ts-eslint's comma handling: a void expression that is not the
+                // last expression of the sequence is valid (`(log(), value)`).
+                if parent.child_is_left() || parent.child_is_last() == Some(false) => {
                     return None;
                 }
                 // Right operand of a sequence falls through (invalid).
@@ -250,7 +263,11 @@ fn check_expression(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let opts = Options::from_node(node);
 
     // Bail unless the expression's type is void-like.
-    if !is_void_like(&node.type_texts) {
+    let void_like = match node_type_flags(node) {
+        Some(type_flags) => type_flags & flags::VOID_LIKE != 0,
+        None => is_void_like(&node.type_texts),
+    };
+    if !void_like {
         return;
     }
 
@@ -323,21 +340,14 @@ fn ancestor_chain(node: &LintNode) -> Vec<Ancestor<'_>> {
         .unwrap_or_default()
 }
 
-/// Whether any rendered type text is void-like (matches `TypeFlagsVoidLike`:
-/// `void` or `undefined`). Mirrors `IsTypeFlagSet(t, VoidLike)` over union parts.
+/// Whether the expression's type is void-like. Mirrors typescript-eslint's
+/// `isTypeFlagSet(type, VoidLike)`: the type itself must be `void` or
+/// `undefined`. A union such as `void | undefined` or `Promise<void> | undefined`
+/// carries the `Union` flag instead and is not void-like.
 fn is_void_like(type_texts: &[String]) -> bool {
-    type_texts.iter().any(|text| {
-        let trimmed = text.trim();
-        if trimmed == "void" || trimmed == "undefined" {
-            return true;
-        }
-        split_top_level_type_text(trimmed, '|').iter().any(|part| {
-            let part = part.trim();
-            part == "void"
-                || part == "undefined"
-                || classify_type_text(Some(part)) == TypeTextKind::Nullish && part != "null"
-        })
-    })
+    type_texts
+        .iter()
+        .any(|text| matches!(text.trim(), "void" | "undefined"))
 }
 
 #[cfg(test)]
@@ -501,5 +511,63 @@ mod tests {
             json!([{ "kind": "VariableDeclarator", "start": 0, "end": 28 }]),
         );
         assert!(run(&node).is_empty());
+    }
+
+    #[test]
+    fn ignores_union_containing_void() {
+        // `await callback?.()`: `void | undefined` is a union, not void-like.
+        let mut node = void_call(6, 18);
+        node.type_texts = vec!["void | undefined".to_owned()];
+        node.fields
+            .insert("__typeFlags".to_owned(), json!(1u32 << 27));
+        set_chain(&mut node, json!([{ "kind": "AwaitExpression" }]));
+        assert!(run(&node).is_empty());
+    }
+
+    #[test]
+    fn reads_void_from_type_flags() {
+        let mut node = void_call(10, 28);
+        node.type_texts = vec!["T".to_owned()];
+        node.fields.insert("__typeFlags".to_owned(), json!(16));
+        set_chain(&mut node, json!([{ "kind": "VariableDeclarator" }]));
+        assert_eq!(run(&node).len(), 1);
+    }
+
+    #[test]
+    fn looks_through_chain_expressions() {
+        // `console?.log('foo');`
+        let mut node = void_call(0, 19);
+        set_chain(
+            &mut node,
+            json!([
+                { "kind": "ChainExpression", "childKey": "expression" },
+                { "kind": "ExpressionStatement", "childKey": "expression" }
+            ]),
+        );
+        assert!(run(&node).is_empty());
+    }
+
+    #[test]
+    fn ignores_non_last_sequence_expression() {
+        // `return (console.log(input), input);`
+        let mut node = void_call(8, 26);
+        set_chain(
+            &mut node,
+            json!([
+                { "kind": "SequenceExpression", "childKey": "expressions", "childIsLast": false },
+                { "kind": "ReturnStatement", "childKey": "argument" }
+            ]),
+        );
+        assert!(run(&node).is_empty());
+
+        // `return (input, console.log(input));` stays reported.
+        set_chain(
+            &mut node,
+            json!([
+                { "kind": "SequenceExpression", "childKey": "expressions", "childIsLast": true },
+                { "kind": "ReturnStatement", "childKey": "argument" }
+            ]),
+        );
+        assert_eq!(run(&node).len(), 1);
     }
 }

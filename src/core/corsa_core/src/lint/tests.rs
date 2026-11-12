@@ -368,7 +368,11 @@ fn ignores_meaningless_void_operator_on_non_void_type() {
     let diagnostics = registry()
         .run_rule(
             "no-meaningless-void-operator",
-            &void_operator_node(typed_node("Identifier", TextRange::new(5, 10), "number")),
+            &void_operator_node(typed_node(
+                "CallExpression",
+                TextRange::new(5, 10),
+                "number",
+            )),
         )
         .unwrap();
 
@@ -376,8 +380,40 @@ fn ignores_meaningless_void_operator_on_non_void_type() {
 }
 
 #[test]
+fn reports_meaningless_void_operator_on_non_call() {
+    // `void value;` discards nothing.
+    let diagnostics = registry()
+        .run_rule(
+            "no-meaningless-void-operator",
+            &void_operator_node(typed_node("Identifier", TextRange::new(5, 10), "string")),
+        )
+        .unwrap();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "meaninglessVoidOnNonCall");
+
+    // `void 0` is the undefined idiom.
+    let mut zero = typed_node("Literal", TextRange::new(5, 6), "0");
+    zero.fields.insert("value".to_owned(), json!(0));
+    assert!(
+        registry()
+            .run_rule("no-meaningless-void-operator", &void_operator_node(zero))
+            .unwrap()
+            .is_empty()
+    );
+
+    // `void promise` is left to no-floating-promises.
+    let promise = typed_node("Identifier", TextRange::new(5, 12), "Promise<number>");
+    assert!(
+        registry()
+            .run_rule("no-meaningless-void-operator", &void_operator_node(promise))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn respects_meaningless_void_operator_check_never_option() {
-    let mut node = void_operator_node(typed_node("Identifier", TextRange::new(5, 10), "never"));
+    let mut node = void_operator_node(typed_node("CallExpression", TextRange::new(5, 10), "never"));
     assert!(
         registry()
             .run_rule("no-meaningless-void-operator", &node)

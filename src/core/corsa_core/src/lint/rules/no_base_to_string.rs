@@ -54,11 +54,26 @@ fn ignored_type_names(node: &LintNode) -> Vec<String> {
     })
 }
 
-const MESSAGES: &[RuleMessage] = &[RuleMessage {
-    id: "unexpected",
-    description: "This value is stringified through its base Object#toString() representation.",
-}];
-const LISTENERS: &[&str] = &["BinaryExpression", "CallExpression", "TemplateLiteral"];
+const MESSAGES: &[RuleMessage] = &[
+    RuleMessage {
+        id: "unexpected",
+        description: "This value is stringified through its base Object#toString() representation.",
+    },
+    RuleMessage {
+        id: "baseToString",
+        description: "This value may use Object's default stringification format ('[object Object]') when stringified.",
+    },
+    RuleMessage {
+        id: "baseArrayJoin",
+        description: "Using `join()` for this array may use Object's default stringification format ('[object Object]') when stringified.",
+    },
+];
+const LISTENERS: &[&str] = &[
+    "AssignmentExpression",
+    "BinaryExpression",
+    "CallExpression",
+    "TemplateLiteral",
+];
 
 impl RustLintRule for NoBaseToStringRule {
     fn name(&self) -> &'static str {
@@ -79,6 +94,9 @@ impl RustLintRule for NoBaseToStringRule {
 
     fn check(&self, ctx: &mut RuleContext<'_>, node: &LintNode) {
         let options = Options::from_node(node);
+        if shapes::check(ctx, node, &options) {
+            return;
+        }
         match node.kind.as_str() {
             "BinaryExpression" if node.field_str("operator") == Some("+") => {
                 let Some(left) = node.child("left") else {
@@ -118,6 +136,315 @@ impl RustLintRule for NoBaseToStringRule {
             }
             _ => {}
         }
+    }
+}
+
+/// typescript-eslint's `collectToStringCertainty`, over checker type shapes
+/// (`__typeShape`). Used whenever the host attached shapes to the stringified
+/// expressions.
+mod shapes {
+    use super::{Options, child_list, strip_chain_expression};
+    use crate::lint::type_shape::{TypeShape, flags};
+    use crate::lint::{LintNode, RuleContext};
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum Usefulness {
+        Always,
+        Never,
+        Sometimes,
+    }
+
+    impl Usefulness {
+        fn certainty(self) -> &'static str {
+            match self {
+                Self::Always => "always",
+                Self::Never => "will",
+                Self::Sometimes => "may",
+            }
+        }
+    }
+
+    /// Returns `true` when the node was handled with shapes.
+    pub(super) fn check(ctx: &mut RuleContext<'_>, node: &LintNode, options: &Options) -> bool {
+        match node.kind.as_str() {
+            "BinaryExpression" | "AssignmentExpression" => {
+                let operator = node.field_str("operator");
+                if !matches!(
+                    (node.kind.as_str(), operator),
+                    ("BinaryExpression", Some("+")) | ("AssignmentExpression", Some("+="))
+                ) {
+                    return node.kind == "AssignmentExpression";
+                }
+                let (Some(left), Some(right)) = (node.child("left"), node.child("right")) else {
+                    return false;
+                };
+                let (Some(left_shape), Some(right_shape)) =
+                    (TypeShape::of(left), TypeShape::of(right))
+                else {
+                    return node.kind == "AssignmentExpression";
+                };
+                if type_name_is_string(&left_shape) {
+                    check_expression(ctx, right, &right_shape, options);
+                } else if left.kind != "PrivateIdentifier" && type_name_is_string(&right_shape) {
+                    check_expression(ctx, left, &left_shape, options);
+                }
+                true
+            }
+            "CallExpression" => check_call(ctx, node, options),
+            "TemplateLiteral" => {
+                let expressions = child_list(node, "expressions");
+                let shapes = expressions
+                    .iter()
+                    .map(TypeShape::of)
+                    .collect::<Option<Vec<_>>>();
+                let Some(shapes) = shapes else {
+                    return false;
+                };
+                if node.field_str("__parentKind") == Some("TaggedTemplateExpression") {
+                    return true;
+                }
+                for (expression, shape) in expressions.iter().zip(&shapes) {
+                    check_expression(ctx, expression, shape, options);
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn check_call(ctx: &mut RuleContext<'_>, node: &LintNode, options: &Options) -> bool {
+        let Some(callee) = node.child("callee") else {
+            return false;
+        };
+        let callee = strip_chain_expression(callee);
+        if callee.kind == "Identifier" && callee.field_str("name") == Some("String") {
+            let Some(argument) = child_list(node, "arguments").first() else {
+                return true;
+            };
+            let Some(shape) = TypeShape::of(argument) else {
+                return false;
+            };
+            // A local `String` binding shadows the builtin.
+            if callee.field_bool("__declaredInFile") == Some(true)
+                || argument.kind == "SpreadElement"
+            {
+                return true;
+            }
+            check_expression(ctx, argument, &shape, options);
+            return true;
+        }
+        if callee.kind != "MemberExpression" || callee.field_bool("computed") == Some(true) {
+            return false;
+        }
+        let Some(object) = callee.child("object") else {
+            return false;
+        };
+        let property = callee.child("property").and_then(|property| {
+            (property.kind == "Identifier")
+                .then(|| property.field_str("name"))
+                .flatten()
+        });
+        match property {
+            Some("toString" | "toLocaleString") => {
+                let Some(shape) = TypeShape::of(object) else {
+                    return false;
+                };
+                check_expression(ctx, object, &shape, options);
+                true
+            }
+            Some("join") => {
+                let Some(shape) = TypeShape::of(object) else {
+                    return false;
+                };
+                let certainty = join_certainty(&shape.constrained(), options, 0);
+                if certainty != Usefulness::Always {
+                    let name = object.text.as_deref().unwrap_or_default();
+                    ctx.report_with_message(
+                        "baseArrayJoin",
+                        format!(
+                            "Using `join()` for {name} {} use Object's default stringification format ('[object Object]') when stringified.",
+                            certainty.certainty()
+                        ),
+                        object.range,
+                    );
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn check_expression(
+        ctx: &mut RuleContext<'_>,
+        node: &LintNode,
+        shape: &TypeShape,
+        options: &Options,
+    ) {
+        if node.kind == "Literal" {
+            return;
+        }
+        let certainty = to_string_certainty(shape, options, 0);
+        if certainty == Usefulness::Always {
+            return;
+        }
+        let name = node.text.as_deref().unwrap_or_default();
+        ctx.report_with_message(
+            "baseToString",
+            format!(
+                "'{name}' {} use Object's default stringification format ('[object Object]') when stringified.",
+                certainty.certainty()
+            ),
+            node.range,
+        );
+    }
+
+    /// `getTypeName(checker, type) === 'string'`.
+    fn type_name_is_string(shape: &TypeShape) -> bool {
+        if shape.has(flags::STRING_LIKE) {
+            return true;
+        }
+        if shape.has(flags::TYPE_PARAMETER)
+            && let Some(constraint) = &shape.constraint
+        {
+            return type_name_is_string(constraint);
+        }
+        if shape.is_union() && !shape.types.is_empty() {
+            return shape.types.iter().all(type_name_is_string);
+        }
+        if shape.is_intersection() && !shape.types.is_empty() {
+            return shape.types.iter().any(type_name_is_string);
+        }
+        shape.text == "string"
+    }
+
+    const MAX_DEPTH: u8 = 8;
+
+    fn union_certainty(parts: &[Usefulness]) -> Usefulness {
+        if parts.iter().all(|part| *part == Usefulness::Never) {
+            Usefulness::Never
+        } else if parts.iter().all(|part| *part == Usefulness::Always) {
+            Usefulness::Always
+        } else {
+            Usefulness::Sometimes
+        }
+    }
+
+    fn intersection_certainty(parts: &[Usefulness]) -> Usefulness {
+        if parts.contains(&Usefulness::Always) {
+            Usefulness::Always
+        } else {
+            Usefulness::Never
+        }
+    }
+
+    fn tuple_certainty(elements: &[TypeShape], options: &Options, depth: u8) -> Usefulness {
+        let parts = elements
+            .iter()
+            .map(|element| to_string_certainty(element, options, depth + 1))
+            .collect::<Vec<_>>();
+        if parts.contains(&Usefulness::Never) {
+            Usefulness::Never
+        } else if parts.contains(&Usefulness::Sometimes) {
+            Usefulness::Sometimes
+        } else {
+            Usefulness::Always
+        }
+    }
+
+    fn join_certainty(shape: &TypeShape, options: &Options, depth: u8) -> Usefulness {
+        if depth > MAX_DEPTH || !shape.parts_known() {
+            return Usefulness::Always;
+        }
+        if shape.is_union() {
+            let parts = shape
+                .types
+                .iter()
+                .map(|part| join_certainty(part, options, depth + 1))
+                .collect::<Vec<_>>();
+            return union_certainty(&parts);
+        }
+        if shape.is_intersection() {
+            let parts = shape
+                .types
+                .iter()
+                .map(|part| join_certainty(part, options, depth + 1))
+                .collect::<Vec<_>>();
+            return intersection_certainty(&parts);
+        }
+        if let Some(elements) = &shape.tuple_elements {
+            return tuple_certainty(elements, options, depth);
+        }
+        if let Some(element) = &shape.array_element {
+            return to_string_certainty(element, options, depth + 1);
+        }
+        Usefulness::Always
+    }
+
+    fn to_string_certainty(shape: &TypeShape, options: &Options, depth: u8) -> Usefulness {
+        if depth > MAX_DEPTH {
+            return Usefulness::Always;
+        }
+        if shape.has(flags::TYPE_PARAMETER) {
+            return match &shape.constraint {
+                Some(constraint) => to_string_certainty(constraint, options, depth + 1),
+                None if options.check_unknown => Usefulness::Sometimes,
+                None => Usefulness::Always,
+            };
+        }
+        if shape.has(flags::BOOLEAN | flags::BOOLEAN_LITERAL) {
+            return Usefulness::Always;
+        }
+        if matches_ignored_name(shape, options) {
+            return Usefulness::Always;
+        }
+        if !shape.parts_known() {
+            return Usefulness::Always;
+        }
+        if shape.is_intersection() {
+            let parts = shape
+                .types
+                .iter()
+                .map(|part| to_string_certainty(part, options, depth + 1))
+                .collect::<Vec<_>>();
+            return intersection_certainty(&parts);
+        }
+        if shape.is_union() {
+            let parts = shape
+                .types
+                .iter()
+                .map(|part| to_string_certainty(part, options, depth + 1))
+                .collect::<Vec<_>>();
+            return union_certainty(&parts);
+        }
+        if let Some(elements) = &shape.tuple_elements {
+            return tuple_certainty(elements, options, depth);
+        }
+        if let Some(element) = &shape.array_element {
+            return to_string_certainty(element, options, depth + 1);
+        }
+        let is_unknown = shape.flags == flags::UNKNOWN;
+        match shape.to_string {
+            Some(Some(true)) => Usefulness::Never,
+            Some(Some(false)) => Usefulness::Always,
+            // No coercion method resolved (`unknown`, `any`, `never`, ...).
+            Some(None) | None if is_unknown && options.check_unknown => Usefulness::Sometimes,
+            // Primitives resolve their own wrapper's methods; objects without
+            // a host answer stay silent.
+            Some(None) | None => Usefulness::Always,
+        }
+    }
+
+    /// `matchesTypeOrBaseType(type, getTypeName(type) in ignoredTypeNames)`.
+    fn matches_ignored_name(shape: &TypeShape, options: &Options) -> bool {
+        let name = if type_name_is_string(shape) {
+            "string"
+        } else {
+            shape.text.as_str()
+        };
+        options
+            .ignored_type_names
+            .iter()
+            .any(|ignored| ignored == name || shape.bases.iter().any(|base| base == ignored))
     }
 }
 
@@ -396,5 +723,80 @@ mod tests {
             ))
             .is_empty()
         );
+    }
+
+    fn shaped(kind: &str, shape: serde_json::Value) -> serde_json::Value {
+        json!({
+            "kind": kind,
+            "range": { "start": 3, "end": 8 },
+            "text": "value",
+            "fields": { "name": "value", "__typeShape": shape }
+        })
+    }
+
+    fn template(expression: serde_json::Value) -> LintNode {
+        node(json!({
+            "kind": "TemplateLiteral",
+            "range": { "start": 0, "end": 10 },
+            "childLists": { "expressions": [expression] }
+        }))
+    }
+
+    #[test]
+    fn shapes_report_object_to_string_and_skip_custom_ones() {
+        let object = json!({ "id": "o", "flags": 1 << 20, "text": "{}", "toString": true });
+        assert_eq!(
+            run(&template(shaped("Identifier", object))),
+            vec!["baseToString"]
+        );
+
+        let custom = json!({ "id": "c", "flags": 1 << 20, "text": "{ toString(): string }", "toString": false });
+        assert!(run(&template(shaped("Identifier", custom))).is_empty());
+
+        let error_subclass = json!({ "id": "e", "flags": 1 << 20, "text": "Boom<T>", "toString": true, "bases": ["BaseError", "Error"] });
+        assert!(run(&template(shaped("Identifier", error_subclass))).is_empty());
+    }
+
+    #[test]
+    fn shapes_respect_check_unknown_and_unions() {
+        let unknown = json!({ "id": "u", "flags": 2, "text": "unknown" });
+        assert!(run(&template(shaped("Identifier", unknown.clone()))).is_empty());
+        let mut with_option = template(shaped("Identifier", unknown));
+        with_option.fields.insert(
+            "__ruleOptions".to_owned(),
+            json!([{ "checkUnknown": true }]),
+        );
+        assert_eq!(run(&with_option), vec!["baseToString"]);
+
+        let maybe = json!({
+            "id": "m", "flags": 1 << 27, "text": "{} | string",
+            "types": [
+                { "id": "o", "flags": 1 << 20, "text": "{}", "toString": true },
+                { "id": "s", "flags": 1 << 5, "text": "string" }
+            ]
+        });
+        assert_eq!(
+            run(&template(shaped("Identifier", maybe))),
+            vec!["baseToString"]
+        );
+    }
+
+    #[test]
+    fn local_string_function_is_not_the_builtin() {
+        let object = json!({ "id": "o", "flags": 1 << 20, "text": "{}", "toString": true });
+        let call = |declared: bool| {
+            node(json!({
+                "kind": "CallExpression",
+                "range": { "start": 0, "end": 10 },
+                "children": { "callee": {
+                    "kind": "Identifier",
+                    "range": { "start": 0, "end": 6 },
+                    "fields": { "name": "String", "__declaredInFile": declared }
+                } },
+                "childLists": { "arguments": [shaped("ObjectExpression", object.clone())] }
+            }))
+        };
+        assert_eq!(run(&call(false)), vec!["baseToString"]);
+        assert!(run(&call(true)).is_empty());
     }
 }

@@ -1,7 +1,8 @@
 use super::super::{
     LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule, TextRange,
 };
-use crate::lint::helpers::strip_chain_expression;
+use crate::lint::helpers::{rule_allow_list_names, strip_chain_expression, type_texts_match_names};
+use crate::lint::type_shape::{TypeShape, flags};
 use crate::utils::{is_array_like_type_texts, is_string_like_type_texts};
 
 /// Type-aware port of tsgolint `no-misused-spread`.
@@ -94,11 +95,124 @@ impl RustLintRule for NoMisusedSpreadRule {
             return;
         }
 
+        if let Some(shape) = TypeShape::of(argument) {
+            let shape = shape.constrained();
+            if !shape.parts_known() || shape_is_allowed(node, &shape) {
+                return;
+            }
+            let argument = &with_shape_facts(argument, &shape);
+            match spread_position(node) {
+                SpreadPosition::ArrayOrCall => check_array_or_call_spread(ctx, node, argument),
+                SpreadPosition::Object => check_object_spread(ctx, node, argument),
+            }
+            return;
+        }
+
         match spread_position(node) {
             SpreadPosition::ArrayOrCall => check_array_or_call_spread(ctx, node, argument),
             SpreadPosition::Object => check_object_spread(ctx, node, argument),
         }
     }
+}
+
+// TypeScript 7 SyntaxKind values for class declarations and expressions.
+const CLASS_DECLARATION_KINDS: &[u64] = &[265, 233];
+// TypeScript 7 ObjectFlags.InstantiationExpressionType (`const A = Set<number>`).
+const INSTANTIATION_EXPRESSION_TYPE: u32 = 1 << 24;
+
+/// `isTypeRecurser`: a union or intersection matches when any constituent does.
+fn recurse(shape: &TypeShape, predicate: &dyn Fn(&TypeShape) -> bool) -> bool {
+    if (shape.is_union() || shape.is_intersection()) && !shape.types.is_empty() {
+        return shape.types.iter().any(|part| recurse(part, predicate));
+    }
+    predicate(shape)
+}
+
+/// `isBuiltinSymbolLike(program, type, names)`: the type's own symbol or one
+/// of its base types is one of `names` from the default library.
+fn is_builtin_like(shape: &TypeShape, names: &[&str]) -> bool {
+    let own = shape
+        .symbol
+        .as_deref()
+        .is_some_and(|symbol| names.contains(&symbol) && shape.lib != Some(false));
+    own || shape.bases.iter().any(|base| {
+        let name = base.split('<').next().unwrap_or(base).trim();
+        names.contains(&name)
+    })
+}
+
+/// typescript-eslint's `typeMatchesSomeSpecifier(type, allow)` by name.
+fn shape_is_allowed(node: &LintNode, shape: &TypeShape) -> bool {
+    let names = rule_allow_list_names(node, "allow");
+    if names.is_empty() {
+        return false;
+    }
+    let matches = |part: &TypeShape| {
+        part.symbol
+            .as_deref()
+            .is_some_and(|symbol| names.iter().any(|name| name == symbol))
+            || names.contains(&part.text)
+    };
+    if shape.is_union() {
+        return shape.types.iter().all(matches);
+    }
+    matches(shape) || (shape.is_intersection() && shape.types.iter().any(matches))
+}
+
+/// Derives the `__spread*` facts from a checker type shape, mirroring the
+/// predicates of typescript-eslint's `no-misused-spread`.
+fn with_shape_facts(argument: &LintNode, shape: &TypeShape) -> LintNode {
+    let mut owned = argument.clone();
+    let is_string = recurse(shape, &|part| part.has(flags::STRING_LIKE));
+    let is_promise = recurse(shape, &|part| is_builtin_like(part, &["Promise"]));
+    let is_function_without_props = recurse(shape, &|part| {
+        part.callable == Some(true) && part.property_count == Some(0)
+    });
+    let is_map = recurse(shape, &|part| {
+        is_builtin_like(part, &["Map", "ReadonlyMap", "WeakMap"])
+    });
+    let all_parts_iterable_map = shape.union_parts().iter().all(|part| {
+        recurse(part, &|inner| {
+            is_builtin_like(inner, &["Map", "ReadonlyMap"])
+        })
+    });
+    let is_array = recurse(shape, &|part| {
+        part.array_element.is_some() || part.tuple_elements.is_some()
+    });
+    let constituents = if shape.is_union() || shape.is_intersection() {
+        shape.types.iter().collect::<Vec<_>>()
+    } else {
+        vec![shape]
+    };
+    let is_iterable = constituents.iter().any(|part| part.iterable == Some(true));
+    let is_class_instance = recurse(shape, &|part| {
+        part.constructable == Some(false) && part.symbol_constructable == Some(true)
+    });
+    let is_class_declaration = recurse(shape, &|part| {
+        (part.is_object() && part.object_flags & INSTANTIATION_EXPRESSION_TYPE != 0)
+            || part
+                .value_declaration_kind
+                .is_some_and(|kind| CLASS_DECLARATION_KINDS.contains(&kind))
+    });
+    for (key, value) in [
+        ("__spreadIsString", is_string),
+        ("__spreadIsPromise", is_promise),
+        ("__spreadIsFunctionWithoutProps", is_function_without_props),
+        ("__spreadIsMap", is_map),
+        ("__spreadAllUnionPartsMap", all_parts_iterable_map),
+        ("__spreadIsArray", is_array),
+        ("__spreadIsIterable", is_iterable),
+        ("__spreadIsClassInstance", is_class_instance),
+        ("__spreadIsClassDeclaration", is_class_declaration),
+    ] {
+        owned
+            .fields
+            .insert(key.to_owned(), serde_json::Value::Bool(value));
+    }
+    // The shape is authoritative: drop text and property fallbacks.
+    owned.type_texts.clear();
+    owned.property_names.clear();
+    owned
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -240,8 +354,17 @@ fn is_class_declaration(argument: &LintNode) -> bool {
 
 /// `allow` option: the host pre-resolves whether the spread argument's type is
 /// matched by a configured `TypeOrValueSpecifier` and records the raw boolean.
+/// The host's `__spreadAllowed`, or the `allow` option (a
+/// `TypeOrValueSpecifier` list) matching the argument's type name.
 fn spread_is_allowed(node: &LintNode) -> bool {
-    node.field_bool("__spreadAllowed") == Some(true)
+    if node.field_bool("__spreadAllowed") == Some(true) {
+        return true;
+    }
+    let names = rule_allow_list_names(node, "allow");
+    node.child("argument")
+        .or_else(|| node.child("expression"))
+        .filter(|argument| TypeShape::of(argument).is_none())
+        .is_some_and(|argument| type_texts_match_names(&argument.type_texts, &names))
 }
 
 // ----- suggestion builders -------------------------------------------------
@@ -582,5 +705,88 @@ mod tests {
         node.fields
             .insert("__spreadAllowed".to_owned(), json!(true));
         assert!(run(&node).is_empty());
+    }
+
+    fn shaped(parent_kind: &str, shape: serde_json::Value) -> LintNode {
+        let mut argument = arg(&[]);
+        argument.fields.insert("__typeShape".to_owned(), shape);
+        spread(parent_kind, argument)
+    }
+
+    fn object_shape(extra: serde_json::Value) -> serde_json::Value {
+        let mut shape = json!({ "id": "x", "flags": 1 << 20, "text": "X" });
+        if let (Some(shape), Some(extra)) = (shape.as_object_mut(), extra.as_object()) {
+            shape.extend(extra.clone());
+        }
+        shape
+    }
+
+    #[test]
+    fn shape_reports_map_promise_and_class_instance() {
+        let map =
+            object_shape(json!({ "symbol": "Map", "lib": true, "text": "Map<string, number>" }));
+        assert_eq!(
+            run(&shaped("ObjectExpression", map))[0].message_id,
+            "noMapSpreadInObject"
+        );
+
+        let promise = object_shape(json!({ "symbol": "Promise", "lib": true }));
+        assert_eq!(
+            run(&shaped("ObjectExpression", promise))[0].message_id,
+            "noPromiseSpreadInObject"
+        );
+
+        // `PromiseLike` has `then` but is not a Promise.
+        let promise_like = object_shape(
+            json!({ "symbol": "PromiseLike", "lib": true, "propertyCount": 1, "constructable": false, "symbolConstructable": false }),
+        );
+        assert!(run(&shaped("ObjectExpression", promise_like)).is_empty());
+
+        let instance = object_shape(
+            json!({ "symbol": "Foo", "lib": false, "constructable": false, "symbolConstructable": true, "propertyCount": 1 }),
+        );
+        assert_eq!(
+            run(&shaped("ObjectExpression", instance))[0].message_id,
+            "noClassInstanceSpreadInObject"
+        );
+    }
+
+    #[test]
+    fn shape_reports_branded_string_spread_through_generics() {
+        let generic = json!({
+            "id": "T", "flags": 1 << 19, "text": "T",
+            "constraint": {
+                "id": "i", "flags": 1 << 28, "text": "string & { __brand: 'x' }",
+                "types": [
+                    { "id": "s", "flags": 1 << 5, "text": "string" },
+                    { "id": "o", "flags": 1 << 20, "text": "{ __brand: 'x' }" }
+                ]
+            }
+        });
+        assert_eq!(
+            run(&shaped("ArrayExpression", generic))[0].message_id,
+            "noStringSpread"
+        );
+    }
+
+    #[test]
+    fn allow_option_skips_listed_types() {
+        let mut node = shaped(
+            "ObjectExpression",
+            object_shape(json!({ "symbol": "Map", "lib": true, "text": "Map<string, number>" })),
+        );
+        node.fields.insert(
+            "__ruleOptions".to_owned(),
+            json!([{ "allow": [{ "from": "lib", "name": "Map" }] }]),
+        );
+        assert!(run(&node).is_empty());
+
+        let mut text_only = spread("ArrayExpression", arg(&["Branded"]));
+        assert_eq!(run(&text_only).len(), 0);
+        text_only = spread("ArrayExpression", arg(&["string"]));
+        text_only
+            .fields
+            .insert("__ruleOptions".to_owned(), json!([{ "allow": ["string"] }]));
+        assert!(run(&text_only).is_empty());
     }
 }
