@@ -30,6 +30,7 @@ export const noUnnecessaryTypeParametersRule = createRustNativeRule(
   "no-unnecessary-type-parameters",
 );
 export const noUnsafeArgumentRule = createRustNativeRule("no-unsafe-argument");
+export const noUnsafeEnumAssignmentRule = createRustNativeRule("no-unsafe-enum-assignment");
 export const noUnsafeEnumComparisonRule = createRustNativeRule("no-unsafe-enum-comparison");
 export const noUselessDefaultAssignmentRule = createRustNativeRule("no-useless-default-assignment");
 export const nonNullableTypeAssertionStyleRule = createRustNativeRule(

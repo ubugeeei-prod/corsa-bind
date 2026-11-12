@@ -88,19 +88,19 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-unsafe-member-access: accessing a member through any",
           "diagnostics": [
-            "no-unsafe-member-access/unsafeMemberExpression@6..10: Unsafe member access on an \`any\` value.",
+            "no-unsafe-member-access/unsafeMemberExpression@6..10: Unsafe member access .prop on an \`any\` value.",
           ],
         },
         {
           "caseName": "no-unsafe-unary-minus: unary minus on string union",
           "diagnostics": [
-            "no-unsafe-unary-minus/unaryMinus@0..6: Argument of unary negation should be assignable to number | bigint.",
+            "no-unsafe-unary-minus/unaryMinus@0..6: Argument of unary negation should be assignable to number | bigint but is string | number instead.",
           ],
         },
         {
           "caseName": "no-unsafe-return: returning any to string",
           "diagnostics": [
-            "no-unsafe-return/unsafe@18..23: Unsafe return of an any-typed value.",
+            "no-unsafe-return/unsafe@18..23: Unsafe return of a value of type \`any\`.",
           ],
         },
         {
@@ -286,13 +286,19 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-unsafe-argument: any argument passed to a string parameter",
           "diagnostics": [
-            "no-unsafe-argument/unsafeArgument@5..10: Unsafe argument of an any typed value assigned to a non-any parameter.",
+            "no-unsafe-argument/unsafeArgument@5..10: Unsafe argument of type \`any\` assigned to a parameter of type \`string\`.",
           ],
         },
         {
           "caseName": "no-unsafe-assignment: any initializer assigned to a string variable",
           "diagnostics": [
-            "no-unsafe-assignment/unsafe@0..22: Unsafe assignment of an any-typed value.",
+            "no-unsafe-assignment/unsafe@0..22: Unsafe assignment of an \`any\` value.",
+          ],
+        },
+        {
+          "caseName": "no-unsafe-enum-assignment: number literal assigned to an enum variable",
+          "diagnostics": [
+            "no-unsafe-enum-assignment/unsafeEnumAssignment@0..15: The value assigned here does not have a shared enum type with the expected enum 'Color'.",
           ],
         },
         {
@@ -861,6 +867,31 @@ const diagnosticCases = [
           children: { typeAnnotation: node("TSTypeAnnotation", [11, 19]) },
         }),
         init: id("source", [20, 22], ["any"]),
+      },
+    }),
+  },
+  {
+    ruleName: "no-unsafe-enum-assignment",
+    scenario: "number literal assigned to an enum variable",
+    node: node("VariableDeclarator", [0, 15], {
+      children: {
+        id: id("color", [0, 5], ["Color"], {
+          fields: {
+            __typeDetail: {
+              id: "color",
+              flags: 32768 | 2048,
+              parts: [
+                { id: "color", flags: 32768 | 2048, enumId: "color", enumText: "Color" },
+              ],
+            },
+          },
+        }),
+        init: node("Literal", [14, 15], {
+          fields: {
+            value: 1,
+            __typeDetail: { id: "one", flags: 2048, parts: [{ id: "one", flags: 2048 }] },
+          },
+        }),
       },
     }),
   },

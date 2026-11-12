@@ -178,6 +178,21 @@ impl<'a> RuleContext<'a> {
         });
     }
 
+    /// Reports a diagnostic whose text fills in the message's `{{name}}`
+    /// placeholders from `data` (as typescript-eslint's message data does).
+    pub fn report_with_data(
+        &mut self,
+        message_id: &'static str,
+        range: TextRange,
+        data: &[(&str, &str)],
+    ) {
+        let mut message = self.message(message_id);
+        for (name, value) in data {
+            message = message.replace(&format!("{{{{{name}}}}}"), value);
+        }
+        self.report_formatted(message_id, message, range, Vec::new());
+    }
+
     /// Reports a diagnostic whose message the rule rendered itself (for
     /// example with the offending type's name filled in). `message_id` still
     /// names the catalog entry; its description is the generic fallback.

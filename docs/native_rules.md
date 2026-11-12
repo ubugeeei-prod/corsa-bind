@@ -105,6 +105,7 @@ conservatively** — it stays silent rather than emit a false positive.
 | `no-unsafe-argument`                     | Disallow calling a function with a value of type `any`.                                        |
 | `no-unsafe-assignment`                   | Disallow assigning any-typed values to more specific targets.                                  |
 | `no-unsafe-call`                         | Disallow calling values typed as any.                                                          |
+| `no-unsafe-enum-assignment`              | Disallow assigning non-enum values to enum typed locations.                                    |
 | `no-unsafe-enum-comparison`              | Disallow comparing an enum value with a value from a different enum domain.                    |
 | `no-unsafe-member-access`                | Disallow member access on values typed as any.                                                 |
 | `no-unsafe-return`                       | Disallow returning any-typed values from functions.                                            |
