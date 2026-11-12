@@ -178,6 +178,27 @@ impl<'a> RuleContext<'a> {
         });
     }
 
+    /// Reports a diagnostic whose text fills in the message's `{{name}}`
+    /// placeholders from `data` (as typescript-eslint's message data does).
+    pub fn report_with_data(
+        &mut self,
+        message_id: &'static str,
+        range: TextRange,
+        data: &[(&str, &str)],
+    ) {
+        let mut message = self.message(message_id);
+        for (name, value) in data {
+            message = message.replace(&format!("{{{{{name}}}}}"), value);
+        }
+        self.diagnostics.push(LintDiagnostic {
+            rule_name: self.rule.name().to_owned(),
+            message_id: message_id.to_owned(),
+            message,
+            range,
+            suggestions: Vec::new(),
+        });
+    }
+
     pub(crate) fn finish(self) -> Vec<LintDiagnostic> {
         self.diagnostics
     }

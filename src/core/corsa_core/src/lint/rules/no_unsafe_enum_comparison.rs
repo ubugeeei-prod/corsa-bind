@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
+use crate::lint::checker_types::{EnumValueKind, TypeDetail, TypePart};
 
 /// Type-aware rule that disallows comparing an enum value against a value that
 /// does not share that enum's domain.
@@ -70,7 +71,11 @@ fn check_binary_expression(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(right) = node.child("right") else {
         return;
     };
-    if is_mismatched_comparison(left, right) {
+    let mismatched = match (TypeDetail::of(left), TypeDetail::of(right)) {
+        (Some(left), Some(right)) => is_mismatched_detail(left, right),
+        _ => is_mismatched_comparison(left, right),
+    };
+    if mismatched {
         ctx.report("mismatchedCondition", node.range);
     }
 }
@@ -84,6 +89,16 @@ fn check_case_clause(ctx: &mut RuleContext<'_>, node: &LintNode) {
     let Some(test) = case_test(node) else {
         return;
     };
+    let discriminant_detail = node
+        .fields
+        .get("__switchDiscriminantDetail")
+        .and_then(TypeDetail::from_value);
+    if let (Some(left), Some(right)) = (discriminant_detail, TypeDetail::of(test)) {
+        if is_mismatched_detail(left, right) {
+            ctx.report("mismatchedCase", node.range);
+        }
+        return;
+    }
     let Some(discriminant) = case_discriminant(node) else {
         return;
     };
@@ -108,6 +123,41 @@ fn case_test(node: &LintNode) -> Option<&LintNode> {
 fn case_discriminant(node: &LintNode) -> Option<&LintNode> {
     node.child("__switchDiscriminant")
         .or_else(|| node.child("discriminant"))
+}
+
+/// typescript-eslint `isMismatchedEnumComparisonTypes` on checker details.
+fn is_mismatched_detail(left: TypeDetail<'_>, right: TypeDetail<'_>) -> bool {
+    let left_enums = left.enum_ids();
+    let right_enums = right.enum_ids();
+    // `1 === 2` has nothing to do with enums.
+    if left_enums.is_empty() && right_enums.is_empty() {
+        return false;
+    }
+    // `Fruit.Apple === Fruit.Banana` shares an enum.
+    if left_enums.iter().any(|id| right_enums.contains(id)) {
+        return false;
+    }
+    // A constituent on both sides (`Fruit.Apple | 0` against `0`) is safe.
+    let left_parts = left.parts();
+    let right_parts = right.parts();
+    if left_parts
+        .iter()
+        .any(|left| !left.id.is_empty() && right_parts.iter().any(|right| right.id == left.id))
+    {
+        return false;
+    }
+    violates(&left_parts, right) || violates(&right_parts, left)
+}
+
+/// An enum-valued constituent on one side meets a plain value of the same
+/// primitive kind on the other.
+fn violates(parts: &[TypePart<'_>], other: TypeDetail<'_>) -> bool {
+    let kinds = parts
+        .iter()
+        .filter_map(|part| part.enum_value_kind())
+        .collect::<Vec<_>>();
+    (kinds.contains(&EnumValueKind::Number) && other.is_number_like())
+        || (kinds.contains(&EnumValueKind::String) && other.is_string_like())
 }
 
 /// Faithful port of the Go `isMismatchedComparison`.

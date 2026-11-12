@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
+use crate::lint::checker_types::{CallParameters, TypeDetail, is_unsafe_assignment, quoted_type};
 use crate::lint::helpers::{child_list, is_any_like_node, strip_chain_expression};
 use crate::utils::{is_any_like_type_texts, is_array_like_type_texts, is_unknown_like_type_texts};
 
@@ -14,19 +15,19 @@ pub struct NoUnsafeArgumentRule;
 const MESSAGES: &[RuleMessage] = &[
     RuleMessage {
         id: "unsafeArgument",
-        description: "Unsafe argument of an any typed value assigned to a non-any parameter.",
+        description: "Unsafe argument of type {{sender}} assigned to a parameter of type {{receiver}}.",
     },
     RuleMessage {
         id: "unsafeArraySpread",
-        description: "Unsafe spread of an any array type.",
+        description: "Unsafe spread of an {{sender}} array type.",
     },
     RuleMessage {
         id: "unsafeSpread",
-        description: "Unsafe spread of an any type.",
+        description: "Unsafe spread of an {{sender}} type.",
     },
     RuleMessage {
         id: "unsafeTupleSpread",
-        description: "Unsafe spread of a tuple type with an any element assigned to a non-any parameter.",
+        description: "Unsafe spread of a tuple type. The argument is of type {{sender}} and is assigned to a parameter of type {{receiver}}.",
     },
 ];
 
@@ -54,6 +55,10 @@ impl RustLintRule for NoUnsafeArgumentRule {
     }
 
     fn check(&self, ctx: &mut RuleContext<'_>, node: &LintNode) {
+        if let Some(parameters) = CallParameters::of(node) {
+            check_resolved_signature(ctx, node, parameters);
+            return;
+        }
         match node.kind.as_str() {
             "CallExpression" | "NewExpression" => {
                 let arguments = collect_call_arguments(node);
@@ -65,6 +70,106 @@ impl RustLintRule for NoUnsafeArgumentRule {
             }
             _ => {}
         }
+    }
+}
+
+/// typescript-eslint's check against the signature the checker resolved for
+/// the call: each argument (or each element of a spread tuple) against the
+/// parameter type at its position, rest parameters expanded.
+fn check_resolved_signature(
+    ctx: &mut RuleContext<'_>,
+    node: &LintNode,
+    parameters: CallParameters<'_>,
+) {
+    let is_tagged_template = node.kind == "TaggedTemplateExpression";
+    let arguments = if is_tagged_template {
+        collect_tagged_template_arguments(node)
+    } else {
+        collect_call_arguments(node)
+    };
+    if arguments.is_empty() {
+        return;
+    }
+    // An `any` callee is no-unsafe-call's to report.
+    let callee = node.child("callee").or_else(|| node.child("tag"));
+    if callee
+        .and_then(TypeDetail::of)
+        .is_some_and(TypeDetail::is_any)
+    {
+        return;
+    }
+    // The template strings array takes the first parameter of a tag.
+    let mut position = usize::from(is_tagged_template);
+    for argument in arguments {
+        if argument.kind != "SpreadElement" {
+            let parameter = parameters.at(position);
+            position += 1;
+            let Some(parameter) = parameter else {
+                continue;
+            };
+            let (Some(detail), Some(parameter_detail)) =
+                (TypeDetail::of(argument), parameter.detail())
+            else {
+                continue;
+            };
+            if is_unsafe_assignment(detail, parameter_detail, Some(argument)) {
+                report_types(
+                    ctx,
+                    "unsafeArgument",
+                    argument,
+                    &quoted_type(&argument.type_texts),
+                    &quoted_type(&parameter.texts()),
+                );
+            }
+            continue;
+        }
+        let Some(spread_node) = argument.child("argument") else {
+            return;
+        };
+        let Some(spread) = TypeDetail::of(spread_node) else {
+            return;
+        };
+        if spread.is_any() {
+            let sender = quoted_type(&spread_node.type_texts);
+            ctx.report_with_data(
+                "unsafeSpread",
+                argument.range,
+                &[("sender", sender.as_str())],
+            );
+        } else if spread.is_any_array() {
+            ctx.report_with_data("unsafeArraySpread", argument.range, &[("sender", "`any`")]);
+        } else if spread.is_tuple() {
+            let mut reported = false;
+            for element in spread.type_arguments() {
+                let parameter = parameters.at(position);
+                position += 1;
+                if let Some((parameter, parameter_detail)) =
+                    parameter.and_then(|parameter| Some((parameter, parameter.detail()?)))
+                {
+                    if !reported && is_unsafe_assignment(element, parameter_detail, None) {
+                        let sender =
+                            quoted_type(&element.reference_text().into_iter().collect::<Vec<_>>());
+                        report_types(
+                            ctx,
+                            "unsafeTupleSpread",
+                            argument,
+                            &sender,
+                            &quoted_type(&parameter.texts()),
+                        );
+                        reported = true;
+                    }
+                }
+            }
+            // A variadic tuple consumes the remaining parameters; later
+            // arguments meet the rest type, which positions no longer track.
+            if spread
+                .reference_text()
+                .is_none_or(|text| text.contains("..."))
+            {
+                return;
+            }
+        }
+        // Other iterables are not matched against parameters.
     }
 }
 
@@ -227,7 +332,13 @@ fn check_unsafe_arguments(
         if parameter_is_any_or_unknown(expected) {
             continue;
         }
-        ctx.report("unsafeArgument", argument.range);
+        report_types(
+            ctx,
+            "unsafeArgument",
+            argument,
+            &quoted_type(&argument.type_texts),
+            &quoted_type(expected),
+        );
     }
 }
 
@@ -243,7 +354,8 @@ fn check_spread_argument(
 
     // foo(...any)
     if is_any_like_node(inner) {
-        ctx.report("unsafeSpread", spread.range);
+        let sender = quoted_type(&inner.type_texts);
+        ctx.report_with_data("unsafeSpread", spread.range, &[("sender", sender.as_str())]);
         return;
     }
 
@@ -267,7 +379,13 @@ fn check_spread_argument(
             }
             let element_unsafe = is_any_like_type_texts(element) || is_error_typed(element);
             if element_unsafe && !parameter_is_any_or_unknown(expected) {
-                ctx.report("unsafeTupleSpread", spread.range);
+                report_types(
+                    ctx,
+                    "unsafeTupleSpread",
+                    spread,
+                    &quoted_type(element),
+                    &quoted_type(expected),
+                );
             }
         }
         // `__spreadTupleHasRest` (consumeRemainingArguments) is read by the host
@@ -282,7 +400,7 @@ fn check_spread_argument(
     // Only genuine array types reach here (tuples were handled above), so a
     // bracketed tuple text can no longer be misread as an `any[]` spread.
     if is_array_like_type_texts(&inner.type_texts) && array_element_is_any_or_error(inner) {
-        ctx.report("unsafeArraySpread", spread.range);
+        ctx.report_with_data("unsafeArraySpread", spread.range, &[("sender", "`any`")]);
     }
 
     // Anything else iterable is intentionally ignored, mirroring the Go rule.
@@ -313,6 +431,20 @@ fn array_element_is_any_or_error(inner: &LintNode) -> bool {
             || text.starts_with("Array<any>")
             || text.starts_with("ReadonlyArray<any>")
     })
+}
+
+fn report_types(
+    ctx: &mut RuleContext<'_>,
+    message_id: &'static str,
+    node: &LintNode,
+    sender: &str,
+    receiver: &str,
+) {
+    ctx.report_with_data(
+        message_id,
+        node.range,
+        &[("sender", sender), ("receiver", receiver)],
+    );
 }
 
 #[cfg(test)]

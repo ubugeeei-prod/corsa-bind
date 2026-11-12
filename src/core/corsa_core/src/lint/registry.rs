@@ -11,17 +11,18 @@ use super::{
     NoUnnecessaryConditionRule, NoUnnecessaryQualifierRule, NoUnnecessaryTemplateExpressionRule,
     NoUnnecessaryTypeArgumentsRule, NoUnnecessaryTypeAssertionRule,
     NoUnnecessaryTypeConversionRule, NoUnnecessaryTypeParametersRule, NoUnsafeArgumentRule,
-    NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeEnumComparisonRule, NoUnsafeMemberAccessRule,
-    NoUnsafeReturnRule, NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule,
-    NoUselessDefaultAssignmentRule, NonNullableTypeAssertionStyleRule, OnlyThrowErrorRule,
-    PreferFindRule, PreferIncludesRule, PreferNullishCoalescingRule, PreferOptionalChainRule,
-    PreferPromiseRejectErrorsRule, PreferReadonlyParameterTypesRule, PreferReadonlyRule,
-    PreferReduceTypeParameterRule, PreferRegexpExecRule, PreferReturnThisTypeRule,
-    PreferStringStartsEndsWithRule, PromiseFunctionAsyncRule, RelatedGetterSetterPairsRule,
-    RequireArraySortCompareRule, RequireAwaitRule, RestrictPlusOperandsRule,
-    RestrictTemplateExpressionsRule, ReturnAwaitRule, RuleContext, RuleMeta, RustLintRule,
-    StrictBooleanExpressionsRule, StrictVoidReturnRule, SwitchExhaustivenessCheckRule,
-    UnboundMethodRule, UseUnknownInCatchCallbackVariableRule, host_facts,
+    NoUnsafeAssignmentRule, NoUnsafeCallRule, NoUnsafeEnumAssignmentRule,
+    NoUnsafeEnumComparisonRule, NoUnsafeMemberAccessRule, NoUnsafeReturnRule,
+    NoUnsafeTypeAssertionRule, NoUnsafeUnaryMinusRule, NoUselessDefaultAssignmentRule,
+    NonNullableTypeAssertionStyleRule, OnlyThrowErrorRule, PreferFindRule, PreferIncludesRule,
+    PreferNullishCoalescingRule, PreferOptionalChainRule, PreferPromiseRejectErrorsRule,
+    PreferReadonlyParameterTypesRule, PreferReadonlyRule, PreferReduceTypeParameterRule,
+    PreferRegexpExecRule, PreferReturnThisTypeRule, PreferStringStartsEndsWithRule,
+    PromiseFunctionAsyncRule, RelatedGetterSetterPairsRule, RequireArraySortCompareRule,
+    RequireAwaitRule, RestrictPlusOperandsRule, RestrictTemplateExpressionsRule, ReturnAwaitRule,
+    RuleContext, RuleMeta, RustLintRule, StrictBooleanExpressionsRule, StrictVoidReturnRule,
+    SwitchExhaustivenessCheckRule, UnboundMethodRule, UseUnknownInCatchCallbackVariableRule,
+    host_facts,
 };
 
 /// Collection of Rust-authored lint rules addressable by stable rule name.
@@ -78,6 +79,7 @@ impl LintRuleRegistry {
             .with_rule(NoUnsafeArgumentRule)
             .with_rule(NoUnsafeAssignmentRule)
             .with_rule(NoUnsafeCallRule)
+            .with_rule(NoUnsafeEnumAssignmentRule)
             .with_rule(NoUnsafeEnumComparisonRule)
             .with_rule(NoUnsafeMemberAccessRule)
             .with_rule(NoUnsafeReturnRule)
