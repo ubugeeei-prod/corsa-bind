@@ -17,6 +17,7 @@ mod tests;
 mod type_shape;
 #[cfg(test)]
 mod type_shape_tests;
+mod type_tree;
 mod types;
 
 pub use context::{RuleContext, RustLintRule};
