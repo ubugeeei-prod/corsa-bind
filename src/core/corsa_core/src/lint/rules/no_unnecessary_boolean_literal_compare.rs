@@ -1,3 +1,4 @@
+use super::super::type_shape::{TypeShape, flags};
 use super::super::{
     LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule, TextRange,
 };
@@ -243,6 +244,9 @@ struct ConstraintInfo {
 impl ConstraintInfo {
     fn of(node: &LintNode) -> Self {
         let target = strip_chain_expression(node);
+        if let Some(shape) = TypeShape::of(target).or_else(|| TypeShape::of(node)) {
+            return Self::from_shape(shape);
+        }
 
         let is_unconstrained_type_parameter =
             target.field_bool("__isUnconstrainedTypeParameter") == Some(true);
@@ -272,6 +276,33 @@ impl ConstraintInfo {
         let is_boolean = is_boolean_constraint(&constituents);
         let is_nullable_boolean = is_nullable_boolean_constraint(&constituents);
 
+        Self {
+            is_unconstrained_type_parameter,
+            is_boolean,
+            is_nullable_boolean,
+        }
+    }
+}
+
+impl ConstraintInfo {
+    /// typescript-eslint `getConstraintInfo` + `isBooleanType` /
+    /// `isNullableBoolean` over checker flags.
+    fn from_shape(shape: TypeShape<'_>) -> Self {
+        let is_type_parameter = shape.raw_flags() & flags::TYPE_PARAMETER != 0;
+        let is_unconstrained_type_parameter =
+            is_type_parameter && shape.flags() & flags::TYPE_PARAMETER != 0;
+        let boolean = flags::BOOLEAN | flags::BOOLEAN_LITERAL;
+        let is_boolean = shape.flags() & boolean != 0;
+        let is_nullable_boolean = shape.is_union() && {
+            let parts = shape.union();
+            let non_nullish = parts
+                .iter()
+                .filter(|part| !part.has(flags::UNDEFINED | flags::NULL))
+                .collect::<Vec<_>>();
+            !non_nullish.is_empty()
+                && non_nullish.len() < parts.len()
+                && non_nullish.iter().all(|part| part.flags() & boolean != 0)
+        };
         Self {
             is_unconstrained_type_parameter,
             is_boolean,

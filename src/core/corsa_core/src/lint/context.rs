@@ -178,6 +178,33 @@ impl<'a> RuleContext<'a> {
         });
     }
 
+    /// Reports a diagnostic whose text fills in the message's placeholders.
+    pub fn report_with_message(
+        &mut self,
+        message_id: &'static str,
+        message: String,
+        range: TextRange,
+    ) {
+        self.report_with_message_and_suggestions(message_id, message, range, Vec::new());
+    }
+
+    /// Like [`Self::report_with_message`], with suggested fixes.
+    pub fn report_with_message_and_suggestions(
+        &mut self,
+        message_id: &'static str,
+        message: String,
+        range: TextRange,
+        suggestions: Vec<LintSuggestion>,
+    ) {
+        self.diagnostics.push(LintDiagnostic {
+            rule_name: self.rule.name().to_owned(),
+            message_id: message_id.to_owned(),
+            message,
+            range,
+            suggestions,
+        });
+    }
+
     pub(crate) fn finish(self) -> Vec<LintDiagnostic> {
         self.diagnostics
     }
