@@ -1,5 +1,6 @@
 use super::super::{
     LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule, TextRange,
+    constrained_shape::ConstrainedShape,
 };
 use crate::{
     lint::helpers::{callee_property_name, child_list, member_object},
@@ -64,19 +65,48 @@ impl RustLintRule for PreferReduceTypeParameterRule {
         let Some(object) = member_object(callee) else {
             return;
         };
-        if object.kind != "ArrayExpression" && !is_array_like_type_texts(&object.type_texts) {
+        if object.field_bool("__typeFactsMissing").unwrap_or(false)
+            || initializer_assertion
+                .field_bool("__typeFactsMissing")
+                .unwrap_or(false)
+        {
             return;
         }
         let Some(type_annotation) = type_annotation_text(initializer_assertion) else {
             return;
         };
-        if is_bare_type_parameter(type_annotation) {
-            return;
-        }
         let Some(initializer) = initializer_assertion.child("expression") else {
             return;
         };
-        if !is_obviously_assignable_initializer(initializer, type_annotation) {
+        // `checker.isTypeAssignableTo(initializerType, assertedType)`: an
+        // assertion the initializer needs would turn into a type error.
+        match initializer_assertion.field_bool("__initializerAssignable") {
+            Some(assignable) => {
+                if !assignable {
+                    return;
+                }
+            }
+            None => {
+                if is_bare_type_parameter(type_annotation)
+                    || !is_obviously_assignable_initializer(initializer, type_annotation)
+                {
+                    return;
+                }
+            }
+        }
+        // Every union constituent of the receiver's constrained type is made
+        // of arrays or tuples.
+        let array_receiver = match ConstrainedShape::of(object) {
+            Some(shape) => shape.union_constituents().into_iter().all(|part| {
+                part.intersection_constituents()
+                    .into_iter()
+                    .all(ConstrainedShape::is_array_or_tuple)
+            }),
+            None => {
+                object.kind == "ArrayExpression" || is_array_like_type_texts(&object.type_texts)
+            }
+        };
+        if !array_receiver {
             return;
         }
 

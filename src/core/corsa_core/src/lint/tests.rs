@@ -1417,3 +1417,241 @@ fn shared_default_registry_is_reused_across_lookups() {
     );
     assert!(super::run_default_type_aware_rule_owned("not-a-rule", array_delete_node()).is_none());
 }
+
+fn fact_node(value: serde_json::Value) -> LintNode {
+    serde_json::from_value(value).unwrap()
+}
+
+#[test]
+fn non_null_on_a_nullable_operand_type_is_kept() {
+    // `bar!` where the constrained type is `number` but the operand type is
+    // `T | undefined`: either being nullable keeps the assertion.
+    let node = fact_node(json!({
+        "kind": "TSNonNullExpression",
+        "range": { "start": 0, "end": 4 },
+        "fields": {
+            "__parentKind": "ReturnStatement",
+            "__expressionTypeFlags": [],
+            "__actualTypeFlags": ["undefined"],
+            "__constrainedTypeDiffers": true,
+            "__contextualTypeFlags": ["undefined"]
+        },
+        "children": { "expression": { "kind": "Identifier", "range": { "start": 0, "end": 3 } } }
+    }));
+    let diagnostics = registry()
+        .run_rule("no-unnecessary-type-assertion", &node)
+        .unwrap();
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn non_null_without_type_facts_is_never_reported() {
+    let node = fact_node(json!({
+        "kind": "TSNonNullExpression",
+        "range": { "start": 0, "end": 2 },
+        "fields": { "__parentKind": "ExpressionStatement", "__typeFactsMissing": true },
+        "children": { "expression": { "kind": "Identifier", "range": { "start": 0, "end": 1 } } }
+    }));
+    assert!(
+        registry()
+            .run_rule("no-unnecessary-type-assertion", &node)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn non_null_compound_assignment_target_is_not_contextual() {
+    // `a! -= 1` with `a: number | undefined` keeps the assertion.
+    let node = fact_node(json!({
+        "kind": "TSNonNullExpression",
+        "range": { "start": 0, "end": 2 },
+        "fields": {
+            "__parentKind": "AssignmentExpression",
+            "__parentOperator": "-=",
+            "__isAssignmentLeft": true,
+            "__expressionTypeFlags": ["undefined"],
+            "__actualTypeFlags": ["undefined"]
+        },
+        "children": { "expression": { "kind": "Identifier", "range": { "start": 0, "end": 1 } } }
+    }));
+    assert!(
+        registry()
+            .run_rule("no-unnecessary-type-assertion", &node)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn reports_double_assertion_back_to_the_original_type() {
+    // `v as unknown as number` where `v: number`.
+    let node = fact_node(json!({
+        "kind": "TSAsExpression",
+        "range": { "start": 10, "end": 32 },
+        "fields": {
+            "__typeAnnotationText": "number",
+            "__typeIsUnchanged": false,
+            "__doubleAssertionUnchanged": true
+        },
+        "children": { "expression": { "kind": "TSAsExpression", "range": { "start": 10, "end": 22 } } }
+    }));
+    let diagnostics = registry()
+        .run_rule("no-unnecessary-type-assertion", &node)
+        .unwrap();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].range, TextRange::new(10, 32));
+}
+
+fn shape_for_in(shape: serde_json::Value) -> LintNode {
+    fact_node(json!({
+        "kind": "ForInStatement",
+        "range": { "start": 0, "end": 30 },
+        "children": {
+            "right": {
+                "kind": "Identifier",
+                "range": { "start": 14, "end": 19 },
+                "typeTexts": ["string[] | null"],
+                "fields": { "__constrainedTypeShape": shape }
+            }
+        }
+    }))
+}
+
+#[test]
+fn for_in_reads_array_likeness_from_the_constrained_shape() {
+    let nullable_array = shape_for_in(json!({
+        "union": true,
+        "parts": [ { "flags": 8 }, { "numberIndex": true, "numberLength": true, "array": true } ]
+    }));
+    assert_eq!(
+        registry()
+            .run_rule("no-for-in-array", &nullable_array)
+            .unwrap()
+            .len(),
+        1
+    );
+    let record = shape_for_in(json!({ "numberIndex": false, "numberLength": false }));
+    assert!(
+        registry()
+            .run_rule("no-for-in-array", &record)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn array_delete_needs_every_union_part_to_be_an_array_or_tuple() {
+    let mut node = array_delete_node();
+    let object = node
+        .children
+        .get_mut("argument")
+        .unwrap()
+        .children
+        .get_mut("object")
+        .unwrap();
+    object.fields.insert(
+        "__constrainedTypeShape".to_owned(),
+        json!({ "union": true, "parts": [ { "tuple": true }, { "array": true } ] }),
+    );
+    assert_eq!(
+        registry().run_rule("no-array-delete", &node).unwrap().len(),
+        1
+    );
+    let object = node
+        .children
+        .get_mut("argument")
+        .unwrap()
+        .children
+        .get_mut("object")
+        .unwrap();
+    object.fields.insert(
+        "__constrainedTypeShape".to_owned(),
+        json!({ "union": true, "parts": [ { "tuple": true }, { "flags": 8 } ] }),
+    );
+    assert!(
+        registry()
+            .run_rule("no-array-delete", &node)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn reduce_keeps_an_assertion_the_initializer_needs() {
+    // `['a'].reduce(fn, {} as T)`: `{}` is not assignable to `T`.
+    let node = fact_node(json!({
+        "kind": "CallExpression",
+        "range": { "start": 0, "end": 30 },
+        "children": {
+            "callee": {
+                "kind": "MemberExpression",
+                "range": { "start": 0, "end": 12 },
+                "children": {
+                    "object": {
+                        "kind": "ArrayExpression",
+                        "range": { "start": 0, "end": 5 },
+                        "fields": { "__constrainedTypeShape": { "array": true } }
+                    },
+                    "property": { "kind": "Identifier", "range": { "start": 6, "end": 12 }, "fields": { "name": "reduce" } }
+                }
+            }
+        },
+        "childLists": {
+            "arguments": [
+                { "kind": "ArrowFunctionExpression", "range": { "start": 13, "end": 20 } },
+                {
+                    "kind": "TSAsExpression",
+                    "range": { "start": 22, "end": 29 },
+                    "fields": { "__typeAnnotationText": "T", "__initializerAssignable": false },
+                    "children": { "expression": { "kind": "ObjectExpression", "range": { "start": 22, "end": 24 } } }
+                }
+            ]
+        }
+    }));
+    assert!(
+        registry()
+            .run_rule("prefer-reduce-type-parameter", &node)
+            .unwrap()
+            .is_empty()
+    );
+    let mut assignable = node.clone();
+    assignable
+        .child_lists
+        .get_mut("arguments")
+        .unwrap()
+        .get_mut(1)
+        .unwrap()
+        .fields
+        .insert("__initializerAssignable".to_owned(), json!(true));
+    assert_eq!(
+        registry()
+            .run_rule("prefer-reduce-type-parameter", &assignable)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn deprecated_messages_name_the_use_and_report_the_key() {
+    let node = fact_node(json!({
+        "kind": "Property",
+        "range": { "start": 15, "end": 40 },
+        "fields": {
+            "__parentKind": "ObjectExpression",
+            "__deprecated": true,
+            "__deprecationReason": "use newField instead",
+            "__deprecatedName": "deprecatedField",
+            "__deprecationReportRange": { "start": 15, "end": 30 }
+        }
+    }));
+    let diagnostics = registry().run_rule("no-deprecated", &node).unwrap();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].message_id, "deprecatedWithReason");
+    assert_eq!(
+        diagnostics[0].message,
+        "`deprecatedField` is deprecated. use newField instead"
+    );
+    assert_eq!(diagnostics[0].range, TextRange::new(15, 30));
+}

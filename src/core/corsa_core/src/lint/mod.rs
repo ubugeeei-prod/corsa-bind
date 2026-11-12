@@ -3,6 +3,7 @@
 mod checker_types;
 #[cfg(test)]
 mod checker_types_tests;
+mod constrained_shape;
 mod context;
 mod helpers;
 mod host_facts;

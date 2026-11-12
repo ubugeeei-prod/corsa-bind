@@ -103,6 +103,10 @@ fn check_type_assertion(ctx: &mut RuleContext<'_>, node: &LintNode, options: &Op
     if node.child("expression").is_none() {
         return;
     }
+    // The host could not type the assertion: never report on a guess.
+    if node.field_bool("__typeFactsMissing").unwrap_or(false) {
+        return;
+    }
 
     // `slices.Contains(opts.TypesToIgnore, trimmed source text of the type node)`.
     // The host renders the asserted type's source text into `__typeAnnotationText`.
@@ -147,6 +151,37 @@ fn check_type_assertion(ctx: &mut RuleContext<'_>, node: &LintNode, options: &Op
     };
 
     if !type_is_unchanged || !would_same_type_be_inferred {
+        // The receiver's contextual type already accepts the operand: the host
+        // decides `shouldSkipContextualTypeFallback` and the type relations.
+        if !type_annotation_is_const_assertion
+            && node
+                .field_bool("__contextuallyUnnecessary")
+                .unwrap_or(false)
+        {
+            let range = assertion_range(node);
+            let fix_range = remove_range(node).unwrap_or(range);
+            let suggestion = LintSuggestion {
+                message_id: "contextuallyUnnecessary".to_owned(),
+                message: MESSAGES[1].description.to_owned(),
+                fixes: vec![LintFix::remove_range(fix_range)],
+            };
+            ctx.report_with_suggestions("contextuallyUnnecessary", range, vec![suggestion]);
+            return;
+        }
+        // `reportDoubleAssertionIfUnnecessary`: `x as A as B` where `x`
+        // already has type `B` (and `B` is not `any`), or where `A` is `any`
+        // or `unknown` and the receiver accepts `x`.
+        if node
+            .field_bool("__doubleAssertionUnchanged")
+            .unwrap_or(false)
+        {
+            report_whole_assertion(ctx, node, "unnecessaryAssertion");
+        } else if node
+            .field_bool("__doubleAssertionContextual")
+            .unwrap_or(false)
+        {
+            report_whole_assertion(ctx, node, "contextuallyUnnecessary");
+        }
         return;
     }
 
@@ -163,6 +198,12 @@ fn check_type_assertion(ctx: &mut RuleContext<'_>, node: &LintNode, options: &Op
         fixes: vec![LintFix::remove_range(fix_range)],
     };
     ctx.report_with_suggestions("unnecessaryAssertion", assertion_range, vec![suggestion]);
+}
+
+/// A double assertion is replaced by its innermost operand, so the report
+/// covers the whole expression.
+fn report_whole_assertion(ctx: &mut RuleContext<'_>, node: &LintNode, message_id: &'static str) {
+    ctx.report(message_id, node.range);
 }
 
 fn is_const_assertion(node: &LintNode) -> bool {
@@ -219,8 +260,13 @@ fn check_non_null_assertion(ctx: &mut RuleContext<'_>, node: &LintNode) {
         return;
     };
 
-    // `if ast.IsAssignmentExpression(node.Parent, true)`.
-    if node.field_str("__parentKind") == Some("AssignmentExpression") {
+    // `node.parent.type === AssignmentExpression && node.parent.operator === '='`.
+    // Hosts that do not report the operator keep the older parent-kind check.
+    if node.field_str("__parentKind") == Some("AssignmentExpression")
+        && node
+            .field_str("__parentOperator")
+            .is_none_or(|operator| operator == "=")
+    {
         // Only report when the non-null assertion is the assignment target
         // (the left-hand side). The host exposes this as a raw positional fact.
         if node.field_bool("__isAssignmentLeft").unwrap_or(false) {
@@ -233,11 +279,19 @@ fn check_non_null_assertion(ctx: &mut RuleContext<'_>, node: &LintNode) {
         return;
     }
 
+    // The host could not type the operand: never report on a guess.
+    if node.field_bool("__typeFactsMissing").unwrap_or(false) {
+        return;
+    }
+
     // `t := GetConstrainedTypeAtLocation(expression)`; gather union part flags.
     let flags = TypeFlags::of_expression(node);
+    // `services.getTypeAtLocation(expression)`, when the host reports it apart
+    // from the constrained type. Either being nullable keeps the assertion.
+    let actual = TypeFlags::read(node, "__actualTypeFlags");
 
     // `if tFlags & (Any|Unknown|Null|Undefined|Void) == 0`.
-    if !flags.is_nullable_or_top() {
+    if !flags.is_nullable_or_top() && !actual.is_nullable_or_top() {
         // The expression is already non-nullable -> the `!` is unnecessary.
         // `if ast.IsIdentifier(expression) && isPossiblyUsedBeforeAssigned(expression) { return }`.
         if expression.kind == "Identifier"
@@ -254,7 +308,12 @@ fn check_non_null_assertion(ctx: &mut RuleContext<'_>, node: &LintNode) {
     }
 
     // The expression is nullable: report only if used in a position whose
-    // contextual type already accepts the same nullable members.
+    // contextual type already accepts the same nullable members. A
+    // constrained type that differs from the operand type (an unresolved type
+    // parameter) may still need the assertion.
+    if node.field_bool("__constrainedTypeDiffers").unwrap_or(false) {
+        return;
+    }
     let Some(contextual) = TypeFlags::of_contextual(node) else {
         return;
     };

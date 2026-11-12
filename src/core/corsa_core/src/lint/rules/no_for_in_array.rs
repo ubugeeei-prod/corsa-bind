@@ -1,4 +1,6 @@
-use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule};
+use super::super::{
+    LintNode, RuleContext, RuleMessage, RustLintRule, constrained_shape::ConstrainedShape,
+};
 use crate::utils::is_array_like_type_texts;
 
 /// Type-aware rule that rejects `for-in` loops over array-like values.
@@ -35,7 +37,17 @@ impl RustLintRule for NoForInArrayRule {
         let Some(right) = node.child("right") else {
             return;
         };
-        if right.kind == "ArrayExpression" || is_array_like_type_texts(&right.type_texts) {
+        if right.field_bool("__typeFactsMissing").unwrap_or(false) {
+            return;
+        }
+        // `isArrayLike(getConstrainedTypeAtLocation(node.right))`: some union or
+        // intersection constituent has a number index signature and a
+        // number-like `length`.
+        let array_like = match ConstrainedShape::of(right) {
+            Some(shape) => shape.some_leaf(&|part| part.is_array_like()),
+            None => right.kind == "ArrayExpression" || is_array_like_type_texts(&right.type_texts),
+        };
+        if array_like {
             ctx.report("unexpected", node.range);
         }
     }
