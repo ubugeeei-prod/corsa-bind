@@ -1,5 +1,6 @@
 use super::super::{
     LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule, TextRange,
+    type_shape::TypeShape,
 };
 use crate::utils::is_array_like_type_texts;
 
@@ -47,14 +48,37 @@ impl RustLintRule for NoArrayDeleteRule {
         let Some(argument) = node.child("argument") else {
             return;
         };
-        if argument.kind != "MemberExpression" || argument.field_bool("computed") != Some(true) {
+        if argument.kind != "MemberExpression" {
             return;
         }
         let Some(object) = argument.child("object") else {
             return;
         };
-        if object.kind != "ArrayExpression" && !is_array_like_type_texts(&object.type_texts) {
+        if object.field_bool("__typeFactsMissing").unwrap_or(false) {
             return;
+        }
+        match TypeShape::of(object) {
+            // `isUnderlyingTypeArray(getConstrainedTypeAtLocation(object))`.
+            Some(shape) => {
+                let underlying_array = if shape.is_union() {
+                    shape.parts().all(TypeShape::is_array_or_tuple)
+                } else if shape.is_intersection() {
+                    shape.parts().any(TypeShape::is_array_or_tuple)
+                } else {
+                    shape.is_array_or_tuple()
+                };
+                if !underlying_array {
+                    return;
+                }
+            }
+            None => {
+                if argument.field_bool("computed") != Some(true)
+                    || (object.kind != "ArrayExpression"
+                        && !is_array_like_type_texts(&object.type_texts))
+                {
+                    return;
+                }
+            }
         }
         let suggestions = splice_suggestion(node, argument, object)
             .into_iter()

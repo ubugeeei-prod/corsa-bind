@@ -25,6 +25,9 @@ const LISTENERS: &[&str] = &[
     "TSClassImplements",
     "TSInterfaceHeritage",
     "JSXOpeningElement",
+    // typescript-eslint listens to the argument list itself; hosts that put
+    // the facts there cover every context, including `class A extends B<T>`.
+    "TSTypeParameterInstantiation",
 ];
 
 impl RustLintRule for NoUnnecessaryTypeArgumentsRule {
