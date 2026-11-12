@@ -178,6 +178,25 @@ impl<'a> RuleContext<'a> {
         });
     }
 
+    /// Reports a diagnostic whose message the rule rendered itself (for
+    /// example with the offending type's name filled in). `message_id` still
+    /// names the catalog entry; its description is the generic fallback.
+    pub fn report_formatted(
+        &mut self,
+        message_id: &'static str,
+        message: String,
+        range: TextRange,
+        suggestions: Vec<LintSuggestion>,
+    ) {
+        self.diagnostics.push(LintDiagnostic {
+            rule_name: self.rule.name().to_owned(),
+            message_id: message_id.to_owned(),
+            message,
+            range,
+            suggestions,
+        });
+    }
+
     pub(crate) fn finish(self) -> Vec<LintDiagnostic> {
         self.diagnostics
     }

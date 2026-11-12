@@ -1,9 +1,12 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use serde_json::Value;
 
 use super::super::{LintFix, LintNode, LintSuggestion, RuleContext, RuleMessage, RustLintRule};
-use crate::lint::helpers::{child_list, rule_option_bool};
+use crate::lint::helpers::{
+    ancestor_fact, ancestor_facts, ancestor_kind, child_list, is_function_or_function_type,
+    rule_option_bool,
+};
 
 /// Type-aware rule that disallows duplicate union or intersection constituents.
 ///
@@ -104,46 +107,104 @@ impl Options {
 /// Returns whether an ancestor (looking only through parenthesized types) is a
 /// union/intersection of the same kind as `node`.
 ///
-/// Consumes the host fact `__sameKindAncestor` (a raw checker/AST observation
-/// computed by walking `node`'s parents while they are `TSParenthesizedType`
-/// and reporting whether the first non-parenthesized ancestor matches `node`'s
-/// kind). The verdict (skip vs. check) stays here in Rust.
+/// Consumes the host fact `__sameKindAncestor` when present (a raw AST
+/// observation: the first non-parenthesized ancestor matches `node`'s kind).
+/// Otherwise the same observation is read off `__ancestorFacts`, or off
+/// `__parentKind` for hosts that send only the parent. The verdict (skip vs.
+/// check) stays here in Rust.
 fn has_same_kind_ancestor(node: &LintNode) -> bool {
-    node.field_bool("__sameKindAncestor").unwrap_or(false)
+    if let Some(same) = node.field_bool("__sameKindAncestor") {
+        return same;
+    }
+    let parent = match ancestor_facts(node) {
+        Some(ancestors) => ancestors
+            .iter()
+            .rev()
+            .filter_map(ancestor_kind)
+            .find(|kind| *kind != "TSParenthesizedType"),
+        None => node.field_str("__parentKind"),
+    };
+    parent == Some(node.kind.as_str())
+}
+
+/// Whether the union annotates an optional function parameter: upstream's
+/// `forEachNodeType` callback walks union -> `TSTypeAnnotation` -> optional
+/// `Identifier` in the `params` of a function or function type.
+///
+/// Consumes `__parentOptionalParam` when present, otherwise the `kind`,
+/// `optional` and `keyInParent` entries of `__ancestorFacts`.
+fn is_optional_parameter_annotation(node: &LintNode) -> bool {
+    if node.field_bool("__parentOptionalParam") == Some(true) {
+        return true;
+    }
+    let Some(ancestors) = ancestor_facts(node) else {
+        return false;
+    };
+    let annotation = ancestor_fact(ancestors, 1);
+    let parameter = ancestor_fact(ancestors, 2);
+    let function = ancestor_fact(ancestors, 3);
+    annotation.and_then(ancestor_kind) == Some("TSTypeAnnotation")
+        && parameter.is_some_and(|parameter| {
+            ancestor_kind(parameter) == Some("Identifier")
+                && parameter.get("optional").and_then(Value::as_bool) == Some(true)
+                && parameter.get("keyInParent").and_then(Value::as_str) == Some("params")
+        })
+        && function
+            .and_then(ancestor_kind)
+            .is_some_and(is_function_or_function_type)
 }
 
 fn check_duplicate(ctx: &mut RuleContext<'_>, node: &LintNode, kind: Kind) {
-    let parent_optional_param =
-        kind == Kind::Union && node.field_bool("__parentOptionalParam").unwrap_or(false);
+    let parent_optional_param = kind == Kind::Union && is_optional_parameter_annotation(node);
 
-    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut unique: Vec<&LintNode> = Vec::new();
+    let mut seen: BTreeMap<String, &LintNode> = BTreeMap::new();
     for constituent in child_list(node, "types") {
-        check_duplicate_recursively(ctx, kind, constituent, &mut seen, parent_optional_param);
+        check_duplicate_recursively(
+            ctx,
+            kind,
+            constituent,
+            &mut unique,
+            &mut seen,
+            parent_optional_param,
+        );
     }
 }
 
 /// Recursively checks one constituent, mirroring upstream
-/// `checkDuplicateRecursively`. Returns whether this constituent was reported as
-/// a duplicate (used only for recursion symmetry; the fix selection here always
-/// emits a removal suggestion, see parity notes).
-fn check_duplicate_recursively(
+/// `checkDuplicateRecursively`: an AST-identical earlier constituent, then an
+/// earlier constituent of the same resolved type, makes this one a duplicate.
+fn check_duplicate_recursively<'a>(
     ctx: &mut RuleContext<'_>,
     kind: Kind,
-    constituent: &LintNode,
-    seen: &mut BTreeSet<String>,
+    constituent: &'a LintNode,
+    unique: &mut Vec<&'a LintNode>,
+    seen: &mut BTreeMap<String, &'a LintNode>,
     parent_optional_param: bool,
-) -> bool {
-    // `utils.IsIntrinsicErrorType(t)` short-circuit: when the host could not
-    // resolve a non-error type id, the constituent never participates in
-    // duplicate detection or caching. This is why `type T = A | A` (with `A`
-    // unresolved) is NOT reported upstream.
+) {
+    // `isSameAstNode` runs before any type lookup, so `{ a: string }` twice is
+    // a duplicate although each type literal is a distinct checker type.
+    if let Some(previous) = unique
+        .iter()
+        .find(|previous| same_ast_node(previous, constituent))
+    {
+        report(ctx, kind, constituent, previous);
+        return;
+    }
+
+    // `tsutils.isIntrinsicErrorType(type)`: the constituent neither
+    // participates in duplicate detection nor is flattened. This is why
+    // `type T = A | A` (with `A` unresolved) is NOT reported upstream.
+    if constituent.field_bool("__isErrorType") == Some(true) {
+        return;
+    }
+    // A constituent without a resolved type id (and no syntax id) is treated
+    // the same way for detection, but still flattened.
     let type_id = resolved_type_id(constituent);
 
-    if let Some(id) = type_id.as_deref() {
-        if seen.contains(id) {
-            report(ctx, constituent);
-            return true;
-        }
+    if let Some(previous) = type_id.as_deref().and_then(|id| seen.get(id)) {
+        report(ctx, kind, constituent, previous);
+        return;
     }
 
     // `forEachNodeType`: for a union whose parent is an optional parameter, an
@@ -153,17 +214,49 @@ fn check_duplicate_recursively(
     }
 
     if let Some(id) = type_id {
-        seen.insert(id);
+        seen.insert(id, constituent);
+        unique.push(constituent);
     }
 
     // Flatten into same-kind constituents reached through parenthesized types.
     let Some(nested) = same_kind_constituents(constituent, kind) else {
-        return false;
+        return;
     };
     for child in nested {
-        check_duplicate_recursively(ctx, kind, child, seen, parent_optional_param);
+        check_duplicate_recursively(ctx, kind, child, unique, seen, parent_optional_param);
     }
-    false
+}
+
+fn ast_fields(node: &LintNode) -> Vec<(&String, &Value)> {
+    node.fields
+        .iter()
+        .filter(|(key, _)| !key.starts_with("__"))
+        .collect()
+}
+
+/// Upstream `isSameAstNode`: structural equality of two nodes, ignoring
+/// locations. Host facts (`__`-prefixed fields), source text and type texts
+/// are not part of the AST.
+fn same_ast_node(left: &LintNode, right: &LintNode) -> bool {
+    left.kind == right.kind
+        && ast_fields(left) == ast_fields(right)
+        && left.children.len() == right.children.len()
+        && left.children.iter().all(|(key, child)| {
+            right
+                .children
+                .get(key)
+                .is_some_and(|other| same_ast_node(child, other))
+        })
+        && left.child_lists.len() == right.child_lists.len()
+        && left.child_lists.iter().all(|(key, children)| {
+            right.child_lists.get(key).is_some_and(|others| {
+                children.len() == others.len()
+                    && children
+                        .iter()
+                        .zip(others)
+                        .all(|(child, other)| same_ast_node(child, other))
+            })
+        })
 }
 
 /// Returns the constituents of `node` when, after skipping parenthesized types,
@@ -285,13 +378,23 @@ fn literal_type_id(node: &LintNode) -> Option<String> {
     }
 }
 
-fn report(ctx: &mut RuleContext<'_>, constituent: &LintNode) {
+/// `{{type}} type constituent is duplicated with {{previous}}.`, naming the
+/// earlier constituent by its source text when the host sent it.
+fn report(ctx: &mut RuleContext<'_>, kind: Kind, constituent: &LintNode, previous: &LintNode) {
     let suggestion = LintSuggestion {
         message_id: "duplicate".to_owned(),
         message: "Remove the duplicated type constituent.".to_owned(),
         fixes: vec![LintFix::remove_range(constituent.range)],
     };
-    ctx.report_with_suggestions("duplicate", constituent.range, vec![suggestion]);
+    let container = match kind {
+        Kind::Union => "Union",
+        Kind::Intersection => "Intersection",
+    };
+    let message = match previous.text.as_deref() {
+        Some(text) => format!("{container} type constituent is duplicated with {text}."),
+        None => format!("{container} type constituent is duplicated with a previous constituent."),
+    };
+    ctx.report_formatted("duplicate", message, constituent.range, vec![suggestion]);
 }
 
 fn report_unnecessary(ctx: &mut RuleContext<'_>, constituent: &LintNode) {
@@ -444,6 +547,21 @@ mod tests {
         assert!(diagnostics.is_empty());
     }
 
+    fn number_literal(value: i64, start: u32, end: u32) -> serde_json::Value {
+        json!({
+            "kind": "TSLiteralType",
+            "range": { "start": start, "end": end },
+            "fields": { "__resolvedTypeId": value.to_string() },
+            "children": {
+                "literal": {
+                    "kind": "Literal",
+                    "range": { "start": start, "end": end },
+                    "fields": { "value": value, "raw": value.to_string() }
+                }
+            }
+        })
+    }
+
     // `type T = 1 | 2;` -> distinct types, NOT reported.
     #[test]
     fn does_not_report_distinct_union() {
@@ -452,8 +570,8 @@ mod tests {
             "range": { "start": 9, "end": 14 },
             "childLists": {
                 "types": [
-                    keyword("TSLiteralType", 9, 10, "1"),
-                    keyword("TSLiteralType", 13, 14, "2"),
+                    number_literal(1, 9, 10),
+                    number_literal(2, 13, 14),
                 ]
             }
         }))
@@ -532,6 +650,144 @@ mod tests {
                     constituent(14, 15, "shared"),
                 ]
             }
+        }))
+        .unwrap();
+
+        assert!(run(&node).is_empty());
+    }
+
+    fn type_literal(start: u32, end: u32, type_id: &str) -> serde_json::Value {
+        json!({
+            "kind": "TSTypeLiteral",
+            "range": { "start": start, "end": end },
+            "text": "{ a: string }",
+            "fields": { "__resolvedTypeId": type_id },
+            "childLists": { "members": [ {
+                "kind": "TSPropertySignature",
+                "range": { "start": start + 2, "end": end - 2 },
+                "fields": { "computed": false, "optional": false, "readonly": false, "__parentKind": "TSTypeLiteral" },
+                "children": {
+                    "key": { "kind": "Identifier", "range": { "start": start + 2, "end": start + 3 }, "fields": { "name": "a" } },
+                    "typeAnnotation": {
+                        "kind": "TSTypeAnnotation",
+                        "range": { "start": start + 3, "end": end - 2 },
+                        "children": { "typeAnnotation": { "kind": "TSStringKeyword", "range": { "start": start + 5, "end": end - 2 } } }
+                    }
+                }
+            } ] }
+        })
+    }
+
+    // `type T = { a: string } | { a: string };` each type literal is its own
+    // checker type, but the second is the same AST as the first.
+    #[test]
+    fn reports_same_ast_type_literals() {
+        let node: LintNode = serde_json::from_value(json!({
+            "kind": "TSUnionType",
+            "range": { "start": 9, "end": 38 },
+            "childLists": { "types": [
+                type_literal(9, 22, "1"),
+                type_literal(25, 38, "2"),
+            ] }
+        }))
+        .unwrap();
+
+        let diagnostics = run(&node);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].range.start, 25);
+        assert_eq!(
+            diagnostics[0].message,
+            "Union type constituent is duplicated with { a: string }."
+        );
+    }
+
+    // `type T = Missing | Missing;` the host marks unresolved names as error
+    // types: neither the type nor the AST comparison sees them.
+    #[test]
+    fn skips_host_error_types() {
+        let missing = |start: u32| {
+            json!({
+                "kind": "TSTypeReference",
+                "range": { "start": start, "end": start + 7 },
+                "fields": { "__isErrorType": true },
+                "children": { "typeName": { "kind": "Identifier", "range": { "start": start, "end": start + 7 }, "fields": { "name": "Missing" } } }
+            })
+        };
+        let node: LintNode = serde_json::from_value(json!({
+            "kind": "TSUnionType",
+            "range": { "start": 9, "end": 26 },
+            "childLists": { "types": [missing(9), missing(19)] }
+        }))
+        .unwrap();
+
+        assert!(run(&node).is_empty());
+    }
+
+    // A nested union whose TS-ESTree parent (from `__ancestorFacts`) is a
+    // union is flattened by that parent, so it is not checked on its own.
+    #[test]
+    fn skips_union_nested_in_union_by_ancestor_facts() {
+        let node: LintNode = serde_json::from_value(json!({
+            "kind": "TSUnionType",
+            "range": { "start": 14, "end": 19 },
+            "fields": { "__ancestorFacts": [
+                { "kind": "TSTypeAliasDeclaration" },
+                { "kind": "TSUnionType", "keyInParent": "typeAnnotation" }
+            ] },
+            "childLists": { "types": [
+                constituent(14, 15, "shared"),
+                constituent(18, 19, "shared"),
+            ] }
+        }))
+        .unwrap();
+
+        assert!(run(&node).is_empty());
+    }
+
+    // `function f(a?: string | undefined) {}` read off `__ancestorFacts`.
+    #[test]
+    fn reports_unnecessary_undefined_by_ancestor_facts() {
+        let node: LintNode = serde_json::from_value(json!({
+            "kind": "TSUnionType",
+            "range": { "start": 15, "end": 33 },
+            "fields": { "__ancestorFacts": [
+                { "kind": "Program" },
+                { "kind": "FunctionDeclaration", "keyInParent": "body" },
+                { "kind": "Identifier", "keyInParent": "params", "optional": true },
+                { "kind": "TSTypeAnnotation", "keyInParent": "typeAnnotation" }
+            ] },
+            "childLists": { "types": [
+                keyword("TSStringKeyword", 15, 21, "string"),
+                {
+                    "kind": "TSUndefinedKeyword",
+                    "range": { "start": 24, "end": 33 },
+                    "fields": { "__isUndefinedType": true, "__resolvedTypeId": "undefined" }
+                }
+            ] }
+        }))
+        .unwrap();
+
+        let diagnostics = run(&node);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].message_id, "unnecessary");
+        assert_eq!(diagnostics[0].range.start, 24);
+    }
+
+    // `let a: string | undefined;` is not a parameter.
+    #[test]
+    fn ignores_undefined_outside_optional_parameters() {
+        let node: LintNode = serde_json::from_value(json!({
+            "kind": "TSUnionType",
+            "range": { "start": 7, "end": 25 },
+            "fields": { "__ancestorFacts": [
+                { "kind": "VariableDeclarator" },
+                { "kind": "Identifier", "keyInParent": "id" },
+                { "kind": "TSTypeAnnotation", "keyInParent": "typeAnnotation" }
+            ] },
+            "childLists": { "types": [
+                keyword("TSStringKeyword", 7, 13, "string"),
+                keyword("TSUndefinedKeyword", 16, 25, "undefined"),
+            ] }
         }))
         .unwrap();
 

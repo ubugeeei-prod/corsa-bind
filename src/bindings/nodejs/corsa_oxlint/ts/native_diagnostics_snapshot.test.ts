@@ -232,7 +232,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-redundant-type-constituents: string literal overridden by string primitive",
           "diagnostics": [
-            "no-redundant-type-constituents/literalOverridden@9..12: Literal constituent is overridden by a primitive in this union type.",
+            "no-redundant-type-constituents/literalOverridden@9..12: \"a\" is overridden by string in this union type.",
           ],
         },
         {
