@@ -1,8 +1,10 @@
 use serde_json::Value;
 
+use super::super::type_shape::{TypeShape, flags};
+
 use super::super::{LintNode, RuleContext, RuleMessage, RustLintRule, TextRange};
 use crate::lint::helpers::child_list;
-use crate::utils::{TypeTextKind, classify_type_text, split_type_text};
+use crate::utils::{TypeTextKind, classify_type_text, split_top_level_type_text};
 
 /// Type-aware rule that flags template literal interpolations that are
 /// unnecessary because they wrap a literal/identifier value (or are a trivial
@@ -72,9 +74,11 @@ fn check_template(ctx: &mut RuleContext<'_>, node: &LintNode, is_type: bool) {
     // literal text) whose underlying type is string-like is always reportable.
     if is_trivial_interpolation(node, quasis, expressions) {
         let first = &expressions[0];
-        let underlying_is_string = underlying_type_is_string(first);
-        let enum_member = is_enum_member_type(first);
-        if underlying_is_string && (!is_type || !enum_member) {
+        let reportable = match TypeShape::of(first) {
+            Some(shape) => shape_is_reportable_trivial(shape, is_type),
+            None => underlying_type_is_string(first) && (!is_type || !is_enum_member_type(first)),
+        };
+        if reportable {
             // reportSingleInterpolation: span from `${` to `}`.
             report_span(ctx, first);
             return;
@@ -91,8 +95,48 @@ fn check_template(ctx: &mut RuleContext<'_>, node: &LintNode, is_type: bool) {
         if !is_unnecessary_value_interpolation(node, i, expr, next_quasi) {
             continue;
         }
-        report_span(ctx, expr);
+        match quasis
+            .get(i)
+            .and_then(|prev_quasi| span_range(node, prev_quasi, next_quasi))
+        {
+            Some(range) => ctx.report("noUnnecessaryTemplateExpression", range),
+            None => report_span(ctx, expr),
+        }
     }
+}
+
+/// `getConstraintInfo` + `isStringLike` (+ `isEnumMemberType` for types) over
+/// checker flags.
+fn shape_is_reportable_trivial(shape: TypeShape<'_>, is_type: bool) -> bool {
+    let raw_type_parameter = shape.raw_flags() & flags::TYPE_PARAMETER != 0;
+    if raw_type_parameter {
+        // The constraint replaces the type parameter; an unconstrained one has
+        // no constraint type and is never reported.
+        if is_type || shape.flags() & flags::TYPE_PARAMETER != 0 {
+            return false;
+        }
+        return shape.is_string_like();
+    }
+    // Only type parameters are constrained upstream; anything else is judged
+    // on its own (unconstrained) type.
+    shape
+        .raw()
+        .is_some_and(|own| own.is_string_like() && (!is_type || !own.has_enum_member_constituent()))
+}
+
+/// The `${ ... }` report range from the quasis around an interpolation:
+/// `prevQuasi.range[1] - 2` to `nextQuasi.range[0] + 1`. TS-ESTree quasis
+/// include their delimiters; the source text confirms it before use.
+fn span_range(node: &LintNode, prev_quasi: &LintNode, next_quasi: &LintNode) -> Option<TextRange> {
+    let text = node.text.as_deref()?;
+    let base = node.range.start;
+    let open = prev_quasi.range.end.checked_sub(2)?;
+    let open_text =
+        text.get((open.checked_sub(base)?) as usize..(prev_quasi.range.end - base) as usize)?;
+    let close_start = (next_quasi.range.start.checked_sub(base)?) as usize;
+    let close_text = text.get(close_start..close_start + 1)?;
+    (open_text == "${" && close_text == "}")
+        .then(|| TextRange::new(open, next_quasi.range.start + 1))
 }
 
 fn is_tagged_template(node: &LintNode) -> bool {
@@ -243,8 +287,9 @@ fn string_literal_value(node: &LintNode) -> String {
     String::new()
 }
 
+/// ESLint `LINEBREAK_MATCHER` (`\r\n|[\r\n\u2028\u2029]`) at index 0.
 fn starts_with_newline(text: &str) -> bool {
-    text.starts_with('\n') || text.starts_with("\r\n")
+    text.starts_with(['\n', '\r', '\u{2028}', '\u{2029}'])
 }
 
 /// `isWhitespace`: empty or all-whitespace (per the upstream definition that
@@ -259,15 +304,52 @@ fn is_whitespace(text: &str) -> bool {
 /// comments either before/after the expression or before the following quasi.
 /// The verdict (whether the comment makes the span intentional) stays in Rust.
 fn span_has_comments(node: &LintNode, index: usize) -> bool {
-    node.fields
+    if let Some(indices) = node
+        .fields
         .get("__spanCommentIndices")
         .and_then(Value::as_array)
-        .is_some_and(|indices| {
-            indices
-                .iter()
-                .filter_map(Value::as_u64)
-                .any(|value| value as usize == index)
-        })
+    {
+        return indices
+            .iter()
+            .filter_map(Value::as_u64)
+            .any(|value| value as usize == index);
+    }
+    source_span_has_comments(node, index)
+}
+
+/// `hasCommentsBetweenQuasi` from the template's own source text: a comment
+/// marker between the quasis around interpolation `index` but outside the
+/// interpolated expression itself (whose strings may contain `//`).
+fn source_span_has_comments(node: &LintNode, index: usize) -> bool {
+    let Some(text) = node.text.as_deref() else {
+        return false;
+    };
+    let quasis = child_list(node, "quasis");
+    let expressions = if node.kind == "TSTemplateLiteralType" {
+        child_list(node, "types")
+    } else {
+        child_list(node, "expressions")
+    };
+    let (Some(prev), Some(next), Some(expression)) = (
+        quasis.get(index),
+        quasis.get(index + 1),
+        expressions.get(index),
+    ) else {
+        return false;
+    };
+    let base = node.range.start;
+    let slice = |start: u32, end: u32| {
+        let start = start.checked_sub(base)? as usize;
+        let end = end.checked_sub(base)? as usize;
+        text.get(start..end)
+    };
+    [
+        slice(prev.range.end, expression.range.start),
+        slice(expression.range.end, next.range.start),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|gap| gap.contains("/*") || gap.contains("//"))
 }
 
 /// `isUnderlyingTypeString`: every union part has some intersection part that is
@@ -285,10 +367,13 @@ fn underlying_type_is_string(expression: &LintNode) -> bool {
         return false;
     }
     texts.iter().all(|text| {
-        // Each union member: some intersection part is string-like.
-        split_type_text(text)
-            .iter()
-            .any(|part| classify_type_text(Some(part.as_str())) == TypeTextKind::String)
+        // Every union member has some intersection part that is string-like;
+        // `string | undefined` is not a string yet.
+        split_top_level_type_text(text, '|').iter().all(|member| {
+            split_top_level_type_text(member, '&')
+                .iter()
+                .any(|part| classify_type_text(Some(part.trim())) == TypeTextKind::String)
+        })
     })
 }
 

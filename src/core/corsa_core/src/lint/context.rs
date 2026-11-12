@@ -212,6 +212,27 @@ impl<'a> RuleContext<'a> {
         });
     }
 
+    /// Reports a diagnostic with a message the rule rendered itself.
+    pub fn report_with_message(
+        &mut self,
+        message_id: &'static str,
+        message: String,
+        range: TextRange,
+    ) {
+        self.report_formatted(message_id, message, range, Vec::new());
+    }
+
+    /// Like [`Self::report_with_message`], with suggested fixes.
+    pub fn report_with_message_and_suggestions(
+        &mut self,
+        message_id: &'static str,
+        message: String,
+        range: TextRange,
+        suggestions: Vec<LintSuggestion>,
+    ) {
+        self.report_formatted(message_id, message, range, suggestions);
+    }
+
     pub(crate) fn finish(self) -> Vec<LintDiagnostic> {
         self.diagnostics
     }

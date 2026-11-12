@@ -10,6 +10,9 @@ mod registry;
 mod rules;
 #[cfg(test)]
 mod tests;
+mod type_shape;
+#[cfg(test)]
+mod type_shape_tests;
 mod types;
 
 pub use context::{RuleContext, RustLintRule};
