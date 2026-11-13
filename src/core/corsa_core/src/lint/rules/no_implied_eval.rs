@@ -245,7 +245,7 @@ mod tests {
         json!({
             "kind": "Identifier",
             "range": { "start": 11, "end": 14 },
-            "fields": { "name": "foo", "__typeTree": shape }
+            "fields": { "name": "foo", "__type": shape }
         })
     }
 
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn reports_global_function_constructor() {
         let mut callee = identifier("Function", false);
-        callee["fields"]["__typeTree"] = json!({
+        callee["fields"]["__type"] = json!({
             "id": "F", "flags": 1 << 20, "text": "FunctionConstructor",
             "symbol": "FunctionConstructor", "lib": true
         });
@@ -302,7 +302,7 @@ mod tests {
         let diagnostics = run(&call(callee.clone(), handler(text.clone())));
         assert_eq!(diagnostics[0].message_id, "noFunctionConstructor");
 
-        callee["fields"]["__typeTree"] = json!({
+        callee["fields"]["__type"] = json!({
             "id": "C", "flags": 1 << 20, "text": "typeof Function",
             "symbol": "Function", "lib": false
         });

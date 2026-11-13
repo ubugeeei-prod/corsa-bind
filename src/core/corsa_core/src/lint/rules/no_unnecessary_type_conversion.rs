@@ -123,7 +123,7 @@ fn is_all_number_literal_integers(type_texts: &[String]) -> bool {
     })
 }
 
-/// Upstream `doesUnderlyingTypeMatchFlag` over the `__typeShape` fact.
+/// Upstream `doesUnderlyingTypeMatchFlag` over the constrained `__type` fact.
 /// `constrained` selects `getConstrainedTypeAtLocation` (calls) over
 /// `getTypeAtLocation` (operators), whose type is the shape's `raw` view.
 fn shape_matches(node: &LintNode, mask: u32, constrained: bool) -> Option<bool> {

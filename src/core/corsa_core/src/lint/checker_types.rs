@@ -1,6 +1,7 @@
-//! Reader for checker type details a host attaches as `__typeDetail` (and in
-//! signature facts): TypeScript 7 `TypeFlags`, union constituents, the enum an
-//! enum literal belongs to, and the base constraint of a generic type.
+//! The `no-unsafe-*` and enum view of the host's `__type` fact (and of the
+//! types in signature facts): TypeScript 7 `TypeFlags`, union constituents,
+//! the enum an enum literal belongs to, and the base constraint of a generic
+//! type. See [`super::type_tree`] for the fact itself.
 //!
 //! typescript-eslint decides most `no-unsafe-*` and enum questions on
 //! `ts.Type` flags. Rendered type text cannot tell `any` from an alias named
@@ -10,10 +11,21 @@
 use serde_json::Value;
 
 use super::LintNode;
+use super::type_tree::{constrained_fact, fact};
 
 /// TypeScript 7 `TypeFlags` (microsoft/typescript-go internal/checker/types.go).
 pub(super) mod flags {
     pub(in crate::lint) const ANY: u32 = 1;
+    pub(in crate::lint) const TYPE_PARAMETER: u32 = 1 << 19;
+    pub(in crate::lint) const INDEX: u32 = 1 << 21;
+    pub(in crate::lint) const SUBSTITUTION: u32 = 1 << 24;
+    pub(in crate::lint) const INDEXED_ACCESS: u32 = 1 << 25;
+    pub(in crate::lint) const CONDITIONAL: u32 = 1 << 26;
+    pub(in crate::lint) const UNION: u32 = 1 << 27;
+    pub(in crate::lint) const INTERSECTION: u32 = 1 << 28;
+    /// Types `getConstrainedTypeAtLocation` replaces by their constraint.
+    pub(in crate::lint) const CONSTRAINABLE: u32 =
+        TYPE_PARAMETER | INDEX | SUBSTITUTION | INDEXED_ACCESS | CONDITIONAL | UNION | INTERSECTION;
     pub(in crate::lint) const UNKNOWN: u32 = 1 << 1;
     pub(in crate::lint) const NUMBER_LITERAL: u32 = 1 << 11;
     pub(in crate::lint) const ENUM_LITERAL: u32 = 1 << 15;
@@ -141,10 +153,10 @@ pub(super) struct TypeDetail<'a> {
 impl<'a> TypeDetail<'a> {
     /// The detail of the type at `node`, when the host attached one.
     pub(super) fn of(node: &'a LintNode) -> Option<Self> {
-        node.fields.get("__typeDetail").and_then(Self::from_value)
+        fact(node).and_then(Self::from_value)
     }
 
-    /// Reads a detail object (`{ id, flags, parts, constraint? }`).
+    /// Reads a `__type` tree.
     pub(super) fn from_value(value: &'a Value) -> Option<Self> {
         value.get("flags")?.as_u64()?;
         Some(Self { value })
@@ -166,20 +178,18 @@ impl<'a> TypeDetail<'a> {
 
     /// Union constituents (the type itself when it is not a union).
     pub(super) fn parts(self) -> Vec<TypePart<'a>> {
-        self.value
-            .get("parts")
-            .and_then(Value::as_array)
-            .map(|parts| parts.iter().filter_map(read_part).collect())
-            .unwrap_or_default()
+        match self.value.get("types").and_then(Value::as_array) {
+            Some(types) if self.flags() & flags::UNION != 0 && !types.is_empty() => {
+                types.iter().filter_map(read_part).collect()
+            }
+            _ => read_part(self.value).into_iter().collect(),
+        }
     }
 
     /// typescript-eslint `getConstrainedTypeAtLocation`: the base constraint of
     /// a generic type, or the type itself.
     pub(super) fn constrained(self) -> Self {
-        self.value
-            .get("constraint")
-            .and_then(Self::from_value)
-            .unwrap_or(self)
+        Self::from_value(constrained_fact(self.value, flags::CONSTRAINABLE)).unwrap_or(self)
     }
 
     /// Flags of every union constituent OR-ed together (typescript-eslint's
@@ -282,12 +292,12 @@ impl<'a> TypeDetail<'a> {
 
     /// `checker.isArrayType`.
     pub(super) fn is_array(self) -> bool {
-        self.value.get("isArray").and_then(Value::as_bool) == Some(true)
+        self.value.get("array").and_then(Value::as_bool) == Some(true)
     }
 
     /// `checker.isTupleType`.
     pub(super) fn is_tuple(self) -> bool {
-        self.value.get("isTuple").and_then(Value::as_bool) == Some(true)
+        self.value.get("tuple").and_then(Value::as_bool) == Some(true)
     }
 
     /// typescript-eslint `isTypeAnyArrayType`: `any[]`.
@@ -331,17 +341,27 @@ impl<'a> TypeDetail<'a> {
 }
 
 fn read_part(value: &Value) -> Option<TypePart<'_>> {
-    let flags = u32::try_from(value.get("flags")?.as_u64()?).ok()?;
+    let type_flags = u32::try_from(value.get("flags")?.as_u64()?).ok()?;
+    // An intersection stands for every flag of its constituents.
+    let member_flags = match value.get("types").and_then(Value::as_array) {
+        Some(types) if type_flags & flags::INTERSECTION != 0 && !types.is_empty() => types
+            .iter()
+            .filter_map(|member| member.get("flags").and_then(Value::as_u64))
+            .filter_map(|member| u32::try_from(member).ok())
+            .fold(0, |all, member| all | member),
+        _ => type_flags,
+    };
+    let enum_fact = value.get("enum");
     Some(TypePart {
-        flags,
-        member_flags: value
-            .get("memberFlags")
-            .and_then(Value::as_u64)
-            .and_then(|flags| u32::try_from(flags).ok())
-            .unwrap_or(flags),
+        flags: type_flags,
+        member_flags,
         id: value.get("id").and_then(Value::as_str).unwrap_or_default(),
-        enum_id: value.get("enumId").and_then(Value::as_str),
-        enum_text: value.get("enumText").and_then(Value::as_str),
+        enum_id: enum_fact
+            .and_then(|fact| fact.get("id"))
+            .and_then(Value::as_str),
+        enum_text: enum_fact
+            .and_then(|fact| fact.get("text"))
+            .and_then(Value::as_str),
     })
 }
 

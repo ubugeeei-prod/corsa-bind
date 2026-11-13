@@ -711,7 +711,7 @@ mod tests {
 
     fn shaped(parent_kind: &str, shape: serde_json::Value) -> LintNode {
         let mut argument = arg(&[]);
-        argument.fields.insert("__typeTree".to_owned(), shape);
+        argument.fields.insert("__type".to_owned(), shape);
         spread(parent_kind, argument)
     }
 

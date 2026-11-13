@@ -315,7 +315,7 @@ mod tests {
         json!({
             "kind": "Identifier",
             "range": { "start": start, "end": end },
-            "fields": { "__typeTree": shape }
+            "fields": { "__type": shape }
         })
     }
 
