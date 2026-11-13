@@ -115,8 +115,10 @@ impl RustLintRule for NoMisusedSpreadRule {
     }
 }
 
-// TypeScript 7 SyntaxKind values for class declarations and expressions.
-const CLASS_DECLARATION_KINDS: &[u64] = &[265, 233];
+// TypeScript 7 `SymbolFlags.Class`: the symbol's value declaration is a class
+// declaration or expression. Syntax kind numbers differ between runtimes
+// (7.1 beta numbers every declaration one higher than 7.0), the flag does not.
+const SYMBOL_CLASS: u32 = 1 << 5;
 // TypeScript 7 ObjectFlags.InstantiationExpressionType (`const A = Set<number>`).
 const INSTANTIATION_EXPRESSION_TYPE: u32 = 1 << 24;
 
@@ -191,8 +193,8 @@ fn with_shape_facts(argument: &LintNode, shape: &TypeTree) -> LintNode {
     let is_class_declaration = recurse(shape, &|part| {
         (part.is_object() && part.object_flags & INSTANTIATION_EXPRESSION_TYPE != 0)
             || part
-                .value_declaration_kind
-                .is_some_and(|kind| CLASS_DECLARATION_KINDS.contains(&kind))
+                .symbol_flags
+                .is_some_and(|symbol_flags| symbol_flags & SYMBOL_CLASS != 0)
     });
     for (key, value) in [
         ("__spreadIsString", is_string),

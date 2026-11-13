@@ -83,7 +83,6 @@ pub(crate) struct TypeTree {
     pub symbol_constructable: Option<bool>,
     pub property_count: Option<u64>,
     pub iterable: Option<bool>,
-    pub value_declaration_kind: Option<u64>,
     pub symbol_flags: Option<u32>,
 }
 
@@ -142,7 +141,6 @@ impl TypeTree {
             symbol_constructable: object.get("symbolConstructable").and_then(Value::as_bool),
             property_count: object.get("propertyCount").and_then(Value::as_u64),
             iterable: object.get("iterable").and_then(Value::as_bool),
-            value_declaration_kind: object.get("valueDeclarationKind").and_then(Value::as_u64),
             symbol_flags: object
                 .get("symbolFlags")
                 .and_then(Value::as_u64)
