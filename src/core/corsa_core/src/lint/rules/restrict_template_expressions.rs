@@ -256,7 +256,7 @@ mod tests {
             "childLists": { "expressions": [{
                 "kind": "Identifier",
                 "range": { "start": 3, "end": 6 },
-                "fields": { "__typeTree": shape }
+                "fields": { "__type": shape }
             }] }
         }))
         .unwrap();

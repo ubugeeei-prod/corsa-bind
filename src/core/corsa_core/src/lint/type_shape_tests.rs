@@ -1,4 +1,10 @@
-//! Rules reading the host `__typeShape` fact (TypeScript 7 `TypeFlags`).
+//! Rules reading the constrained view of the host `__type` fact and its
+//! `__typeContext` (TypeScript 7 `TypeFlags`).
+//!
+//! The fixtures describe what typescript-eslint's helpers see: the
+//! constrained type's `flags` and `value`, its `union` parts (each with its
+//! `intersection` parts and position facts), `rawFlags` and `raw` parts of the
+//! unconstrained type. [`hosted`] writes them the way the host sends them.
 
 use serde_json::{Value, json};
 
@@ -18,10 +24,116 @@ const UNION: u32 = 1 << 27;
 const INTERSECTION: u32 = 1 << 28;
 
 fn run(rule: &str, node: Value) -> Vec<LintDiagnostic> {
-    let node: LintNode = serde_json::from_value(node).unwrap();
+    let node: LintNode = serde_json::from_value(hosted(node)).unwrap();
     LintRuleRegistry::with_default_type_aware_rules()
         .run_rule(rule, &node)
         .unwrap()
+}
+
+/// Replaces each fixture `__typeShape` in `node` by the host's `__type` and
+/// `__typeContext`.
+fn hosted(mut node: Value) -> Value {
+    if let Some(fields) = node.get_mut("fields").and_then(Value::as_object_mut)
+        && let Some(shape) = fields.remove("__typeShape")
+    {
+        let (ty, context) = host_type(&shape);
+        fields.insert("__type".to_owned(), ty);
+        fields.insert("__typeContext".to_owned(), context);
+    }
+    for key in ["children", "childLists"] {
+        if let Some(children) = node.get_mut(key).and_then(Value::as_object_mut) {
+            for child in children.values_mut() {
+                let hosted_child = |child: &mut Value| *child = hosted(child.take());
+                match child {
+                    Value::Array(items) => items.iter_mut().for_each(hosted_child),
+                    child => hosted_child(child),
+                }
+            }
+        }
+    }
+    node
+}
+
+/// One fixture part (or intersection member) as a `__type` tree.
+fn host_part(part: &Value) -> Value {
+    let mut ty = json!({ "flags": part["flags"] });
+    for key in ["value", "array", "tuple"] {
+        if let Some(value) = part.get(key) {
+            ty[key] = value.clone();
+        }
+    }
+    if let Some(members) = part.get("intersection").and_then(Value::as_array) {
+        ty["flags"] = json!(part["flags"].as_u64().unwrap_or(0) as u32 | INTERSECTION);
+        ty["types"] = Value::Array(members.iter().map(host_part).collect());
+    }
+    ty
+}
+
+/// The position facts of a fixture part.
+fn part_context(part: &Value) -> Value {
+    let mut context = json!({});
+    for key in ["member", "keyed", "indexKeys", "callReturnsNullable"] {
+        if let Some(value) = part.get(key) {
+            context[key] = value.clone();
+        }
+    }
+    context
+}
+
+/// `(__type, __typeContext)` for a fixture shape.
+fn host_type(shape: &Value) -> (Value, Value) {
+    let flags = shape["flags"].as_u64().unwrap_or(0) as u32;
+    let parts = shape["union"].as_array().cloned().unwrap_or_default();
+    let mut constrained = match parts.as_slice() {
+        [single] if flags & UNION == 0 => host_part(single),
+        _ => json!({ "types": parts.iter().map(host_part).collect::<Vec<_>>() }),
+    };
+    constrained["flags"] = json!(flags);
+    if let Some(value) = shape.get("value") {
+        constrained["value"] = value.clone();
+    }
+    let mut context = part_context(shape);
+    if flags & UNION != 0 {
+        context["parts"] = Value::Array(parts.iter().map(part_context).collect());
+    } else if let Some(single) = parts.first() {
+        for (key, value) in part_context(single)
+            .as_object()
+            .cloned()
+            .unwrap_or_default()
+        {
+            context[key.as_str()] = value;
+        }
+    }
+    if let Some(keys) = shape.get("keys") {
+        context["keys"] = keys.clone();
+    }
+    if let Some(returns) = shape.get("returns").and_then(Value::as_array) {
+        context["returns"] = Value::Array(returns.iter().map(|value| host_type(value).0).collect());
+    }
+    if let Some(predicate) = shape.get("predicate") {
+        let mut predicate = predicate.clone();
+        if let Some(asserted) = predicate.get("shape") {
+            predicate["shape"] = host_type(asserted).0;
+        }
+        context["predicate"] = predicate;
+    }
+    let constrained_away = shape.get("constrained").and_then(Value::as_bool) == Some(true);
+    if !constrained_away {
+        return (constrained, context);
+    }
+    let raw = shape.get("raw");
+    let mut ty = json!({ "flags": shape.get("rawFlags").cloned().unwrap_or(json!(flags)) });
+    if let Some(raw_parts) = raw.and_then(|raw| raw["union"].as_array()) {
+        if ty["flags"].as_u64().unwrap_or(0) as u32 & UNION != 0 {
+            ty["types"] = Value::Array(raw_parts.iter().map(host_part).collect());
+        } else if let Some(single) = raw_parts.first() {
+            let mut single = host_part(single);
+            single["flags"] = ty["flags"].clone();
+            ty = single;
+        }
+    }
+    ty["constraint"] = constrained;
+    (ty, context)
 }
 
 fn part(flags: u32) -> Value {

@@ -1,15 +1,16 @@
-//! `__constrainedTypeShape`: the union/intersection structure of a node's
-//! base-constrained type (`getConstrainedTypeAtLocation`) as the host's
-//! checker reports it. Rules read verdicts from it instead of type text.
-//!
-//! ```json
-//! { "union": true, "intersection": false, "array": false, "tuple": false,
-//!   "numberIndex": false, "numberLength": false, "stringLike": false,
-//!   "parts": [ { "array": true, ... }, ... ] }
-//! ```
+//! The union/intersection structure of a node's base-constrained type
+//! (`getConstrainedTypeAtLocation`), read from the host's `__type` fact (see
+//! [`super::type_tree`]): its `types`, and per type `array`, `tuple`,
+//! `numberIndex` and `numberLength`. Rules read verdicts from it instead of
+//! type text.
 use serde_json::Value;
 
 use super::LintNode;
+use super::type_tree::{constrained_fact, fact};
+
+/// TypeScript 7 `TypeFlags.Union` and `TypeFlags.Intersection`.
+const UNION: u64 = 1 << 27;
+const INTERSECTION: u64 = 1 << 28;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ConstrainedShape<'a>(&'a Value);
@@ -17,22 +18,24 @@ pub(crate) struct ConstrainedShape<'a>(&'a Value);
 impl<'a> ConstrainedShape<'a> {
     /// The node's shape, when the host reported one.
     pub(crate) fn of(node: &'a LintNode) -> Option<Self> {
-        node.fields
-            .get("__constrainedTypeShape")
-            .filter(|value| value.is_object())
-            .map(Self)
+        // `getBaseConstraintOfType` answers for any type that has one.
+        fact(node).map(|value| Self(constrained_fact(value, u32::MAX)))
     }
 
     fn flag(self, key: &str) -> bool {
         self.0.get(key).and_then(Value::as_bool).unwrap_or(false)
     }
 
+    fn type_flags(self) -> u64 {
+        self.0.get("flags").and_then(Value::as_u64).unwrap_or(0)
+    }
+
     pub(crate) fn is_union(self) -> bool {
-        self.flag("union")
+        self.type_flags() & UNION != 0
     }
 
     pub(crate) fn is_intersection(self) -> bool {
-        self.flag("intersection")
+        self.type_flags() & INTERSECTION != 0
     }
 
     /// `checker.isArrayType(t) || checker.isTupleType(t)`.
@@ -48,7 +51,7 @@ impl<'a> ConstrainedShape<'a> {
     /// Union or intersection constituents.
     pub(crate) fn parts(self) -> impl Iterator<Item = ConstrainedShape<'a>> {
         self.0
-            .get("parts")
+            .get("types")
             .and_then(Value::as_array)
             .map(Vec::as_slice)
             .unwrap_or_default()
@@ -94,19 +97,25 @@ mod tests {
         serde_json::from_value(json!({
             "kind": "Identifier",
             "range": { "start": 0, "end": 1 },
-            "fields": { "__constrainedTypeShape": shape }
+            "fields": { "__type": shape }
         }))
         .unwrap()
     }
 
     #[test]
     fn walks_nested_union_and_intersection_parts() {
+        // `T` constrained to `(A & B) | C`.
         let node = node(json!({
-            "union": true,
-            "parts": [
-                { "intersection": true, "parts": [ { "numberIndex": true, "numberLength": true } ] },
-                { "numberIndex": true }
-            ]
+            "flags": 1 << 19,
+            "constraint": {
+                "flags": 1 << 27,
+                "types": [
+                    { "flags": 1 << 28, "types": [
+                        { "flags": 1 << 20, "numberIndex": true, "numberLength": true }
+                    ] },
+                    { "flags": 1 << 20, "numberIndex": true }
+                ]
+            }
         }));
         let shape = ConstrainedShape::of(&node).unwrap();
         assert!(shape.some_leaf(&|part| part.is_array_like()));

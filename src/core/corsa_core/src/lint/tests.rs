@@ -1548,17 +1548,23 @@ fn shape_for_in(shape: serde_json::Value) -> LintNode {
                 "kind": "Identifier",
                 "range": { "start": 14, "end": 19 },
                 "typeTexts": ["string[] | null"],
-                "fields": { "__constrainedTypeShape": shape }
+                "fields": { "__type": shape }
             }
         }
     }))
 }
 
+const OBJECT: u32 = 1 << 20;
+const UNION: u32 = 1 << 27;
+
 #[test]
 fn for_in_reads_array_likeness_from_the_constrained_shape() {
     let nullable_array = shape_for_in(json!({
-        "union": true,
-        "parts": [ { "flags": 8 }, { "numberIndex": true, "numberLength": true, "array": true } ]
+        "flags": UNION,
+        "types": [
+            { "flags": 8 },
+            { "flags": OBJECT, "numberIndex": true, "numberLength": true, "array": true }
+        ]
     }));
     assert_eq!(
         registry()
@@ -1567,7 +1573,8 @@ fn for_in_reads_array_likeness_from_the_constrained_shape() {
             .len(),
         1
     );
-    let record = shape_for_in(json!({ "numberIndex": false, "numberLength": false }));
+    let record =
+        shape_for_in(json!({ "flags": OBJECT, "numberIndex": false, "numberLength": false }));
     assert!(
         registry()
             .run_rule("no-for-in-array", &record)
@@ -1587,8 +1594,11 @@ fn array_delete_needs_every_union_part_to_be_an_array_or_tuple() {
         .get_mut("object")
         .unwrap();
     object.fields.insert(
-        "__constrainedTypeShape".to_owned(),
-        json!({ "union": true, "parts": [ { "tuple": true }, { "array": true } ] }),
+        "__type".to_owned(),
+        json!({ "flags": UNION, "types": [
+            { "flags": OBJECT, "tuple": true },
+            { "flags": OBJECT, "array": true }
+        ] }),
     );
     assert_eq!(
         registry().run_rule("no-array-delete", &node).unwrap().len(),
@@ -1602,8 +1612,8 @@ fn array_delete_needs_every_union_part_to_be_an_array_or_tuple() {
         .get_mut("object")
         .unwrap();
     object.fields.insert(
-        "__constrainedTypeShape".to_owned(),
-        json!({ "union": true, "parts": [ { "tuple": true }, { "flags": 8 } ] }),
+        "__type".to_owned(),
+        json!({ "flags": UNION, "types": [ { "flags": OBJECT, "tuple": true }, { "flags": 8 } ] }),
     );
     assert!(
         registry()
@@ -1627,7 +1637,7 @@ fn reduce_keeps_an_assertion_the_initializer_needs() {
                     "object": {
                         "kind": "ArrayExpression",
                         "range": { "start": 0, "end": 5 },
-                        "fields": { "__constrainedTypeShape": { "array": true } }
+                        "fields": { "__type": { "flags": OBJECT, "array": true } }
                     },
                     "property": { "kind": "Identifier", "range": { "start": 6, "end": 12 }, "fields": { "name": "reduce" } }
                 }

@@ -730,7 +730,7 @@ mod tests {
             "kind": kind,
             "range": { "start": 3, "end": 8 },
             "text": "value",
-            "fields": { "name": "value", "__typeTree": shape }
+            "fields": { "name": "value", "__type": shape }
         })
     }
 

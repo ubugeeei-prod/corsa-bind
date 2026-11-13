@@ -1,32 +1,33 @@
-//! Reader for the host `__typeShape` fact.
+//! The constrained-type view of the host's `__type` fact, plus the position
+//! facts beside it in `__typeContext`.
 //!
 //! typescript-eslint decides many checks on `getConstrainedTypeAtLocation`
-//! plus raw `TypeFlags`. A host that can query the checker stamps a node with
-//! `__typeShape`:
+//! plus raw `TypeFlags`. [`TypeShape`] reads the node's `__type` tree (see
+//! [`super::type_tree`]) through its base constraint, and the facts that
+//! depend on the position rather than the type from `__typeContext`:
 //!
 //! ```json
 //! {
-//!   "flags": 134217728,          // flags of the constrained type
-//!   "rawFlags": 524288,          // flags of the unconstrained type
-//!   "value": "a",                // literal value of the constrained type
-//!   "union": [                   // union constituents of the constrained type
-//!     { "flags": 1024, "value": "a",
-//!       "intersection": [{ "flags": 32 }],
-//!       "array": false, "tuple": false,
-//!       "member": { "found": true, "optional": false, "nullable": true },
-//!       "callReturnsNullable": false }
-//!   ],
-//!   "member": { "found": true, "optional": true, "nullable": true }
+//!   "member": { "found": true, "optional": true, "nullable": true },
+//!   "keys": [{ "key": "a", "typeName": "\"a\"" }],
+//!   "keyed": [{ "found": true, "nullable": false }],
+//!   "indexKeys": ["string"],
+//!   "returns": [{ "flags": 32 }],
+//!   "predicate": { "argument": 0, "shape": { "flags": 16 } },
+//!   "parts": [{ "member": {..}, "keyed": [..], "callReturnsNullable": false }]
 //! }
 //! ```
 //!
-//! Flags use the TypeScript 7 (typescript-go) `TypeFlags` numbering. Boolean
-//! literal values are JSON booleans and bigint values are `{ "bigint": "-1" }`.
-//! Rules fall back to rendered type texts when a node has no shape.
+//! `member`, `keys`, `keyed` and `indexKeys` describe the constrained type;
+//! `parts` holds the same per union constituent, aligned with its `types`.
+//! `returns` are `__type` trees of a callback's call-signature return types,
+//! and `predicate.shape` is the `__type` tree of an asserted argument.
+//! Rules fall back to rendered type texts when a node has no `__type`.
 
 use serde_json::Value;
 
 use super::LintNode;
+use super::type_tree::{constrained_fact, context, fact};
 
 /// TypeScript 7 `TypeFlags` (microsoft/typescript-go internal/checker/types.go).
 pub(crate) mod flags {
@@ -68,6 +69,19 @@ pub(crate) mod flags {
         | NULL;
     pub(crate) const POSSIBLY_FALSY: u32 = DEFINITELY_FALSY | STRING | NUMBER | BIGINT | BOOLEAN;
     pub(crate) const NULLABLE: u32 = ANY | UNKNOWN | NULL | UNDEFINED | VOID;
+    /// Types `getConstrainedTypeAtLocation` replaces by their constraint.
+    pub(crate) const CONSTRAINABLE: u32 = TYPE_PARAMETER
+        | INDEX
+        | INDEXED_ACCESS
+        | CONDITIONAL
+        | SUBSTITUTION
+        | UNION
+        | INTERSECTION
+        | TEMPLATE_LITERAL
+        | STRING_MAPPING;
+    pub(crate) const INDEX: u32 = 1 << 21;
+    pub(crate) const SUBSTITUTION: u32 = 1 << 24;
+    pub(crate) const INTERSECTION: u32 = 1 << 28;
 }
 
 /// A literal value as typescript-eslint's `getValueOfLiteralType` sees it.
@@ -81,10 +95,12 @@ pub(crate) enum StaticValue {
     BigInt(String),
 }
 
-/// One type (or union/intersection constituent) from the shape.
+/// One type (or union/intersection constituent) from the shape, with the
+/// position facts recorded for it.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ShapeType<'a> {
     value: &'a Value,
+    context: Option<&'a Value>,
 }
 
 impl<'a> ShapeType<'a> {
@@ -107,10 +123,14 @@ impl<'a> ShapeType<'a> {
     /// `tsutils.intersectionConstituents`: the parts of an intersection, or
     /// the type itself.
     pub(crate) fn intersection(self) -> Vec<ShapeType<'a>> {
-        match self.value.get("intersection").and_then(Value::as_array) {
-            Some(items) if !items.is_empty() => {
-                items.iter().map(|value| ShapeType { value }).collect()
-            }
+        match self.value.get("types").and_then(Value::as_array) {
+            Some(items) if self.has(flags::INTERSECTION) && !items.is_empty() => items
+                .iter()
+                .map(|value| ShapeType {
+                    value,
+                    context: None,
+                })
+                .collect(),
             _ => vec![self],
         }
     }
@@ -125,20 +145,20 @@ impl<'a> ShapeType<'a> {
 
     /// Property fact recorded for the member name the host was asked about.
     pub(crate) fn member(self) -> Option<MemberFact> {
-        MemberFact::read(self.value.get("member")?)
+        MemberFact::read(self.context?.get("member")?)
     }
 
     /// Property facts per computed key (see [`TypeShape::keys`]); `None`
     /// entries are keys that are not string or number literals.
     pub(crate) fn keyed(self) -> Option<Vec<Option<MemberFact>>> {
-        let items = self.value.get("keyed")?.as_array()?;
+        let items = self.context?.get("keyed")?.as_array()?;
         Some(items.iter().map(MemberFact::read).collect())
     }
 
     /// `getTypeName` of each index signature key type.
     pub(crate) fn index_key_names(self) -> Vec<&'a str> {
-        self.value
-            .get("indexKeys")
+        self.context
+            .and_then(|context| context.get("indexKeys"))
             .and_then(Value::as_array)
             .map(|items| items.iter().filter_map(Value::as_str).collect())
             .unwrap_or_default()
@@ -161,7 +181,7 @@ impl<'a> ShapeType<'a> {
     }
 
     pub(crate) fn call_returns_nullable(self) -> Option<bool> {
-        self.value
+        self.context?
             .get("callReturnsNullable")
             .and_then(Value::as_bool)
     }
@@ -268,23 +288,39 @@ impl MemberFact {
 /// The constrained type of one node.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TypeShape<'a> {
+    /// The node's own (unconstrained) `__type`.
+    raw: &'a Value,
+    /// The type the shape reads: the base constraint, or `raw` itself.
     value: &'a Value,
+    context: Option<&'a Value>,
 }
 
 impl<'a> TypeShape<'a> {
     pub(crate) fn of(node: &'a LintNode) -> Option<Self> {
-        Self::from_value(node.fields.get("__typeShape")?)
+        Some(Self::with_context(fact(node)?, context(node)))
     }
 
-    /// A shape nested in another fact (for example a callback's return types).
+    /// A `__type` tree nested in another fact (for example a callback's
+    /// return types), without position facts.
     pub(crate) fn from_value(value: &'a Value) -> Option<Self> {
         value.get("flags")?.as_u64()?;
-        Some(Self { value })
+        Some(Self::with_context(value, None))
+    }
+
+    fn with_context(raw: &'a Value, context: Option<&'a Value>) -> Self {
+        Self {
+            raw,
+            value: constrained_fact(raw, flags::CONSTRAINABLE),
+            context,
+        }
     }
 
     /// The constrained type itself (not its union parts).
     pub(crate) fn root(self) -> ShapeType<'a> {
-        ShapeType { value: self.value }
+        ShapeType {
+            value: self.value,
+            context: self.context,
+        }
     }
 
     pub(crate) fn flags(self) -> u32 {
@@ -292,8 +328,8 @@ impl<'a> TypeShape<'a> {
     }
 
     pub(crate) fn raw_flags(self) -> u32 {
-        self.value
-            .get("rawFlags")
+        self.raw
+            .get("flags")
             .and_then(Value::as_u64)
             .and_then(|flags| u32::try_from(flags).ok())
             .unwrap_or_else(|| self.flags())
@@ -303,16 +339,19 @@ impl<'a> TypeShape<'a> {
     /// when it had to constrain the type, else the shape itself. `None` when
     /// the type was constrained but its own parts were not sent.
     pub(crate) fn raw(self) -> Option<Self> {
-        match self.value.get("raw") {
-            Some(raw) if raw.get("flags").is_some() => Some(Self { value: raw }),
-            _ if self.is_constrained() => None,
-            _ => Some(self),
+        if !self.is_constrained() {
+            return Some(self);
         }
+        Some(Self {
+            raw: self.raw,
+            value: self.raw,
+            context: None,
+        })
     }
 
-    /// The host replaced the expression's type with its base constraint.
+    /// The expression's type was replaced with its base constraint.
     pub(crate) fn is_constrained(self) -> bool {
-        self.value.get("constrained").and_then(Value::as_bool) == Some(true)
+        !std::ptr::eq(self.raw, self.value)
     }
 
     /// `isEnumMemberType`: some union or intersection constituent is an enum
@@ -332,9 +371,20 @@ impl<'a> TypeShape<'a> {
 
     /// `tsutils.unionConstituents`.
     pub(crate) fn union(self) -> Vec<ShapeType<'a>> {
-        match self.value.get("union").and_then(Value::as_array) {
-            Some(items) if !items.is_empty() => {
-                items.iter().map(|value| ShapeType { value }).collect()
+        match self.value.get("types").and_then(Value::as_array) {
+            Some(items) if self.flags() & flags::UNION != 0 && !items.is_empty() => {
+                let contexts = self
+                    .context
+                    .and_then(|context| context.get("parts"))
+                    .and_then(Value::as_array);
+                items
+                    .iter()
+                    .enumerate()
+                    .map(|(index, value)| ShapeType {
+                        value,
+                        context: contexts.and_then(|contexts| contexts.get(index)),
+                    })
+                    .collect()
             }
             _ => vec![self.root()],
         }
@@ -347,7 +397,7 @@ impl<'a> TypeShape<'a> {
 
     /// Constituents of the computed key this object is indexed with.
     pub(crate) fn keys(self) -> Option<Vec<ComputedKey<'a>>> {
-        let items = self.value.get("keys")?.as_array()?;
+        let items = self.context?.get("keys")?.as_array()?;
         items
             .iter()
             .map(|item| {

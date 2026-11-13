@@ -1,4 +1,4 @@
-//! Rules deciding on host checker details (`__typeDetail`, `__callParameters`,
+//! Rules deciding on host checker details (`__type`, `__callParameters`,
 //! `__functionReturns`, contextual types) rather than rendered type text.
 
 use serde_json::{Value, json};
@@ -27,7 +27,7 @@ fn run(rule: &str, node: &Value) -> Vec<LintDiagnostic> {
 
 /// A plain (non-union) type detail.
 fn simple(id: &str, flags: u32) -> Value {
-    json!({ "id": id, "flags": flags, "parts": [{ "id": id, "flags": flags }] })
+    json!({ "id": id, "flags": flags })
 }
 
 fn reference(id: &str, target: &str, text: &str, arguments: Vec<Value>) -> Value {
@@ -38,18 +38,17 @@ fn reference(id: &str, target: &str, text: &str, arguments: Vec<Value>) -> Value
         "target": target,
         "text": text,
         "typeArguments": arguments,
-        "parts": [{ "id": id, "flags": OBJECT }],
     })
 }
 
 /// `enum Fruit { Apple, Banana }` as the union of its members.
 fn fruit() -> Value {
-    let member = |id: &str| json!({ "id": id, "flags": ENUM_LITERAL | NUMBER_LITERAL, "enumId": "fruit", "enumText": "Fruit" });
-    json!({ "id": "fruit", "flags": UNION | ENUM_LITERAL, "parts": [member("apple"), member("banana")] })
+    let member = |id: &str| json!({ "id": id, "flags": ENUM_LITERAL | NUMBER_LITERAL, "enum": { "id": "fruit", "text": "Fruit" } });
+    json!({ "id": "fruit", "flags": UNION | ENUM_LITERAL, "types": [member("apple"), member("banana")] })
 }
 
 fn typed(kind: &str, start: u32, end: u32, detail: Value) -> Value {
-    json!({ "kind": kind, "range": { "start": start, "end": end }, "fields": { "__typeDetail": detail } })
+    json!({ "kind": kind, "range": { "start": start, "end": end }, "fields": { "__type": detail } })
 }
 
 fn with(mut node: Value, key: &str, child: Value) -> Value {
@@ -103,7 +102,7 @@ fn unsafe_assignment_compares_type_arguments_of_the_same_generic_only() {
 #[test]
 fn unary_minus_accepts_a_type_parameter_constrained_to_number() {
     let generic = json!({
-        "id": "t", "flags": TYPE_PARAMETER, "parts": [{ "id": "t", "flags": TYPE_PARAMETER }],
+        "id": "t", "flags": TYPE_PARAMETER,
         "constraint": simple("n", NUMBER),
     });
     let minus = |detail: Value| {
@@ -270,8 +269,8 @@ fn unsafe_assignment_exempts_an_empty_map_construction() {
 #[test]
 fn unsafe_assignment_reports_any_tuple_elements_in_array_patterns() {
     let tuple = json!({
-        "id": "t", "flags": OBJECT, "objectFlags": REFERENCE, "isTuple": true,
-        "typeArguments": [simple("any", ANY)], "parts": [{ "id": "t", "flags": OBJECT }],
+        "id": "t", "flags": OBJECT, "objectFlags": REFERENCE, "tuple": true,
+        "typeArguments": [simple("any", ANY)],
     });
     let pattern = json!({ "kind": "ArrayPattern", "range": { "start": 0, "end": 3 }, "fields": {},
         "childLists": { "elements": [{ "kind": "Identifier", "range": { "start": 1, "end": 2 } }] } });

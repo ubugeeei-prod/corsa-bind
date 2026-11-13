@@ -14,7 +14,7 @@ use checked::{Settings, Truthiness};
 /// result is fixed.
 ///
 /// Port of typescript-eslint `no-unnecessary-condition`. When the host stamps
-/// a `__typeShape` fact (constrained type flags, literal values, union parts)
+/// a `__type` fact (read through its constraint: flags, literal values, union parts)
 /// the verdicts follow the upstream `TypeFlags` logic exactly; otherwise the
 /// rule falls back to rendered type texts for the truthiness and literal
 /// comparison checks.
@@ -317,7 +317,7 @@ fn check_node_reporting(
     ctx.report(message, report);
 }
 
-/// Rendered-type-text fallback for hosts without `__typeShape`.
+/// Rendered-type-text fallback for hosts without `__type`.
 fn text_truthiness(expression: &LintNode) -> Option<Truthiness> {
     let type_texts = &expression.type_texts;
     if type_texts.is_empty() || is_conditional_always_necessary(type_texts) {
@@ -482,14 +482,12 @@ fn static_text(
 }
 
 /// The `checkTypePredicates` branch of upstream `checkCallExpression`, over
-/// the host's `predicate` entry in the call's `__typeShape`:
+/// the host's `predicate` entry in the call's `__typeContext`:
 /// `asserts x` checks `x` like a condition, and `x is T` / `asserts x is T`
 /// reports an argument whose type already satisfies the predicate.
 fn check_type_predicate(ctx: &mut RuleContext<'_>, node: &LintNode, settings: Settings) {
-    let Some(fact) = node
-        .fields
-        .get("__typeShape")
-        .and_then(|shape| shape.get("predicate"))
+    let Some(fact) =
+        crate::lint::type_tree::context(node).and_then(|context| context.get("predicate"))
     else {
         return;
     };
@@ -511,9 +509,8 @@ fn check_type_predicate(ctx: &mut RuleContext<'_>, node: &LintNode, settings: Se
         // `findTruthinessAssertedArgument`: the asserted argument is a
         // condition whose value is used (its parent is the call).
         let mut asserted = argument.clone();
-        asserted
-            .fields
-            .insert("__typeShape".to_owned(), shape.clone());
+        asserted.fields.remove("__typeContext");
+        asserted.fields.insert("__type".to_owned(), shape.clone());
         check_node(ctx, Some(&asserted), false, false, settings);
         return;
     }

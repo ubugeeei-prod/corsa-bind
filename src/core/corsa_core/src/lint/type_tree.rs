@@ -1,18 +1,37 @@
-//! Structural type facts a host attaches as `__typeTree`.
+//! The checker type fact a host attaches to a node as `__type`.
 //!
 //! Rendered type text cannot tell a type parameter from an interface, a
 //! branded primitive from an object, or where a `toString` came from. Hosts
-//! that can query the checker attach a small tree instead:
+//! that can query the checker attach one recursive tree per node, built once
+//! per checker type:
 //!
 //! ```json
 //! { "id": "17", "flags": 1048576, "objectFlags": 4, "text": "Foo<T>",
-//!   "types": [..], "constraint": {..}, "arrayElement": {..},
-//!   "tupleElements": [..], "callable": false, "toString": true,
-//!   "bases": ["Error"], "symbol": "Foo", "lib": false }
+//!   "value": "a", "types": [..], "constraint": {..},
+//!   "target": "9", "typeArguments": [..], "array": false, "tuple": false,
+//!   "enum": { "id": "4", "text": "Color" },
+//!   "symbol": "Foo", "symbolFlags": 32, "lib": false,
+//!   "callable": false, "constructable": false, "symbolConstructable": true,
+//!   "propertyCount": 2, "iterable": false, "toString": true,
+//!   "bases": ["Error"], "numberIndex": false, "numberLength": false }
 //! ```
 //!
-//! `flags` are TypeScript 7 `TypeFlags`. Every field except `flags` is
-//! optional; a missing field means "unknown", never "absent".
+//! - `flags` are TypeScript 7 `TypeFlags`, `objectFlags` its `ObjectFlags`.
+//! - `value` is a literal's value: JSON strings, numbers and booleans, and
+//!   `{ "bigint": "-1" }` for bigints.
+//! - `types` are the union or intersection constituents.
+//! - `constraint` is `getBaseConstraintOfType` where it differs from the type.
+//!   Readers apply it the way their typescript-eslint helper does: the whole
+//!   type ([`constrained_fact`]), or each constituent ([`TypeTree::constrained`]).
+//! - `typeArguments`, `array` and `tuple` describe type references; an
+//!   array's element and a tuple's elements are its type arguments.
+//! - `enum` is the enum an enum literal belongs to.
+//!
+//! Every field except `flags` is optional; a missing field means "unknown",
+//! never "absent". Facts that depend on the position rather than the type
+//! (a property looked up by name, computed keys, a call's type predicate,
+//! callback return types) are attached beside it as `__typeContext`; see
+//! [`super::type_shape`].
 
 use serde_json::Value;
 
@@ -59,6 +78,43 @@ pub(crate) mod flags {
     pub(crate) const VOID_LIKE: u32 = VOID | UNDEFINED;
 }
 
+/// TypeScript 7 `ObjectFlags.Reference`.
+const REFERENCE: u32 = 1 << 2;
+
+/// Types whose constraint typescript-eslint's shape helpers read
+/// (`getConstrainedTypeAtLocation` on a type variable).
+const GENERIC: u32 = flags::TYPE_PARAMETER
+    | flags::INDEX
+    | flags::SUBSTITUTION
+    | flags::INDEXED_ACCESS
+    | flags::CONDITIONAL;
+
+/// The `__type` fact the host attached to `node`.
+pub(crate) fn fact(node: &LintNode) -> Option<&Value> {
+    node.fields
+        .get("__type")
+        .filter(|value| value.get("flags").is_some_and(Value::is_u64))
+}
+
+/// The position facts the host attached beside `__type`.
+pub(crate) fn context(node: &LintNode) -> Option<&Value> {
+    node.fields
+        .get("__typeContext")
+        .filter(|value| value.is_object())
+}
+
+/// `getBaseConstraintOfType(type) ?? type` for a type whose flags meet `mask`.
+pub(crate) fn constrained_fact(value: &Value, mask: u32) -> &Value {
+    let constrained = value
+        .get("flags")
+        .and_then(Value::as_u64)
+        .is_some_and(|type_flags| type_flags & u64::from(mask) != 0);
+    match value.get("constraint") {
+        Some(constraint) if constrained && constraint.get("flags").is_some() => constraint,
+        _ => value,
+    }
+}
+
 /// One checker type, as described by the host.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct TypeTree {
@@ -87,9 +143,9 @@ pub(crate) struct TypeTree {
 }
 
 impl TypeTree {
-    /// Reads the `__typeTree` the host attached to `node`.
+    /// Reads the `__type` the host attached to `node`.
     pub(crate) fn of(node: &LintNode) -> Option<Self> {
-        Self::parse(node.fields.get("__typeTree")?)
+        Self::parse(fact(node)?)
     }
 
     pub(crate) fn parse(value: &Value) -> Option<Self> {
@@ -102,6 +158,19 @@ impl TypeTree {
                 .map(|items| items.iter().filter_map(Self::parse).collect())
         };
         let single = |key: &str| object.get(key).and_then(Self::parse).map(Box::new);
+        let flag = |key: &str| object.get(key).and_then(Value::as_bool);
+        let type_arguments = list("typeArguments");
+        let is_reference = object
+            .get("objectFlags")
+            .and_then(Value::as_u64)
+            .is_some_and(|object_flags| object_flags & u64::from(REFERENCE) != 0);
+        let (array_element, tuple_elements) = match (type_arguments, flag("array"), flag("tuple")) {
+            (Some(arguments), Some(true), _) if is_reference => {
+                (arguments.into_iter().next().map(Box::new), None)
+            }
+            (Some(arguments), _, Some(true)) if is_reference => (None, Some(arguments)),
+            _ => (None, None),
+        };
         Some(Self {
             id: object.get("id").and_then(Value::as_str).map(str::to_owned),
             flags,
@@ -116,9 +185,11 @@ impl TypeTree {
                 .unwrap_or_default()
                 .to_owned(),
             types: list("types").unwrap_or_default(),
-            constraint: single("constraint"),
-            array_element: single("arrayElement"),
-            tuple_elements: list("tupleElements"),
+            // Shape rules constrain type variables only; a union's base
+            // constraint is read through its constituents.
+            constraint: single("constraint").filter(|_| flags & GENERIC != 0),
+            array_element,
+            tuple_elements,
             callable: object.get("callable").and_then(Value::as_bool),
             to_string: object.get("toString").map(Value::as_bool),
             bases: object

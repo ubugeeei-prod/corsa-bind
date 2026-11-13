@@ -877,17 +877,17 @@ const diagnosticCases = [
       children: {
         id: id("color", [0, 5], ["Color"], {
           fields: {
-            __typeDetail: {
+            __type: {
               id: "color",
               flags: 32768 | 2048,
-              parts: [{ id: "color", flags: 32768 | 2048, enumId: "color", enumText: "Color" }],
+              enum: { id: "color", text: "Color" },
             },
           },
         }),
         init: node("Literal", [14, 15], {
           fields: {
             value: 1,
-            __typeDetail: { id: "one", flags: 2048, parts: [{ id: "one", flags: 2048 }] },
+            __type: { id: "one", flags: 2048 },
           },
         }),
       },

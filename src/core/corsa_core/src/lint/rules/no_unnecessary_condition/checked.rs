@@ -279,9 +279,7 @@ pub(super) fn is_array_or_tuple(node: &LintNode) -> bool {
 /// (`hasTruthyReturnTypes`, `hasFalsyReturnTypes`), or `None` when any return
 /// type is unknown, `any`, missing, or the callback has no signatures.
 pub(super) fn callback_returns(callback: &LintNode) -> Option<(bool, bool)> {
-    let returns = callback
-        .fields
-        .get("__typeShape")?
+    let returns = crate::lint::type_tree::context(callback)?
         .get("returns")?
         .as_array()?;
     if returns.is_empty() {
