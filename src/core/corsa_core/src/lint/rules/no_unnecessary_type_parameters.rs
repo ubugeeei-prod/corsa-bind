@@ -24,9 +24,7 @@ pub struct NoUnnecessaryTypeParametersRule;
 const MESSAGES: &[RuleMessage] = &[
     RuleMessage {
         id: "sole",
-        // Description is filled with the concrete name/uses/descriptor by the
-        // host renderer; this static fallback mirrors the upstream template.
-        description: "Type parameter is used only once in the signature.",
+        description: "Type parameter {{name}} is {{uses}} in the {{descriptor}} signature.",
     },
     RuleMessage {
         id: "replaceUsagesWithConstraint",
@@ -115,18 +113,12 @@ fn check_type_parameter(
     // references); the host supplies the resolved reference ranges.
     let report_range = param.range;
 
-    ctx.report_with_suggestions(
+    ctx.report_with_data_and_suggestions(
         "sole",
         report_range,
+        &[("name", name), ("uses", uses), ("descriptor", descriptor)],
         build_suggestions(declaration, params, index, param),
     );
-
-    // `name`, `uses`, and `descriptor` carry the same data the upstream
-    // `buildSoleMessage` interpolates. They are not consumed by the static
-    // message catalog here but are kept so the host renderer can reproduce the
-    // exact "Type parameter {name} is {uses} in the {descriptor} signature."
-    // text. Referencing them keeps the parity contract explicit.
-    let _ = (name, uses, descriptor);
 }
 
 /// Equivalent of the `descriptor` argument passed at each listener: "class" for
@@ -324,6 +316,10 @@ mod tests {
         let diagnostics = run(&node);
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message_id, "sole");
+        assert_eq!(
+            diagnostics[0].message,
+            "Type parameter T is never used in the function signature."
+        );
         assert_eq!(diagnostics[0].suggestions.len(), 1);
         assert_eq!(
             diagnostics[0].suggestions[0].message_id,
@@ -354,6 +350,10 @@ mod tests {
         let diagnostics = run(&node);
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message_id, "sole");
+        assert_eq!(
+            diagnostics[0].message,
+            "Type parameter T is used only once in the function signature."
+        );
         let fixes = &diagnostics[0].suggestions[0].fixes;
         // One replacement + one removal.
         assert_eq!(fixes.len(), 2);

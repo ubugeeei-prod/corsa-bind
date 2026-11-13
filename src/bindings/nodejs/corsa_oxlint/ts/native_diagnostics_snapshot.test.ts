@@ -280,7 +280,7 @@ describe("native diagnostic snapshots", () => {
         {
           "caseName": "no-unnecessary-type-parameters: type parameter used only once",
           "diagnostics": [
-            "no-unnecessary-type-parameters/sole@1..2: Type parameter is used only once in the signature. | suggestions replaceUsagesWithConstraint@1..2=><empty>: Replace all usages of type parameter with its constraint.",
+            "no-unnecessary-type-parameters/sole@1..2: Type parameter T is never used in the function signature. | suggestions replaceUsagesWithConstraint@1..2=><empty>: Replace all usages of type parameter with its constraint.",
           ],
         },
         {
