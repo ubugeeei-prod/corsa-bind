@@ -412,15 +412,10 @@ fn should_skip_for_type_aware_allowances(node: &LintNode) -> bool {
         _ => {}
     }
 
-    if allow_index
+    allow_index
         && node
             .field_bool("__propertyIsIndexSignature")
             .unwrap_or(false)
-    {
-        return true;
-    }
-
-    false
 }
 
 #[cfg(test)]

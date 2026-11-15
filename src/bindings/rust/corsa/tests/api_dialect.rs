@@ -14,7 +14,7 @@ use corsa::{
     CorsaError,
     api::{
         ApiClient, ApiDialect, ApiMode, ApiSpawnConfig, DocumentIdentifier, FileChangeSummary,
-        FileChanges, ManagedSnapshot, ProjectHandle, UpdateSnapshotParams,
+        FileChanges, ManagedSnapshot, ProjectHandle, TypeHandle, UpdateSnapshotParams,
     },
     runtime::{block_on, spawn},
 };
@@ -43,12 +43,16 @@ impl Runtime {
 
     /// Params of every request sent for `method`, in order.
     fn sent(&self, method: &str) -> Vec<Value> {
-        fs::read_to_string(self.log.path().join(format!("{method}.jsonl")))
-            .unwrap_or_default()
-            .lines()
-            .map(|line| serde_json::from_str(line).unwrap())
-            .collect()
+        sent(self.log.path(), method)
     }
+}
+
+fn sent(log: &Path, method: &str) -> Vec<Value> {
+    fs::read_to_string(log.join(format!("{method}.jsonl")))
+        .unwrap_or_default()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
 }
 
 fn config(mode: ApiMode, log: &Path) -> ApiSpawnConfig {
@@ -99,6 +103,113 @@ fn handshake_names_the_dialect_behind_one_stable_response() {
             let initialize = runtime.client.initialize().await.unwrap();
             assert_eq!(runtime.client.dialect(), Some(ApiDialect::DerivedSnapshots));
             assert!(initialize.use_case_sensitive_file_names, "{mode:?}");
+            runtime.client.close().await.unwrap();
+        }
+    });
+}
+
+#[test]
+fn type_parameter_defaults_preserve_response_and_request_handles_in_both_dialects() {
+    block_on(async {
+        for mode in MODES {
+            let log = tempfile::tempdir().unwrap();
+            let client = ApiClient::spawn(
+                support::api_config(mode)
+                    .with_env("CORSA_MOCK_PARAMS_DIR", log.path().display().to_string()),
+            )
+            .await
+            .unwrap();
+            let snapshot = client.update_snapshot(open(APP)).await.unwrap();
+            let project = snapshot.projects[0].id.clone();
+            let found = client
+                .get_default_from_type_parameter(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    TypeHandle::from("86"),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.id.as_str(), "91", "{mode:?}");
+            assert!(
+                client
+                    .get_default_from_type_parameter(
+                        snapshot.handle.clone(),
+                        project.clone(),
+                        TypeHandle::from("0"),
+                    )
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{mode:?}"
+            );
+            assert_eq!(
+                sent(log.path(), "getDefaultFromTypeParameter"),
+                [
+                    json!({
+                        "snapshot": snapshot.handle.as_str(),
+                        "project": project.as_str(),
+                        "type": 86,
+                        "objectId": 86,
+                    }),
+                    json!({
+                        "snapshot": snapshot.handle.as_str(),
+                        "project": project.as_str(),
+                        "type": 0,
+                        "objectId": 0,
+                    }),
+                ],
+                "{mode:?}"
+            );
+            drop(snapshot);
+            client.close().await.unwrap();
+
+            let runtime = Runtime::spawn(mode).await;
+            let snapshot = runtime.client.update_snapshot(open(APP)).await.unwrap();
+            let project = snapshot.projects[0].id.clone();
+            let found = runtime
+                .client
+                .get_default_from_type_parameter(
+                    snapshot.handle.clone(),
+                    project.clone(),
+                    TypeHandle::from("40"),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(found.id.as_str(), "91", "{mode:?}");
+            assert!(
+                runtime
+                    .client
+                    .get_default_from_type_parameter(
+                        snapshot.handle.clone(),
+                        project.clone(),
+                        TypeHandle::from("0"),
+                    )
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{mode:?}"
+            );
+            assert_eq!(
+                runtime.sent("getDefaultFromTypeParameter"),
+                [
+                    json!({
+                        "snapshot": 1,
+                        "project": project.as_str(),
+                        "type": 40,
+                        "objectId": 40,
+                    }),
+                    json!({
+                        "snapshot": 1,
+                        "project": project.as_str(),
+                        "type": 0,
+                        "objectId": 0,
+                    }),
+                ],
+                "{mode:?}"
+            );
+            drop(snapshot);
             runtime.client.close().await.unwrap();
         }
     });

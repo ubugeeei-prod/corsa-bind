@@ -99,6 +99,12 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
                 write_tuple(&mut writer, MSG_RESPONSE, method.as_bytes(), b"type-node")?;
                 continue;
             }
+            "getDefaultFromTypeParameter"
+                if params.get("type").and_then(Value::as_u64) == Some(0) =>
+            {
+                Value::Null
+            }
+            "getDefaultFromTypeParameter" => crate::common::numeric_type_response(91),
             "printNode" => json!("print:type-node"),
             "ping" => json!("pong"),
             "echo" => {

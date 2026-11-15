@@ -136,6 +136,12 @@ pub fn run(cwd: String, callbacks: Vec<String>) -> Result<()> {
             | "getFalseTypeOfConditionalType"
             | "getTypeFromTypeNode"
             | "getParameterType" => Some(common::type_response("t0000000000000001")),
+            "getDefaultFromTypeParameter"
+                if params.get("type").and_then(Value::as_u64) == Some(0) =>
+            {
+                Some(Value::Null)
+            }
+            "getDefaultFromTypeParameter" => Some(common::numeric_type_response(91)),
             // Checker predicates. Answering these is what lets the binding stop
             // deciding type shape by parsing rendered type text.
             "isArrayType" | "isTupleType" | "isArrayLikeType" | "isTypeAssignableTo" => {

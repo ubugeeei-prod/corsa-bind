@@ -30,6 +30,7 @@ const CHECKER_SYMBOL_POSITION: u64 = 1000;
 const FILE_TYPE: u64 = 87;
 const CHECKER_TYPE: u64 = 40;
 const MEMBER_TYPE: u64 = 88;
+const DEFAULT_TYPE: u64 = 91;
 const SIGNATURE: u64 = 5;
 
 /// Outcome of a request the emulator handled.
@@ -214,6 +215,11 @@ impl State {
             "getThisParameterOfSignature" => {
                 Ok(self.checker_symbol(handle?, project, THIS_PARAMETER_SYMBOL, "this"))
             }
+            "getDefaultFromTypeParameter" => match params.get("objectId").and_then(Value::as_u64) {
+                Some(0) => Ok(Value::Null),
+                Some(_) => Ok(type_response(DEFAULT_TYPE, Value::Null)),
+                None => Err("api: client error: empty type handle".into()),
+            },
             "getWellKnownSymbols" => {
                 let registered = &mut self.snapshots.get_mut(&handle?)?.registered;
                 registered.extend([1, 2, 3]);
