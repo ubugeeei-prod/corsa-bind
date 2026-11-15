@@ -460,6 +460,7 @@ mod tests {
     use super::serialize_api_params;
     use crate::api::{
         NodeHandle, ProjectHandle, SignatureHandle, SnapshotHandle, SymbolHandle, TypeHandle,
+        requests_symbols::TypeProjectRequest,
     };
     use serde::Serialize;
     use serde_json::json;
@@ -534,6 +535,29 @@ mod tests {
 
         assert_eq!(params["type"], json!(86));
         assert_eq!(params["objectId"], json!(86));
+    }
+
+    #[test]
+    fn type_parameter_default_uses_the_existing_type_property_wire_shape() {
+        let params = serialize_api_params(
+            "getDefaultFromTypeParameter",
+            &TypeProjectRequest {
+                snapshot: SnapshotHandle::from("1"),
+                project: ProjectHandle::from("project-1"),
+                r#type: TypeHandle::from("86"),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            params,
+            json!({
+                "snapshot": 1,
+                "project": "project-1",
+                "type": 86,
+                "objectId": 86,
+            })
+        );
     }
 
     #[test]

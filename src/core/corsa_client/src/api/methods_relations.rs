@@ -541,6 +541,24 @@ impl ApiClient {
         .await
     }
 
+    /// Returns the default of a type parameter, if one exists.
+    pub async fn get_default_from_type_parameter(
+        &self,
+        snapshot: SnapshotHandle,
+        project: ProjectHandle,
+        r#type: TypeHandle,
+    ) -> Result<Option<TypeResponse>> {
+        self.call_optional(
+            "getDefaultFromTypeParameter",
+            TypeProjectRequest {
+                snapshot,
+                project,
+                r#type,
+            },
+        )
+        .await
+    }
+
     /// Returns the type arguments of an instantiated type.
     ///
     /// Missing server data is normalized to an empty vector. A stale type

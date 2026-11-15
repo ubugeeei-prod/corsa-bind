@@ -96,6 +96,13 @@ pub fn type_response(id: &str) -> Value {
     })
 }
 
+/// Stable TypeScript runtimes encode checker object handles as JSON numbers.
+pub fn numeric_type_response(id: u64) -> Value {
+    let mut response = type_response("");
+    response["id"] = json!(id);
+    response
+}
+
 /// Whether the mock should report a type that satisfies every client-side
 /// traversal guard.
 ///

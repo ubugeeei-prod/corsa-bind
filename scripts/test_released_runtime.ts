@@ -51,7 +51,13 @@ function main(): void {
   runCommand(
     "cargo",
     ["test", "-p", "corsa", "--no-default-features", "--test", "real_corsa_dialect"],
-    { env: { ...process.env, CORSA_EXECUTABLE: runtime.executable } },
+    {
+      env: {
+        ...process.env,
+        CORSA_EXECUTABLE: runtime.executable,
+        CORSA_RELEASED_RUNTIME: "1",
+      },
+    },
   );
 }
 

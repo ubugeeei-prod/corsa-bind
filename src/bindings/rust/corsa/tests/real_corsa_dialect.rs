@@ -314,6 +314,104 @@ export const pending = Promise.resolve(1);
 }
 
 #[test]
+fn type_parameter_defaults_are_checker_types_in_every_runtime_dialect() {
+    block_on(async {
+        // The released TypeScript runtime predates this endpoint. Its existing
+        // dialect contract remains covered by the other tests in this binary;
+        // the pinned runtime proves the newly exposed checker operation.
+        if std::env::var_os("CORSA_RELEASED_RUNTIME").is_some() {
+            return;
+        }
+        let Some(binary) = support::resolved_real_corsa_binary() else {
+            return;
+        };
+        for mode in MODES {
+            let project = fixture(&[
+                ("tsconfig.json", TSCONFIG),
+                (
+                    "src/index.ts",
+                    r#"export declare function withDefault<T = string>(): T;
+export declare function required<T>(): T;
+"#,
+                ),
+            ]);
+            let file = project.path().join("src/index.ts");
+            let text = fs::read_to_string(&file).unwrap();
+            let client = spawn(&binary, mode, project.path()).await;
+            let snapshot = open(&client, &project.path().join("tsconfig.json")).await;
+            let project_id = snapshot.projects[0].id.clone();
+
+            let with_default =
+                type_at(&client, &snapshot, &project_id, &file, &text, "withDefault").await;
+            let signature = client
+                .get_signatures_of_type(
+                    snapshot.handle.clone(),
+                    project_id.clone(),
+                    with_default.id,
+                    0,
+                )
+                .await
+                .unwrap()
+                .remove(0);
+            let parameter = client
+                .get_type_parameters_of_signature(
+                    snapshot.handle.clone(),
+                    project_id.clone(),
+                    signature.id,
+                )
+                .await
+                .unwrap()
+                .remove(0);
+            let default = client
+                .get_default_from_type_parameter(
+                    snapshot.handle.clone(),
+                    project_id.clone(),
+                    parameter.id,
+                )
+                .await
+                .unwrap()
+                .expect("declared default type");
+            assert_eq!(
+                render(&client, &snapshot, &project_id, default.id).await,
+                "string",
+                "{mode:?}"
+            );
+
+            let required = type_at(&client, &snapshot, &project_id, &file, &text, "required").await;
+            let signature = client
+                .get_signatures_of_type(snapshot.handle.clone(), project_id.clone(), required.id, 0)
+                .await
+                .unwrap()
+                .remove(0);
+            let parameter = client
+                .get_type_parameters_of_signature(
+                    snapshot.handle.clone(),
+                    project_id.clone(),
+                    signature.id,
+                )
+                .await
+                .unwrap()
+                .remove(0);
+            assert!(
+                client
+                    .get_default_from_type_parameter(
+                        snapshot.handle.clone(),
+                        project_id,
+                        parameter.id,
+                    )
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{mode:?}"
+            );
+
+            snapshot.release().await.unwrap();
+            client.close().await.unwrap();
+        }
+    });
+}
+
+#[test]
 fn filesystem_callbacks_shadow_files_on_disk() {
     block_on(async {
         let Some(binary) = support::resolved_real_corsa_binary() else {
