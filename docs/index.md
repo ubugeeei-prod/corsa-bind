@@ -95,6 +95,7 @@ points.
 - [Type-aware Oxlint](./oxlint_guide.md) — `corsa-oxlint` rule authoring and native rules.
 - [Content mappers](./content_mappers.md) — `.vue`-style mapped files, span maps, and the `runExternalCode` gate.
 - [Native rules](./native_rules.md) — the full set of type-aware rules implemented natively in Rust.
+- [Using tsrs](./tsrs.md) — run on tsrs, the Rust port of the TypeScript 7 checker.
 - [typescript-eslint parity](./typescript_eslint_parity.md) — per-rule option, fact, and test status against upstream.
 
 ## Run and ship

@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import type {
   ContextWithParserOptions,
   CorsaOxlintSettings,
+  CorsaRuntimeKind,
   ProjectServiceOptions,
   ResolvedProjectConfig,
   ResolvedRuntimeOptions,
@@ -21,16 +22,49 @@ const DEFAULT_TS_CONFIG = {
   },
 };
 
+/**
+ * Finds the Corsa runtime executable a workspace has installed.
+ *
+ * Without a preference this is `typescript` 7 or newer, then `tsrs`, then
+ * `.cache/corsa`, so a workspace that installs both packages keeps running
+ * TypeScript's own binary. `runtime: "tsrs"` prefers tsrs and fails when it is
+ * not installed; `runtime: "typescript"` never picks tsrs.
+ */
 export function defaultCorsaExecutable(
   rootDir: string,
   platform = process.platform,
   resolveFrom?: string,
+  runtime?: CorsaRuntimeKind,
 ): string {
-  const stableTypeScript =
-    resolveStableTypeScriptExecutableFrom(resolve(rootDir, "package.json"), platform) ??
-    (resolveFrom ? resolveStableTypeScriptExecutableFrom(resolveFrom, platform) : undefined);
-  if (stableTypeScript) {
-    return stableTypeScript;
+  const anchors = [resolve(rootDir, "package.json"), ...(resolveFrom ? [resolveFrom] : [])];
+  const fromAnchors = (
+    resolveFrom: (anchor: string, platform: NodeJS.Platform) => string | undefined,
+  ): string | undefined => {
+    for (const anchor of anchors) {
+      const executable = resolveFrom(anchor, platform);
+      if (executable) {
+        return executable;
+      }
+    }
+    return undefined;
+  };
+  if (runtime === "tsrs") {
+    const tsrs = fromAnchors(resolveTsrsExecutableFrom);
+    if (tsrs) {
+      return tsrs;
+    }
+    throw new Error(
+      [
+        "corsa-oxlint could not locate the tsrs executable requested by `parserOptions.corsa.runtime`.",
+        "Install `tsrs` with its platform package (`@tsrs/<platform>-<arch>`), or set `CORSA_EXECUTABLE`.",
+      ].join(" "),
+    );
+  }
+  const installed =
+    fromAnchors(resolveStableTypeScriptExecutableFrom) ??
+    (runtime === "typescript" ? undefined : fromAnchors(resolveTsrsExecutableFrom));
+  if (installed) {
+    return installed;
   }
   const fallback = resolve(rootDir, platform === "win32" ? ".cache/corsa.exe" : ".cache/corsa");
   if (existsSync(fallback)) {
@@ -39,7 +73,7 @@ export function defaultCorsaExecutable(
   throw new Error(
     [
       "corsa-oxlint could not locate a Corsa runtime executable.",
-      "Install `typescript` 7, set `CORSA_EXECUTABLE`, configure `parserOptions.corsa.executable`, or pass `resolveFrom` to `definePlugin`.",
+      "Install `typescript` 7 or `tsrs`, set `CORSA_EXECUTABLE`, configure `parserOptions.corsa.executable`, or pass `resolveFrom` to `definePlugin`.",
     ].join(" "),
   );
 }
@@ -98,7 +132,9 @@ function resolveRuntimeOptions(
   const runtime = parserOptions.corsa;
   return {
     executable: resolve(
-      runtime?.executable ?? process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir),
+      runtime?.executable ??
+        process.env.CORSA_EXECUTABLE ??
+        defaultCorsaExecutable(rootDir, undefined, undefined, runtime?.runtime),
     ),
     cwd: resolve(runtime?.cwd ?? rootDir),
     mode: runtime?.mode ?? "msgpack",
@@ -215,6 +251,52 @@ function resolveStableTypeScriptExecutableFrom(
   return existsSync(executable) ? executable : undefined;
 }
 
+/**
+ * Resolves the native tsrs binary the way the `tsrs` launcher does: from the
+ * `@tsrs/<platform>-<arch>` optional dependency (with a `-gnu` / `-musl`
+ * suffix on Linux), whose package root holds the binary next to the
+ * `lib.*.d.ts` files it loads. The launcher itself is a Node script, so it is
+ * not what gets spawned.
+ */
+function resolveTsrsExecutableFrom(anchor: string, platform: NodeJS.Platform): string | undefined {
+  const packageJsonPath = resolveOptional(createRequire(anchor), "tsrs/package.json");
+  if (!packageJsonPath) {
+    return undefined;
+  }
+  const requireFromTsrs = createRequire(packageJsonPath);
+  const base = `@tsrs/${platform}-${process.arch}`;
+  const candidates =
+    platform === "linux"
+      ? isMuslRuntime()
+        ? [`${base}-musl`, `${base}-gnu`]
+        : [`${base}-gnu`, `${base}-musl`]
+      : [base];
+  for (const candidate of candidates) {
+    const platformPackageJsonPath = resolveOptional(requireFromTsrs, `${candidate}/package.json`);
+    if (!platformPackageJsonPath) {
+      continue;
+    }
+    const executable = resolve(
+      dirname(platformPackageJsonPath),
+      platform === "win32" ? "tsrs.exe" : "tsrs",
+    );
+    if (existsSync(executable)) {
+      return executable;
+    }
+  }
+  return undefined;
+}
+
+function isMuslRuntime(): boolean {
+  if (process.platform !== "linux") {
+    return false;
+  }
+  const report = process.report?.getReport() as
+    | { header?: { glibcVersionRuntime?: string } }
+    | undefined;
+  return !report?.header?.glibcVersionRuntime;
+}
+
 function isTypeScriptVersionSevenOrNewer(packageJsonPath: string): boolean {
   try {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
@@ -266,7 +348,8 @@ function applyTypeAwareParserOptionDefaults(
     resolved = mergeTypeAwareParserOptions(resolved, {
       corsa: {
         executable:
-          process.env.CORSA_EXECUTABLE ?? defaultCorsaExecutable(rootDir, undefined, resolveFrom),
+          process.env.CORSA_EXECUTABLE ??
+          defaultCorsaExecutable(rootDir, undefined, resolveFrom, resolved.corsa?.runtime),
       },
     });
   }

@@ -28,7 +28,7 @@ pub struct CapabilitiesResponse {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapabilities {
-    /// Human-oriented runtime kind such as `corsa`, `native-preview`, or `mock-corsa`.
+    /// Human-oriented runtime kind such as `corsa`, `typescript`, `tsrs`, or `mock-corsa`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<CompactString>,
     /// Executable path used to spawn the worker when known locally.
@@ -136,7 +136,7 @@ impl EditorCapabilities {
 impl LspCapabilities {
     pub(crate) fn from_runtime(runtime: &RuntimeCapabilities) -> Self {
         match runtime.kind.as_deref() {
-            Some("corsa" | "native-preview" | "typescript") => Self {
+            Some("corsa" | "native-preview" | "typescript" | "tsrs") => Self {
                 available: true,
                 editor: EditorCapabilities::all(),
             },

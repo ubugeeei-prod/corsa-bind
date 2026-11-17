@@ -110,6 +110,7 @@ Full guides live under [`docs/`](./docs/index.md):
 | [Language bindings](./docs/language_bindings.md)       | Native bindings for Elixir, C, C++, Go, Zig, C#, Swift, MoonBit |
 | [Type-aware Oxlint](./docs/oxlint_guide.md)            | `corsa-oxlint` rule authoring and native rules                  |
 | [Native rules](./docs/native_rules.md)                 | The type-aware Rust lint rules and their options                |
+| [Using tsrs](./docs/tsrs.md)                           | Running on tsrs, the Rust port of the TypeScript 7 checker      |
 | [Performance](./docs/performance.md)                   | Benchmark entry points and measured numbers                     |
 | [CI and local checks](./docs/ci_guide.md)              | Reproduce the GitHub checks locally                             |
 | [Production readiness](./docs/production_readiness.md) | Runtime controls and release gates                              |

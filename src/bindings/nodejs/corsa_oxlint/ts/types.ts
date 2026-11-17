@@ -9,8 +9,16 @@ import type {
 
 import type { ContentMapping } from "./session";
 
+/** Which installed Corsa runtime package discovery prefers. */
+export type CorsaRuntimeKind = "typescript" | "tsrs";
+
 export interface CorsaRuntimeOptions {
   executable?: string;
+  /**
+   * Runtime package to discover when `executable` and `CORSA_EXECUTABLE` are
+   * unset. Defaults to `typescript` 7, then `tsrs`.
+   */
+  runtime?: CorsaRuntimeKind;
   cwd?: string;
   mode?: ApiMode;
   requestTimeoutMs?: number;

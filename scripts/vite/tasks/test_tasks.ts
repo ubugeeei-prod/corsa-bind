@@ -22,4 +22,10 @@ export const testTasks = {
     cache: false,
     command: "node --strip-types ./scripts/test_released_runtime.ts",
   },
+  // Runs the real-runtime contract suites against tsrs (oxc-project/tsrs),
+  // the Rust port of TypeScript 7 installed from npm.
+  test_tsrs_runtime: {
+    cache: false,
+    command: "node --strip-types ./scripts/test_tsrs_runtime.ts",
+  },
 } satisfies RunTasks;
