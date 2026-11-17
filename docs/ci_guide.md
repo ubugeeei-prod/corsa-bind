@@ -99,6 +99,7 @@ vp run -w verify_ref
 vp run -w build_corsa
 cargo test -p corsa --no-default-features --test real_corsa_regression --test real_corsa_typecheck --test real_corsa_dialect
 vp run -w test_released_runtime
+vp run -w test_tsrs_runtime
 ```
 
 The last command matters because the pin tracks the TypeScript 7.1 beta and
@@ -107,6 +108,9 @@ while the stable release most consumers install can be a dialect behind.
 `test_released_runtime` points the same `real_corsa_dialect` contract at the
 `typescript` package in `node_modules`, so the adapter for that dialect is
 exercised against a real runtime too rather than only against the mock.
+`test_tsrs_runtime` runs the regression, typecheck and dialect suites against
+the `tsrs` package in `node_modules`, the Rust port of TypeScript 7 that serves
+the same `--api` protocol (see [Using tsrs](./tsrs.md)).
 
 ### Ubuntu-only baseline and benchmark guards
 

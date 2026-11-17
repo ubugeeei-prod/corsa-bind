@@ -223,7 +223,8 @@ try {
 
 > [!IMPORTANT]
 > `@corsa-bind/napi` never bundles a Corsa executable. You must provide a
-> compatible binary and pass its path through `spawn({ executable })`. During
+> compatible binary and pass its path through `spawn({ executable })`: the
+> `typescript` 7 package's native `tsc`, or [tsrs](./tsrs.md). During
 > development the repo-local mock binary (`vp run -w build_mock`) works for most
 > flows.
 

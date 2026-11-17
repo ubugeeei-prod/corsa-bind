@@ -34,7 +34,11 @@ import { resolveCheckerBatch } from "./orchestrator";
 const workspaceRoot = resolve(import.meta.dirname, "../../../../..");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const mockBinary = resolve(workspaceRoot, `target/debug/mock_corsa${executableSuffix}`);
-const realBinary = resolve(workspaceRoot, `.cache/corsa${executableSuffix}`);
+// Like the oxlint suites, honor CORSA_EXECUTABLE so the same cases run against
+// another runtime (a released TypeScript, tsrs) without replacing `.cache/corsa`.
+const realBinary = process.env.CORSA_EXECUTABLE
+  ? resolve(process.env.CORSA_EXECUTABLE)
+  : resolve(workspaceRoot, `.cache/corsa${executableSuffix}`);
 const realDatasetCandidates = ["ref/corsa-upstream/packages/typescript/tsconfig.json"].map((path) =>
   resolve(workspaceRoot, path),
 );

@@ -114,7 +114,9 @@ describe("context", () => {
     const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
     cleanupDirs.add(workspace);
 
-    expect(() => defaultCorsaExecutable(workspace, "linux")).toThrow("Install `typescript` 7");
+    expect(() => defaultCorsaExecutable(workspace, "linux")).toThrow(
+      "Install `typescript` 7 or `tsrs`",
+    );
   });
 
   it("resolves the stable TypeScript 7 platform executable", () => {
@@ -165,6 +167,83 @@ describe("context", () => {
     writeFileSync(stableBin, "");
 
     expect(defaultCorsaExecutable(workspace, "win32")).toBe(realpathSync(stableBin));
+  });
+
+  function installPackage(workspace: string, name: string, version: string, file?: string): string {
+    const dir = resolve(workspace, "node_modules", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, "package.json"), JSON.stringify({ name, version }));
+    if (!file) {
+      return dir;
+    }
+    const path = resolve(dir, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "");
+    return realpathSync(path);
+  }
+
+  function installTypeScript(workspace: string): string {
+    installPackage(workspace, "typescript", "7.0.2");
+    return installPackage(
+      workspace,
+      `@typescript/typescript-linux-${process.arch}`,
+      "7.0.2",
+      "lib/tsc",
+    );
+  }
+
+  function installTsrs(workspace: string): string {
+    installPackage(workspace, "tsrs", "7.1.0-beta.tsrs2");
+    return installPackage(workspace, `@tsrs/linux-${process.arch}-gnu`, "7.1.0-beta.tsrs2", "tsrs");
+  }
+
+  it("discovers tsrs when TypeScript 7 is not installed", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const tsrsBin = installTsrs(workspace);
+
+    expect(defaultCorsaExecutable(workspace, "linux")).toBe(tsrsBin);
+  });
+
+  it("keeps TypeScript's own binary when both runtimes are installed", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    const typescriptBin = installTypeScript(workspace);
+    const tsrsBin = installTsrs(workspace);
+
+    expect(defaultCorsaExecutable(workspace, "linux")).toBe(typescriptBin);
+    expect(defaultCorsaExecutable(workspace, "linux", undefined, "tsrs")).toBe(tsrsBin);
+  });
+
+  it("honors an explicit runtime preference", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    installTsrs(workspace);
+
+    expect(() => defaultCorsaExecutable(workspace, "linux", undefined, "typescript")).toThrow(
+      "Install `typescript` 7 or `tsrs`",
+    );
+
+    const bare = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(bare);
+    installTypeScript(bare);
+    expect(() => defaultCorsaExecutable(bare, "linux", undefined, "tsrs")).toThrow(
+      "could not locate the tsrs executable",
+    );
+  });
+
+  it("finds the tsrs binary on Windows", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "corsa-oxlint-context-"));
+    cleanupDirs.add(workspace);
+    installPackage(workspace, "tsrs", "7.1.0-beta.tsrs2");
+    const tsrsBin = installPackage(
+      workspace,
+      `@tsrs/win32-${process.arch}`,
+      "7.1.0-beta.tsrs2",
+      "tsrs.exe",
+    );
+
+    expect(defaultCorsaExecutable(workspace, "win32")).toBe(tsrsBin);
   });
 
   it("ignores TypeScript versions before 7", () => {

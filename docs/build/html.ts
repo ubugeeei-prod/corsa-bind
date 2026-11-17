@@ -31,6 +31,7 @@ const NAV_GROUPS = [
       "language_bindings/index.html",
       "oxlint_guide/index.html",
       "native_rules/index.html",
+      "tsrs/index.html",
     ],
   },
   {
@@ -69,6 +70,7 @@ const ROUTE_TITLES = new Map<string, string>([
   ["language_bindings/index.html", "Language bindings"],
   ["oxlint_guide/index.html", "Type-aware Oxlint"],
   ["native_rules/index.html", "Native rules"],
+  ["tsrs/index.html", "Using tsrs"],
   ["ci_guide/index.html", "CI and local checks"],
   ["performance/index.html", "Performance commands"],
   ["benchmarking_guide/index.html", "Benchmarking model"],

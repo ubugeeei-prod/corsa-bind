@@ -454,6 +454,12 @@ jobs:
       - name: Released TypeScript runtime dialect contract
         run: vp run -w test_released_runtime
 
+      # tsrs (oxc-project/tsrs) ports the checker to Rust and serves the same
+      # `--api` protocol. Running the real-runtime suites against it keeps
+      # corsa-bind a working client for it.
+      - name: tsrs runtime contract
+        run: vp run -w test_tsrs_runtime
+
       # `vp run -w test` runs on a machine with no Corsa binary, so every
       # `integrationCase` in the TypeScript suites degrades to `it.skip` there.
       # This is the only job that has a real runtime, so it is the only place

@@ -17,6 +17,7 @@
     "@typescript-eslint/utils": "8.68.0",
     "@void/md": "0.10.12",
     "eslint": "10.9.1",
+    "tsrs": "7.1.0-beta.tsrs2",
     "typescript": "7.0.2",
     "vite": "8.2.4",
     "vite-plus": "^0.3.0",

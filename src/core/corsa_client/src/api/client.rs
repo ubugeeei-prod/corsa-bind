@@ -904,6 +904,10 @@ fn infer_runtime_kind(path: &Path) -> Option<CompactString> {
         "native-preview"
     } else if matches!(file_name, Some("tsc" | "tsc.exe" | "tsgo" | "tsgo.exe")) {
         "typescript"
+    } else if matches!(file_name, Some("tsrs" | "tsrs.exe")) {
+        // oxc-project/tsrs, a Rust port that serves the same `--api` and
+        // `--lsp` protocols as TypeScript's native binary.
+        "tsrs"
     } else if normalized.ends_with("/corsa")
         || normalized.ends_with("\\corsa.exe")
         || normalized.ends_with("\\corsa")
@@ -975,6 +979,26 @@ mod tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn infers_tsrs_runtime_from_its_platform_binary() {
+        for path in [
+            "/w/node_modules/@tsrs/darwin-arm64/tsrs",
+            "/w/node_modules/@tsrs/linux-x64-musl/tsrs",
+            r"C:\w\node_modules\@tsrs\win32-x64\tsrs.exe",
+        ] {
+            assert_eq!(
+                infer_runtime_kind(Path::new(path)).as_deref(),
+                Some("tsrs"),
+                "{path}"
+            );
+        }
+        let runtime = super::super::capabilities::RuntimeCapabilities {
+            kind: Some("tsrs".into()),
+            ..Default::default()
+        };
+        assert!(super::super::capabilities::LspCapabilities::from_runtime(&runtime).available);
     }
 
     #[test]
