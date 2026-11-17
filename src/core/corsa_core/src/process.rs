@@ -217,7 +217,7 @@ impl AsyncChildGuard {
         {
             observation.finish(child.id(), terminal, wait_for)?;
         } else {
-            terminal?;
+            terminal.status?;
         }
         if poisoned {
             return Err(process_guard_poisoned());
@@ -256,21 +256,18 @@ fn process_guard_poisoned() -> CorsaError {
 /// This helper is safe to use in cleanup code because it guarantees that a
 /// killed child is reaped before returning.
 pub fn wait_for_child_exit(child: &mut Child, wait_for: Duration) -> std::io::Result<()> {
-    wait_for_child_exit_receipt(child, wait_for).map(|_| ())
+    wait_for_child_exit_receipt(child, wait_for)
+        .status
+        .map(|_| ())
 }
 
-fn wait_for_child_exit_receipt(
-    child: &mut Child,
-    wait_for: Duration,
-) -> std::io::Result<ProcessTermination> {
+fn wait_for_child_exit_receipt(child: &mut Child, wait_for: Duration) -> ProcessTermination {
     let deadline = Instant::now() + wait_for;
     loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(ProcessTermination {
-                status,
-                timed_out: false,
-                kill_requested: false,
-            });
+        match child.try_wait() {
+            Ok(Some(status)) => return ProcessTermination::exited(status, false),
+            Ok(None) => {}
+            Err(error) => return ProcessTermination::failed(error, false, false),
         }
         if Instant::now() >= deadline {
             return terminate_child_process_receipt(child, true);
@@ -284,38 +281,31 @@ fn wait_for_child_exit_receipt(
 /// Reaping matters just as much as killing: without the final `wait`, exited
 /// children can remain as zombies on Unix-like systems.
 pub fn terminate_child_process(child: &mut Child) -> std::io::Result<()> {
-    terminate_child_process_receipt(child, false).map(|_| ())
+    terminate_child_process_receipt(child, false)
+        .status
+        .map(|_| ())
 }
 
-fn terminate_child_process_receipt(
-    child: &mut Child,
-    timed_out: bool,
-) -> std::io::Result<ProcessTermination> {
-    if let Some(status) = child.try_wait()? {
-        return Ok(ProcessTermination {
-            status,
-            timed_out,
-            kill_requested: false,
-        });
+/// Kills and reaps `child`, keeping whether the deadline expired and whether a
+/// kill was attempted even when termination fails.
+fn terminate_child_process_receipt(child: &mut Child, timed_out: bool) -> ProcessTermination {
+    match child.try_wait() {
+        Ok(Some(status)) => return ProcessTermination::exited(status, timed_out),
+        Ok(None) => {}
+        Err(error) => return ProcessTermination::failed(error, timed_out, false),
     }
-    match child.kill() {
-        Ok(()) => {}
-        Err(error) => {
-            if child.try_wait()?.is_none() {
-                return Err(error);
-            }
-            return child.wait().map(|status| ProcessTermination {
-                status,
-                timed_out,
-                kill_requested: true,
-            });
+    if let Err(error) = child.kill() {
+        match child.try_wait() {
+            Ok(None) => return ProcessTermination::failed(error, timed_out, true),
+            Ok(Some(_)) => {}
+            Err(error) => return ProcessTermination::failed(error, timed_out, true),
         }
     }
-    child.wait().map(|status| ProcessTermination {
-        status,
+    ProcessTermination {
+        status: child.wait(),
         timed_out,
         kill_requested: true,
-    })
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -400,7 +390,7 @@ mod tests {
         let observer = crate::ProcessObserver::default();
         let (child, observation) = crate::CorsaCommand::new("sh")
             .with_process_observer(observer.clone())
-            .spawn_observed_async(["-c", "printf 'before' >&2; sleep 3 & exit 0"])
+            .spawn_observed_async(["-c", "printf 'before' >&2; sleep 1 & exit 0"])
             .expect("spawn observed child");
         let guard = crate::AsyncChildGuard::new_observed(child, observation);
         let started = std::time::Instant::now();
@@ -416,6 +406,18 @@ mod tests {
         assert!(!receipt.stderr_complete && !receipt.completed);
         assert!(receipt.stderr_error.is_some());
         assert!(receipt.stderr.starts_with(b"before"));
+
+        // Once the grandchild exits, the late EOF completes custody.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let receipt = loop {
+            let receipt = observer.receipts().pop().expect("one receipt");
+            if receipt.stderr_complete || std::time::Instant::now() >= deadline {
+                break receipt;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert!(receipt.stderr_complete && receipt.completed);
+        assert_eq!(receipt.stderr_error, None);
     }
 
     #[test]

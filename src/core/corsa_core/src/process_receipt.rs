@@ -106,10 +106,15 @@ fn drain(mut stderr: ChildStderr, receipt: &Mutex<ProcessReceipt>) {
     loop {
         match stderr.read(&mut bytes) {
             Ok(0) => {
-                receipt
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner())
-                    .stderr_complete = true;
+                let mut receipt = receipt.lock().unwrap_or_else(|error| error.into_inner());
+                receipt.stderr_complete = true;
+                // EOF can arrive after shutdown gave up waiting for it, when a
+                // grandchild held the pipe. Custody is complete once both the
+                // reaped child and every stderr byte are in.
+                if receipt.reaped && receipt.process_error.is_none() {
+                    receipt.stderr_error = None;
+                    receipt.completed = true;
+                }
                 return;
             }
             Ok(count) => receipt
@@ -143,7 +148,7 @@ impl ProcessObservation {
     pub(crate) fn finish(
         mut self,
         pid: u32,
-        result: io::Result<ProcessTermination>,
+        terminal: ProcessTermination,
         drain_timeout: Duration,
     ) -> io::Result<()> {
         let expected_pid = self
@@ -152,7 +157,7 @@ impl ProcessObservation {
             .unwrap_or_else(|error| error.into_inner())
             .pid;
         let result = if expected_pid == pid {
-            result
+            terminal.status
         } else {
             Err(io::Error::other(format!(
                 "process receipt PID mismatch: observed {expected_pid}, guarded {pid}"
@@ -163,11 +168,13 @@ impl ProcessObservation {
                 .receipt
                 .lock()
                 .unwrap_or_else(|error| error.into_inner());
+            // Recorded even when termination failed: a deadline that expired
+            // and a kill that was refused are exactly what diagnoses it.
+            receipt.timed_out = terminal.timed_out;
+            receipt.kill_requested = terminal.kill_requested;
             match result.as_ref() {
-                Ok(terminal) => {
-                    receipt.exit_status = Some(terminal.status);
-                    receipt.timed_out = terminal.timed_out;
-                    receipt.kill_requested = terminal.kill_requested;
+                Ok(status) => {
+                    receipt.exit_status = Some(*status);
                     receipt.reaped = true;
                 }
                 Err(error) => receipt.process_error = Some(error.to_string()),
@@ -198,10 +205,14 @@ impl ProcessObservation {
             .unwrap_or_else(|error| error.into_inner());
         if let Some(error) = drain_error
             && receipt.stderr_error.is_none()
+            && !receipt.stderr_complete
         {
             receipt.stderr_error = Some(error.into());
         }
         receipt.completed = result.is_ok() && receipt.stderr_complete;
+        if receipt.completed {
+            receipt.stderr_error = None;
+        }
         result.map(|_| ())
     }
 }
@@ -209,8 +220,30 @@ impl ProcessObservation {
 /// Upper bound on waiting for stderr EOF once the child has been reaped.
 const STDERR_DRAIN_GRACE: Duration = Duration::from_secs(2);
 
+/// How a guarded child ended, or failed to.
+///
+/// The flags are kept apart from the fallible status so a failed termination
+/// still reports whether its deadline expired and whether a kill was tried.
 pub(crate) struct ProcessTermination {
-    pub(crate) status: ExitStatus,
+    pub(crate) status: io::Result<ExitStatus>,
     pub(crate) timed_out: bool,
     pub(crate) kill_requested: bool,
+}
+
+impl ProcessTermination {
+    pub(crate) fn exited(status: ExitStatus, timed_out: bool) -> Self {
+        Self {
+            status: Ok(status),
+            timed_out,
+            kill_requested: false,
+        }
+    }
+
+    pub(crate) fn failed(error: io::Error, timed_out: bool, kill_requested: bool) -> Self {
+        Self {
+            status: Err(error),
+            timed_out,
+            kill_requested,
+        }
+    }
 }
