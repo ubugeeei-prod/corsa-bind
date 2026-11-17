@@ -189,14 +189,15 @@ impl LspClient {
         args.push(CompactString::from("--lsp"));
         args.push(CompactString::from("--stdio"));
         args.extend(config.extra_args);
-        let mut child = config
+        let (mut child, process_observation) = config
             .command
-            .spawn_async(args.iter().map(CompactString::as_str))?;
+            .spawn_observed_async(args.iter().map(CompactString::as_str))?;
         let stdin = child.stdin.take().ok_or(CorsaError::Closed("lsp stdin"))?;
         let stdout = child
             .stdout
             .take()
             .ok_or(CorsaError::Closed("lsp stdout"))?;
+        let process = Arc::new(AsyncChildGuard::new_observed(child, process_observation));
         Ok(Self {
             rpc: JsonRpcConnection::try_spawn_with_options(
                 BufReader::new(stdout),
@@ -207,7 +208,7 @@ impl LspClient {
                     .with_outbound_capacity(config.outbound_capacity)
                     .with_observer_if_some(config.observer.clone()),
             )?,
-            process: Arc::new(AsyncChildGuard::new(child)),
+            process,
             shutdown_timeout: config.shutdown_timeout,
             shutdown: Arc::new(ShutdownCoordinator::default()),
         })
