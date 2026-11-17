@@ -31,6 +31,7 @@ mod methods_types;
 mod msgpack_codec;
 mod msgpack_worker;
 mod profiling;
+mod project_identity;
 mod project_session;
 mod project_session_capabilities;
 mod project_session_diagnostics;

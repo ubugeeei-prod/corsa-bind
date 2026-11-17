@@ -3,8 +3,8 @@ version = 1
 [corsa_upstream]
 path = "ref/corsa-upstream"
 repository = "https://github.com/microsoft/TypeScript.git"
-commit = "3e9236361fa97a9e6c685f4833ac457ae2d8c50a"
-tree = "2a322d5d8eefb3b2f295c5ed6398de7237f6249a"
-committer_date = "2026-10-19T20:38:54Z"
-author = "typescript-automation[bot]"
-subject = "Merge remote-tracking branch 'origin/main' into release-7.1"
+commit = "68672025cc6f01c845051d9f9b04200b0382942c"
+tree = "cf284e81a46859a60103bdc5210efb3f3836274a"
+committer_date = "2026-11-16T22:28:09Z"
+author = "Anders Hejlsberg"
+subject = "Optimize `getPropertiesOfUnionOrIntersectionType` (#65529)"

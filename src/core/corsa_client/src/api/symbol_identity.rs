@@ -42,6 +42,8 @@ use corsa_core::fast::{CompactString, FastMap, compact_format};
 use parking_lot::Mutex;
 use serde_json::{Map, Value, json};
 
+use super::handles::node_handle_request_form;
+use super::project_identity::{ProjectMemo, UNKNOWN_PROJECT};
 use crate::{CorsaError, Result};
 
 /// Source file descriptors remembered per generation; see [`FileMemo`].
@@ -60,6 +62,8 @@ pub(crate) const UNKNOWN_SYMBOL_OWNER: &str = "symbol owner is unknown to this c
 #[derive(Default)]
 pub(crate) struct SymbolIdentity {
     files: Mutex<FileMemo>,
+    /// Project handles, for runtimes that address projects by handle.
+    projects: Mutex<ProjectMemo>,
 }
 
 /// Source file node id to the descriptor upstream resolves that file by.
@@ -124,7 +128,8 @@ impl FileMemo {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RequestScope {
     snapshot: Option<u64>,
-    project: Option<CompactString>,
+    /// As the caller wrote it: a project id, or a handle a raw call sent.
+    project: Option<Value>,
 }
 
 impl RequestScope {
@@ -134,26 +139,34 @@ impl RequestScope {
             snapshot: params.get("snapshot").and_then(handle_number),
             project: params
                 .get("project")
-                .and_then(Value::as_str)
-                .filter(|project| !project.is_empty())
-                .map(CompactString::from),
+                .filter(|project| match project {
+                    Value::String(id) => !id.is_empty(),
+                    other => other.is_u64(),
+                })
+                .cloned(),
         }
     }
 }
 
 impl SymbolIdentity {
-    /// Rewrites `response` so every symbol the typed API exposes is a handle.
+    /// Rewrites `response` so every symbol the typed API exposes is a handle,
+    /// and learns the handles of the projects it reports.
     pub(crate) fn adopt(&self, response: &mut Value, scope: &RequestScope) {
+        self.projects.lock().learn(response, scope.snapshot);
+        self.adopt_value(response, scope);
+    }
+
+    fn adopt_value(&self, response: &mut Value, scope: &RequestScope) {
         match response {
             Value::Array(items) => {
                 for item in items {
-                    self.adopt(item, scope);
+                    self.adopt_value(item, scope);
                 }
             }
             Value::Object(fields) => {
                 self.adopt_object(fields, scope);
                 for value in fields.values_mut() {
-                    self.adopt(value, scope);
+                    self.adopt_value(value, scope);
                 }
             }
             Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
@@ -238,7 +251,9 @@ impl SymbolIdentity {
         }
     }
 
-    /// Replaces symbol handles in request params with wire references.
+    /// Replaces symbol handles in request params with wire references,
+    /// project ids with the handles a runtime addresses projects by, and
+    /// file-keyed node handles with the shorter form requests take.
     pub(crate) fn encode_params(&self, params: &mut Value) -> Result<()> {
         let scope = RequestScope::from_params(params);
         self.encode_value(params, &scope)
@@ -254,6 +269,7 @@ impl SymbolIdentity {
             Value::Object(fields) => {
                 for (key, value) in fields {
                     match key.as_str() {
+                        "project" => self.encode_project(value, scope)?,
                         "symbol" => self.encode_symbol(value, scope)?,
                         "symbols" => {
                             if let Value::Array(items) = value {
@@ -267,11 +283,18 @@ impl SymbolIdentity {
                             let scope = RequestScope::from_params(value);
                             self.encode_value(value, &scope)?;
                         }
+                        // File contents are never handles.
+                        "text" | "content" | "contents" | "fileContent" | "newText" => {}
                         _ => self.encode_value(value, scope)?,
                     }
                 }
             }
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+            Value::String(text) => {
+                if let Some(handle) = node_handle_request_form(text) {
+                    *text = handle;
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) => {}
         }
         Ok(())
     }
@@ -309,19 +332,45 @@ impl SymbolIdentity {
                     .ok_or_else(invalid)?,
                 // The runtime wants the project a checker-owned symbol is
                 // looked up in. Left empty, it rejects the reference itself.
-                "project": scope.project.as_deref().unwrap_or_default(),
+                "project": match scope.project.clone() {
+                    Some(mut project) => {
+                        self.encode_project(&mut project, scope)?;
+                        project
+                    }
+                    None => Value::String(String::new()),
+                },
                 "id": id,
             }),
         };
         *value = reference;
         Ok(())
     }
+
+    fn encode_project(&self, value: &mut Value, scope: &RequestScope) -> Result<()> {
+        match self.projects.lock().resolve(value, scope.snapshot) {
+            Ok(Some(handle)) => *value = Value::from(handle),
+            Ok(None) => {}
+            Err(id) => {
+                return Err(CorsaError::Protocol(compact_format(format_args!(
+                    "project {id} not found: {UNKNOWN_PROJECT}"
+                ))));
+            }
+        }
+        Ok(())
+    }
 }
 
-/// Recognizes a type or signature response, which both carry numeric `id` and `flags`.
+/// Recognizes a type or signature response by its numeric `id`.
+///
+/// A type always carries numeric `flags`. Development builds of TypeScript 7.1
+/// omit a signature's `flags` when none is set, so a signature is also known
+/// by the symbol mentions only signatures carry.
 fn is_checker_object(fields: &Map<String, Value>) -> bool {
     let is_number = |key| fields.get(key).is_some_and(Value::is_u64);
-    is_number("id") && is_number("flags")
+    is_number("id")
+        && (is_number("flags")
+            || fields.contains_key("parameters")
+            || fields.contains_key("thisParameter"))
 }
 
 /// Recognizes a full `SymbolReference`: an object with a numeric `kind` and `id`.

@@ -196,11 +196,13 @@ impl NodeHandle {
 
     /// Returns the file path a node handle declares, in either wire format.
     ///
-    /// Corsa emits two node handle shapes. Development runtimes use the full
-    /// `<pos>.<end>.<kind>.<path>` form that [`Self::parse`] understands, while
-    /// stable TypeScript 7 runtimes use a compact `<node id>.<kind>.<path>`
-    /// form that carries no source offsets and so cannot be parsed into a
-    /// range. Both still name the declaring file, which is enough for
+    /// Corsa has emitted three node handle shapes. Early development runtimes
+    /// use the full `<pos>.<end>.<kind>.<path>` form that [`Self::parse`]
+    /// understands. TypeScript 7.0 and the 7.1 beta use a compact
+    /// `<node index>.<kind>.<path>` form that carries no source offsets and so
+    /// cannot be parsed into a range. TypeScript 7.1 development builds add the
+    /// declaring source file's node id: `<node index>.<kind>.#<file id>.<path>`.
+    /// All of them still name the declaring file, which is enough for
     /// file-scoped work such as recovering parameter names from source.
     ///
     /// Returns `None` when the handle matches neither shape.
@@ -215,6 +217,9 @@ impl NodeHandle {
     ///
     /// let compact = NodeHandle::from("42.176./workspace/main.ts");
     /// assert_eq!(compact.declaring_path().as_deref(), Some("/workspace/main.ts"));
+    ///
+    /// let file_keyed = NodeHandle::from("42.176.#77./workspace/main.ts");
+    /// assert_eq!(file_keyed.declaring_path().as_deref(), Some("/workspace/main.ts"));
     /// ```
     pub fn declaring_path(&self) -> Option<CompactString> {
         let parts = self.0.split('.').collect::<Vec<_>>();
@@ -224,10 +229,11 @@ impl NodeHandle {
         if first.parse::<u32>().is_err() || second.parse::<u32>().is_err() {
             return None;
         }
-        // A numeric third field is the syntax kind of a full handle, so the
-        // path starts after it. Otherwise the handle is the compact form and
-        // the path starts at the third field itself.
-        let path = if third.parse::<u32>().is_ok() {
+        // A numeric third field is the syntax kind of a full handle, and a
+        // `#<file id>` third field names the declaring file, so the path starts
+        // after either. Otherwise the handle is the compact form and the path
+        // starts at the third field itself.
+        let path = if third.parse::<u32>().is_ok() || is_file_key(third) {
             rest.join(".")
         } else {
             std::iter::once(third)
@@ -238,6 +244,29 @@ impl NodeHandle {
         };
         (!path.is_empty()).then(|| CompactString::from(path))
     }
+}
+
+/// Reports whether `part` is the `#<file id>` field of a file-keyed node handle.
+fn is_file_key(part: &str) -> bool {
+    part.strip_prefix('#')
+        .is_some_and(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+/// Returns the request form of a file-keyed node handle.
+///
+/// TypeScript 7.1 development builds answer with
+/// `<node index>.<kind>.#<file id>.<path>` but only resolve
+/// `<node index>.#<file id>` in requests. Any other text is not a file-keyed
+/// handle and yields `None`.
+pub(crate) fn node_handle_request_form(text: &str) -> Option<String> {
+    let mut parts = text.splitn(4, '.');
+    let index = parts.next()?;
+    let kind = parts.next()?;
+    let file = parts.next()?;
+    let path = parts.next()?;
+    let is_number = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+    (is_number(index) && is_number(kind) && is_file_key(file) && !path.is_empty())
+        .then(|| format!("{index}.{file}"))
 }
 
 #[cfg(test)]

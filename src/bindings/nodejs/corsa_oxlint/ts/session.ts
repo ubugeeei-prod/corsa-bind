@@ -2292,7 +2292,12 @@ function parseNodeHandle(
     return undefined;
   }
   const hasEndPosition = isFiniteNumberText(thirdText);
-  const fileName = (hasEndPosition ? remainingParts : [thirdText, ...remainingParts]).join(".");
+  // TypeScript 7.1 development builds key the handle by the declaring source
+  // file: `<node index>.<syntax kind>.#<file id>.<path>`.
+  const hasFileKey = isFileKeyText(thirdText);
+  const fileName = (
+    hasEndPosition || hasFileKey ? remainingParts : [thirdText, ...remainingParts]
+  ).join(".");
   if (!fileName) {
     return undefined;
   }
@@ -2301,22 +2306,28 @@ function parseNodeHandle(
     return undefined;
   }
   if (!hasEndPosition) {
-    // Compact TypeScript 7 handle: `<node id>.<syntax kind>.<path>`. The
-    // parsed numbers identify the node but are not source offsets.
+    // Compact TypeScript 7 handle: `<node index>.<syntax kind>[.#<file id>].<path>`.
+    // The parsed numbers identify the node but are not source offsets.
     return { id: value, fileName, pos, end, range: [pos, end], positionless: true };
   }
   return { id: value, fileName, pos, end, range: [pos, end] };
 }
 
 /**
- * Reports whether a node handle uses the compact TypeScript 7 wire format
- * `<node id>.<syntax kind>.<path>`, which carries no source offsets.
+ * Reports whether a node handle uses a compact TypeScript 7 wire format,
+ * `<node index>.<syntax kind>.<path>` or, on TypeScript 7.1 development
+ * builds, `<node index>.<syntax kind>.#<file id>.<path>`. Neither carries
+ * source offsets.
  */
 function isPositionlessNodeHandle(value: string): boolean {
   const [posText, secondText, thirdText] = value.split(".");
   return (
     isFiniteNumberText(posText) && isFiniteNumberText(secondText) && !isFiniteNumberText(thirdText)
   );
+}
+
+function isFileKeyText(text: string | undefined): boolean {
+  return text !== undefined && /^#\d+$/.test(text);
 }
 
 function isFiniteNumberText(text: string | undefined): boolean {
