@@ -119,6 +119,13 @@ fn declaring_path_reads_both_node_handle_wire_formats() {
             .as_deref(),
         Some("/workspace/a.b/ctor.d.ts")
     );
+    // TypeScript 7.1 development builds: `<node index>.<kind>.#<file id>.<path>`.
+    assert_eq!(
+        NodeHandle::from("12.80.#77./tmp/case/a.b.ts")
+            .declaring_path()
+            .as_deref(),
+        Some("/tmp/case/a.b.ts")
+    );
     assert_eq!(NodeHandle::from("not-a-handle").declaring_path(), None);
     assert_eq!(NodeHandle::from("1.5").declaring_path(), None);
     assert_eq!(NodeHandle::from("1.5.123.").declaring_path(), None);
@@ -132,4 +139,24 @@ fn parse_still_rejects_compact_handles() {
             .parse()
             .is_err()
     );
+}
+
+#[test]
+fn only_file_keyed_node_handles_have_a_shorter_request_form() {
+    use super::node_handle_request_form;
+
+    assert_eq!(
+        node_handle_request_form("12.80.#77./tmp/case.ts").as_deref(),
+        Some("12.#77")
+    );
+    for other in [
+        "12.#77",
+        "42.176./workspace/main.ts",
+        "1.5.123./workspace/main.ts",
+        "12.80.#77.",
+        "12.80.#x./tmp/case.ts",
+        "export const a = 1.2;",
+    ] {
+        assert_eq!(node_handle_request_form(other), None, "{other}");
+    }
 }

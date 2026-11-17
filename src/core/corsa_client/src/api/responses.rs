@@ -193,6 +193,9 @@ pub struct SymbolResponse {
     /// TypeScript `SymbolFlags` bitset.
     pub flags: u32,
     /// TypeScript `CheckFlags` bitset for checker-specific symbol state.
+    ///
+    /// Development builds of TypeScript 7.1 omit it when no flag is set.
+    #[serde(default)]
     pub check_flags: u32,
     /// Declaration nodes associated with the symbol.
     #[serde(default)]
@@ -277,6 +280,9 @@ pub struct SignatureResponse {
     /// Opaque handle used to reference the signature later.
     pub id: SignatureHandle,
     /// TypeScript `SignatureFlags` bitset.
+    ///
+    /// Development builds of TypeScript 7.1 omit it when no flag is set.
+    #[serde(default)]
     pub flags: u32,
     /// Declaration node that produced the signature, if exposed.
     #[serde(skip_serializing_if = "Option::is_none")]

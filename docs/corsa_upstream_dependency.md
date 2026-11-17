@@ -60,6 +60,26 @@ What the client keeps identical across dialects:
 | `ManagedSnapshot` releases its handle on drop or `release()`            | the handle is shared with that base, so it is released once neither needs it                                                                                                                                            |
 | `SymbolHandle` is one opaque string per symbol                          | the handle is the compact reference; the client completes it with the owning file's descriptor, or the request's project, when it is sent back                                                                          |
 | `ApiFileSystem` callbacks                                               | answers are encoded as `{ kind, value }`                                                                                                                                                                                |
+| `ProjectResponse.id` is what project-scoped requests take               | on runtimes that report a numeric project `handle`, the client remembers it per snapshot and sends it in place of the id                                                                                                |
+| `NodeHandle` from a response can be sent back as-is                     | a file-keyed handle is shortened to the `<node index>.#<file id>` form requests take                                                                                                                                    |
+
+Development builds after the 7.1 beta moved further without changing what
+`initialize` reports, so they stay `derived-snapshots` and the client adapts
+each change from the responses themselves:
+
+- Projects gained a numeric `handle`, and every project-scoped request
+  addresses the project by it. Snapshot change lists (`changedProjects`,
+  `removedProjects`) still name projects by `id`, so `ProjectResponse.id`
+  stays the logical id on every runtime. The client learns each project's
+  handle from the snapshot responses that report it, keyed by snapshot because
+  a recreated project gets a new handle, and swaps it in when a request names
+  the project by id. A runtime that never reports a handle is addressed by id.
+- Node handles name their declaring source file:
+  `<node index>.<kind>.#<file id>.<path>`. Requests only resolve
+  `<node index>.#<file id>`, so the client shortens them on the way out.
+  `NodeHandle::declaring_path` reads all three shapes.
+- `SymbolResponse.checkFlags` and `SignatureResponse.flags` are omitted when
+  zero, and decode as `0`.
 
 Two things are deliberately _not_ adapted:
 

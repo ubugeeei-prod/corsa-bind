@@ -332,3 +332,74 @@ fn file_memo_keeps_descriptors_in_use_and_drops_idle_generations() {
     assert_eq!(memo.get("2"), None);
     assert_eq!(memo.get("4"), Some(descriptor("4")));
 }
+
+#[test]
+fn a_signature_without_flags_still_has_its_parameters_adopted() {
+    let identity = SymbolIdentity::default();
+
+    let signature = adopt(
+        &identity,
+        json!({ "id": 5, "parameters": [{ "id": 21 }] }),
+        &scope(1),
+    );
+
+    assert_eq!(
+        signature["parameters"],
+        json!([r#"{"id":21,"snapshot":1}"#])
+    );
+}
+
+#[test]
+fn project_ids_are_sent_as_the_handle_the_snapshot_reported() {
+    let identity = SymbolIdentity::default();
+    // `updateSnapshot` names its base; the response names the new snapshot.
+    adopt(
+        &identity,
+        json!({
+            "snapshot": 2,
+            "projects": [{
+                "id": PROJECT,
+                "handle": 11,
+                "currentDirectory": "/workspace",
+                "dirty": false,
+                "parsedCommandLine": { "options": {}, "fileNames": [] },
+            }],
+        }),
+        &scope(1),
+    );
+
+    let params = encode(
+        &identity,
+        json!({ "snapshot": 2, "project": PROJECT, "symbol": r#"{"id":9}"# }),
+    )
+    .unwrap();
+
+    assert_eq!(params["project"], json!(11));
+    assert_eq!(
+        params["symbol"],
+        json!({ "kind": 1, "snapshot": 2, "project": 11, "id": 9 })
+    );
+
+    let unknown = encode(
+        &identity,
+        json!({ "snapshot": 2, "project": "/elsewhere/tsconfig.json" }),
+    )
+    .unwrap_err();
+    assert!(
+        unknown.to_string().contains("project is unknown"),
+        "{unknown}"
+    );
+}
+
+#[test]
+fn project_ids_pass_through_on_runtimes_without_project_handles() {
+    let identity = SymbolIdentity::default();
+    let params = encode(
+        &identity,
+        json!({ "snapshot": 2, "project": PROJECT, "symbol": r#"{"id":9}"# }),
+    )
+    .unwrap();
+
+    assert_eq!(params["project"], json!(PROJECT));
+    assert_eq!(params["symbol"]["project"], json!(PROJECT));
+}
