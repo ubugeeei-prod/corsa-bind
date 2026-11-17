@@ -13,6 +13,9 @@ use std::{
 #[derive(Clone, Debug)]
 pub struct ProcessReceipt {
     pub pid: u32,
+    /// The child was reaped and every stderr byte up to EOF was captured.
+    /// Stays `false` when stderr could not be drained, even if
+    /// `exit_status` is set; `stderr_error` then says why.
     pub completed: bool,
     pub stderr: Vec<u8>,
     pub stderr_complete: bool,
@@ -171,38 +174,40 @@ impl ProcessObservation {
             }
             receipt.elapsed = self.started.elapsed();
         }
-        match self.done.recv_timeout(drain_timeout) {
-            Ok(()) => {
-                if let Some(reader) = self.reader.take() {
-                    reader
-                        .join()
-                        .map_err(|_| io::Error::other("stderr reader panicked"))?;
-                }
+        // Stderr custody never changes the shutdown result: a grandchild can
+        // inherit the pipe and hold it open after the guarded child is reaped,
+        // and an unobserved spawn would have succeeded in that case. Drain
+        // failures are recorded on the receipt and leave `completed` false.
+        let drain_error = match self
+            .done
+            .recv_timeout(drain_timeout.min(STDERR_DRAIN_GRACE))
+        {
+            Ok(()) => self
+                .reader
+                .take()
+                .and_then(|reader| reader.join().err())
+                .map(|_| "stderr reader panicked"),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                Some("stderr did not reach EOF before drain deadline")
             }
-            Err(_) => {
-                self.receipt
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner())
-                    .stderr_error = Some("stderr did not reach EOF before drain deadline".into());
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "stderr drain deadline",
-                ));
-            }
-        }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Some("stderr reader panicked"),
+        };
         let mut receipt = self
             .receipt
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if !receipt.stderr_complete {
-            return Err(io::Error::other(
-                receipt.stderr_error.clone().unwrap_or_default(),
-            ));
+        if let Some(error) = drain_error
+            && receipt.stderr_error.is_none()
+        {
+            receipt.stderr_error = Some(error.into());
         }
-        receipt.completed = result.is_ok();
+        receipt.completed = result.is_ok() && receipt.stderr_complete;
         result.map(|_| ())
     }
 }
+
+/// Upper bound on waiting for stderr EOF once the child has been reaped.
+const STDERR_DRAIN_GRACE: Duration = Duration::from_secs(2);
 
 pub(crate) struct ProcessTermination {
     pub(crate) status: ExitStatus,

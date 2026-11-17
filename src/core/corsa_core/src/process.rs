@@ -396,6 +396,29 @@ mod tests {
     }
 
     #[test]
+    fn observed_shutdown_succeeds_when_a_grandchild_holds_stderr_open() {
+        let observer = crate::ProcessObserver::default();
+        let (child, observation) = crate::CorsaCommand::new("sh")
+            .with_process_observer(observer.clone())
+            .spawn_observed_async(["-c", "printf 'before' >&2; sleep 3 & exit 0"])
+            .expect("spawn observed child");
+        let guard = crate::AsyncChildGuard::new_observed(child, observation);
+        let started = std::time::Instant::now();
+        run(guard.shutdown(Duration::from_millis(200))).expect("shutdown");
+        assert!(started.elapsed() < Duration::from_secs(2));
+
+        let receipt = observer.receipts().pop().expect("one receipt");
+        assert!(receipt.reaped);
+        assert_eq!(
+            receipt.exit_status.and_then(|status| status.code()),
+            Some(0)
+        );
+        assert!(!receipt.stderr_complete && !receipt.completed);
+        assert!(receipt.stderr_error.is_some());
+        assert!(receipt.stderr.starts_with(b"before"));
+    }
+
+    #[test]
     fn unobserved_spawn_returns_no_observation() {
         let (child, observation) = crate::CorsaCommand::new("sh")
             .spawn_observed_async(["-c", "exit 0"])
