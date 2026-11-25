@@ -1,0 +1,21 @@
+name: Rust Parallel Frontend
+description: Route rustc through scripts/rustc_wrapper.sh so workspace crates compile with rustc's parallel frontend.
+
+inputs:
+  jobs:
+    description: "rustc frontend threads for workspace crates on Linux and macOS (1: off). Windows legs are unchanged."
+    required: false
+    default: "8"
+
+runs:
+  using: composite
+  steps:
+    # Dependencies, build-script probes and object code stay as they are; see
+    # "Rust build accelerators" in docs/ci_guide.md. Release, publish and
+    # benchmark-comparison workflows do not use this action.
+    - name: Compile workspace crates with the parallel frontend
+      if: ${{ runner.os != 'Windows' && inputs.jobs != '1' }}
+      shell: bash
+      env:
+        CORSA_RUSTC_FRONTEND_JOBS: ${{ inputs.jobs }}
+      run: bash "$GITHUB_ACTION_PATH/enable.sh"

@@ -110,6 +110,9 @@ jobs:
         with:
           components: clippy
 
+      - name: Compile workspace crates with the parallel frontend
+        uses: ./.github/actions/rust-parallel-frontend
+
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
@@ -171,6 +174,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
+      - name: Compile workspace crates with the parallel frontend
+        uses: ./.github/actions/rust-parallel-frontend
+
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
@@ -225,6 +231,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
+      - name: Compile workspace crates with the parallel frontend
+        uses: ./.github/actions/rust-parallel-frontend
+
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
@@ -260,6 +269,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
+      - name: Compile workspace crates with the parallel frontend
+        uses: ./.github/actions/rust-parallel-frontend
+
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
@@ -289,6 +301,9 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Compile workspace crates with the parallel frontend
+        uses: ./.github/actions/rust-parallel-frontend
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
@@ -415,6 +430,9 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Compile workspace crates with the parallel frontend
+        uses: ./.github/actions/rust-parallel-frontend
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2

@@ -50,7 +50,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["bench/src/**/*.test.ts", "src/bindings/nodejs/**/ts/**/*.test.ts"],
+    include: [
+      "bench/src/**/*.test.ts",
+      "scripts/**/*.test.ts",
+      "src/bindings/nodejs/**/ts/**/*.test.ts",
+    ],
     benchmark: {
       include: ["bench/src/**/*.bench.ts"],
       exclude: upstreamRefPatterns,

@@ -178,6 +178,68 @@ nix develop -c sh -c 'vp run -w bench_verify'
 Using `sh -c` instead of a login shell matters here.
 It makes the tool resolution deterministic, especially for `go`, which would otherwise be shadowed by a preexisting shell profile on some machines.
 
+## Rust build accelerators
+
+The Nix dev shell and the Rust CI jobs run every `rustc` call through
+[`../scripts/rustc_wrapper.sh`](../scripts/rustc_wrapper.sh) (`RUSTC_WRAPPER`).
+It does two things, and neither one changes which compiler is used:
+
+- **Parallel frontend for workspace crates.** For a crate whose manifest is in
+  this checkout and whose `--crate-name` is the one Cargo is building, the
+  wrapper adds `-Zthreads=N` and sets `RUSTC_BOOTSTRAP=<that crate>` for that
+  single call. `N` comes from `CORSA_RUSTC_FRONTEND_JOBS`: 8 in the dev shell and
+  in CI, the fastest count measured for rustc's parallel frontend (16 and 32 are
+  slower). `-Zthreads` is the older spelling of `--jobs-frontend`; current stable
+  accepts both, and the dev shell's rustc only knows `-Zthreads`.
+- **kache in the dev shell.** The default `nix develop` shell provides
+  [kache](https://github.com/kunobi-ninja/kache) 2.3.1, pinned to the release
+  binary and its published SHA-256 in
+  [`../nix/flake-outputs.nix`](../nix/flake-outputs.nix). The wrapper hands every
+  call to it (`CORSA_KACHE`). Every worktree and target directory on the machine
+  shares one store, and restored outputs are copy-on-write clones on APFS.
+  `kache stats` reports hits and the store size, and `kache clean` frees space.
+
+Enter the shell with `CORSA_RUSTC_FRONTEND_JOBS=1` or `CORSA_KACHE=` (empty) to
+turn either one off, for example while measuring compile times.
+
+Why it is built this way:
+
+- **A wrapper, not `RUSTFLAGS`.** `RUSTFLAGS` is hashed into every crate's
+  `-C metadata`, so changing it rebuilds every crate and misses every cached
+  target directory. Flags added by the wrapper are invisible to Cargo's
+  fingerprints.
+- **Workspace crates only.** A workspace-wide `RUSTC_BOOTSTRAP` changes
+  dependency code: build scripts such as `proc-macro2`'s probe for nightly
+  features and switch them on. A build-script probe inherits its package's
+  environment but names its own crate, so it never qualifies. Dependencies,
+  probes and Cargo's `-vV`/`--print` queries reach `rustc` unchanged.
+- **CI opts in per job.** [`rust-parallel-frontend`](../.github/actions/rust-parallel-frontend/action.yml)
+  exports the wrapper in `rust-lint`, `build`, `test`, `public-facade`,
+  `non-node-bindings` and `real-corsa-smoke`, on Linux and macOS. Windows legs,
+  release and publish workflows, and the `pr-performance` comparison do not use
+  it. A job that already set `RUSTC_WRAPPER` keeps its own.
+- **No kache in CI.** kache rewrites the paths it hashes, so its outputs are not
+  byte-identical to an uncached build. CI keeps its sticky target disks, and
+  release builds never go through kache.
+
+What was checked, building `corsa_ffi` from an empty target directory at one
+fixed path with `CORSA_RUSTC_FRONTEND_JOBS=1` and `8`:
+
+- With rustc 1.100.0, the stable compiler CI installs, `libcorsa_ffi.dylib` and
+  `libcorsa_ffi.a` are byte-identical, and so are all 68 dependency
+  `.rlib`/`.rmeta` files. In workspace crates every object file is identical;
+  only `lib.rmeta` (the crate hash, because `RUSTC_BOOTSTRAP` is a tracked
+  option) and the archive's symbol index differ.
+- With the dev shell's rustc 1.94.0, setting `RUSTC_BOOTSTRAP` alone changes the
+  workspace crates' object code; the thread count does not (`-Zthreads=1` and
+  `8` give identical objects, and repeated `8` builds are identical). Code built
+  in the dev shell is never published.
+- `cargo clippy --workspace --all-targets -- -D warnings` prints the same
+  diagnostics at 1 and 8 threads.
+- kache on the shared macOS machine: a fresh target directory built `corsa_ffi`
+  in 26 s, and a second fresh one against the warm store in 7 s. Wall times on
+  that machine (load average above 20) are directional only.
+
 ## Blacksmith Testbox
 
 Blacksmith Testbox is the CI-parity path for broad Linux checks and benchmark
