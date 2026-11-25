@@ -47,6 +47,32 @@ in
           runHook postInstall
         '';
       };
+      # kache: a content-addressed rustc cache shared by every worktree and
+      # target directory on the machine (see "Rust build accelerators" in
+      # docs/ci_guide.md). Pinned to an exact release; the hash is the
+      # release's own `.sha256` file. kache and the engine it launches must
+      # come from the same release.
+      kache = pkgs.stdenvNoCC.mkDerivation rec {
+        pname = "kache";
+        version = "2.3.1";
+        src = pkgs.fetchurl {
+          url = "https://github.com/kunobi-ninja/kache/releases/download/v${version}/kache-aarch64-apple-darwin.tar.gz";
+          hash = "sha256-viLTAsQCOLOnX5aVrRgCLlo64ygwDCdKE4bEa6DmuNE=";
+        };
+        sourceRoot = ".";
+        installPhase = ''
+          runHook preInstall
+          install -Dm755 kache $out/bin/kache
+          install -Dm755 kache-engine $out/bin/kache-engine
+          runHook postInstall
+        '';
+        meta = {
+          description = "Compiler cache for Rust, C/C++ and CUDA";
+          homepage = "https://github.com/kunobi-ninja/kache";
+          license = lib.licenses.asl20;
+          mainProgram = "kache";
+        };
+      };
       vitePlusRuntimePnpmDeps = pkgs.fetchPnpmDeps {
         pname = "vite-plus-runtime";
         version = vitePlusVersion;
@@ -109,6 +135,7 @@ in
     in
     {
       default = vitePlus;
+      kache = kache;
       moonbit = moonbit;
       vite-plus = vitePlus;
       blacksmith = blacksmith;
@@ -120,6 +147,7 @@ in
       vitePlus = self.packages.${system}.vite-plus;
       moonPkg = self.packages.${system}.moonbit;
       blacksmithPkg = self.packages.${system}.blacksmith;
+      kachePkg = self.packages.${system}.kache;
       swiftPkg = pkgs.swift;
       dotnetPkg = pkgs.dotnet-sdk_9;
       tnixCli = tnix.packages.${system}.tnix;
@@ -136,6 +164,7 @@ in
         pkgs.git
         pkgs.go_1_26
         pkgs.gnugrep
+        kachePkg
         moonPkg
         pkgs.openssh
         pkgs.pkg-config
@@ -160,6 +189,7 @@ in
           pkgs.git
           pkgs.go_1_26
           pkgs.gnugrep
+          kachePkg
           pkgs.libiconv
           moonPkg
           pkgs.openssh
@@ -184,6 +214,18 @@ in
           export NIX_LDFLAGS="-L${libraryPath} ''${NIX_LDFLAGS:-}"
           corepack enable >/dev/null 2>&1 || true
           corepack prepare pnpm@10.0.0 --activate >/dev/null 2>&1 || true
+          # Rust build accelerators (see docs/ci_guide.md): workspace crates
+          # compile with rustc's parallel frontend, and kache shares compiled
+          # crates across worktrees and target directories. Enter the shell
+          # with CORSA_RUSTC_FRONTEND_JOBS=1 or CORSA_KACHE= to turn either off.
+          corsa_rustc_wrapper="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/scripts/rustc_wrapper.sh"
+          case "''${RUSTC_WRAPPER:-}" in
+            "" | */scripts/rustc_wrapper.sh)
+              if [ -x "$corsa_rustc_wrapper" ]; then export RUSTC_WRAPPER="$corsa_rustc_wrapper"; fi ;;
+          esac
+          unset corsa_rustc_wrapper
+          export CORSA_KACHE="''${CORSA_KACHE-${kachePkg}/bin/kache}"
+          export CORSA_RUSTC_FRONTEND_JOBS="''${CORSA_RUSTC_FRONTEND_JOBS:-8}"
 
           echo "corsa-bind dev shell ready."
           echo "Node and pnpm are provided by Vite+."
